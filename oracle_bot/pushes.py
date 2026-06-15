@@ -10,7 +10,7 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from oracle_bot import storage as db
-from oracle_bot.config import ORACLE_DEEP_STARS, ORACLE_PREMIUM_STARS, ORACLE_REFERRAL_BONUS
+from oracle_bot.access import has_full_access
 from oracle_bot.mystic_data import zodiac_label
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ def schedule_topic_morning(user_id: int) -> None:
 
 
 def schedule_after_limit(user_id: int, module: str) -> None:
-    if db.is_premium(user_id):
+    if has_full_access(user_id):
         return
     ctx = json.dumps({"module": module}, ensure_ascii=False)
     db.schedule_push(user_id, "limit_hit", delay_hours=3, context=ctx)
@@ -69,21 +69,21 @@ def schedule_after_limit(user_id: int, module: str) -> None:
 
 
 def schedule_after_teaser(user_id: int, module: str, cont_id: int) -> None:
-    if db.is_premium(user_id):
+    if has_full_access(user_id):
         return
     ctx = json.dumps({"module": module, "cont_id": cont_id}, ensure_ascii=False)
     db.schedule_push(user_id, "unlock_tease", delay_hours=2, context=ctx)
 
 
 def schedule_welcome_series(user_id: int) -> None:
-    if db.is_premium(user_id):
+    if has_full_access(user_id):
         return
     db.schedule_push(user_id, "welcome_day1", delay_hours=4, context="{}")
     db.schedule_push(user_id, "welcome_day2", delay_hours=26, context="{}")
 
 
 def schedule_inactive(user_id: int) -> None:
-    if db.is_premium(user_id):
+    if has_full_access(user_id):
         return
     db.schedule_push(user_id, "inactive", delay_hours=48, context="{}")
 
@@ -192,7 +192,7 @@ async def process_due_pushes(bot: Bot) -> int:
     sent = 0
     for row in db.fetch_due_pushes():
         uid = int(row["user_id"])
-        if db.is_premium(uid):
+        if has_full_access(uid):
             db.mark_push_sent(int(row["id"]))
             continue
         meta = db.get_user_meta(uid)

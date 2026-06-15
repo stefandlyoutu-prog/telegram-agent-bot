@@ -389,12 +389,77 @@ async def test_telegram_bot_alive() -> bool:
         await bot.session.close()
 
 
+def test_access() -> bool:
+    print("\n👑 Admin / full access")
+    from oracle_bot.access import has_full_access, is_admin_user
+    from business_dashboard.config import MONEY_ADMIN_IDS
+
+    ok = True
+    admin_id = next(iter(MONEY_ADMIN_IDS), 5845195049)
+    if is_admin_user(admin_id):
+        _ok("is_admin_user", str(admin_id))
+    else:
+        _fail("is_admin_user", f"MONEY_ADMIN_IDS={MONEY_ADMIN_IDS}")
+        ok = False
+    if has_full_access(admin_id):
+        _ok("has_full_access admin")
+    else:
+        _fail("has_full_access admin", "admin should bypass limits")
+        ok = False
+    if db.can_use(admin_id, "tarot", 0):
+        _ok("can_use admin unlimited")
+    else:
+        _fail("can_use admin", "expected True")
+        ok = False
+    return ok
+
+
+def test_formatting() -> bool:
+    print("\n📝 Formatting")
+    from oracle_bot.formatting import format_reading_body
+
+    wall = "Первое предложение. Второе предложение. Третье предложение. Четвёртое. Пятое. Шестое."
+    out = format_reading_body(wall)
+    if "\n\n" in out:
+        _ok("paragraph breaks")
+        return True
+    _fail("paragraph breaks", out[:80])
+    return False
+
+
+def test_all_modules() -> bool:
+    print("\n📋 All modules registered")
+    from oracle_bot.handlers import _WAIT
+
+    if len(_WAIT) >= 25:
+        _ok("handler modules", str(len(_WAIT)))
+        return True
+    _fail("handler modules", f"only {len(_WAIT)}")
+    return False
+
+
+def test_broadcast_list() -> bool:
+    print("\n📤 Broadcast users list")
+    db.init_db()
+    db.ensure_user(TEST_UID)
+    ids = db.all_user_ids()
+    if TEST_UID in ids:
+        _ok("all_user_ids", f"{len(ids)} users")
+        return True
+    _fail("all_user_ids", "test user missing")
+    return False
+
+
 async def main() -> int:
     print("=" * 50)
     print("Тест всех функций @MOracul_bot")
     print("=" * 50)
 
     results: list[tuple[str, bool]] = []
+    results.append(("access", test_access()))
+    results.append(("formatting", test_formatting()))
+    results.append(("broadcast", test_broadcast_list()))
+    results.append(("modules", test_all_modules()))
     results.append(("config", test_config()))
     results.append(("dates", test_date_parse()))
     results.append(("storage", test_storage()))

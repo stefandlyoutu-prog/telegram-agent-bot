@@ -25,6 +25,7 @@ from oracle_bot.config import (
     ORACLE_REFERRAL_BONUS,
     ORACLE_REFERRAL_WELCOME,
 )
+from oracle_bot.access import has_full_access, is_admin_user
 from oracle_bot.formatting import reading_header
 from oracle_bot import analytics as analytics_mod
 from oracle_bot import funnel
@@ -163,19 +164,23 @@ class Flow(StatesGroup):
 
 
 def _premium_line(user_id: int) -> str:
+    if is_admin_user(user_id):
+        return "\n\n👑 <b>Полный доступ</b> — все разделы без лимита"
     if db.is_premium(user_id):
         until = db.premium_until(user_id) or ""
-        return f"\n\n⭐ <b>Премиум</b> до {until[:10]} — все чтения без 🔒"
+        return f"\n\n⭐ <b>Премиум</b> до {until[:10]}\nВсе чтения без 🔒"
     used = db.total_usage_today(user_id)
     credits = db.get_referral_credits(user_id)
     invited = db.referral_stats(user_id)["invited"]
-    bonus = f" · 🎁 бонусов: {credits}" if credits else ""
-    refs = f" · 👥 друзей: {invited}" if invited else ""
+    bonus = f"\n🎁 Бонусов: {credits}" if credits else ""
+    refs = f"\n👥 Друзей: {invited}" if invited else ""
     return (
-        f"\n\n🆓 Сегодня использовано: {used} · "
-        f"бесплатно до {ORACLE_FREE_PER_DAY} на раздел{bonus}{refs}\n"
-        f"🔓 Продолжение — {ORACLE_DEEP_STARS}⭐ · ⭐ Премиум — безлимит\n"
-        f"🎁 Или /ref — пригласи друга (+{ORACLE_REFERRAL_BONUS} расклада)"
+        f"\n\n🆓 Сегодня: {used} чтений"
+        f"{bonus}{refs}\n"
+        f"Бесплатно до {ORACLE_FREE_PER_DAY} на раздел\n"
+        f"🔓 Продолжение — {ORACLE_DEEP_STARS}⭐\n"
+        f"⭐ Премиум — безлимит\n"
+        f"🎁 /ref — пригласи друга (+{ORACLE_REFERRAL_BONUS})"
     )
 
 
@@ -228,7 +233,7 @@ async def _send_reading(
     wait_msg: Message | None = None,
     user_text: str = "",
 ) -> None:
-    premium = db.is_premium(uid)
+    premium = has_full_access(uid)
     wait = wait_msg or await message.answer(_WAIT.get(module, "🔮…"))
     try:
         raw = await oracle_reading(prompt, premium=premium, temperature=temperature)
@@ -408,6 +413,55 @@ async def cmd_stats(message: Message) -> None:
     await message.answer(analytics_mod.format_stats_report())
 
 
+@router.message(Command("broadcast"))
+async def cmd_broadcast(message: Message, command: CommandObject) -> None:
+    uid = message.from_user.id if message.from_user else 0
+    if not _is_admin(uid):
+        await message.answer("Нет доступа.")
+        return
+    text = (command.args or "").strip()
+    if len(text) < 2:
+        await message.answer(
+            "Рассылка всем пользователям бота:\n"
+            "<code>/broadcast текст сообщения</code>\n\n"
+            "Поддерживается HTML. Пример:\n"
+            "<code>/broadcast 🌅 Доброе утро! Новый раздел — Карма дня.</code>"
+        )
+        return
+    await _run_broadcast(message, text)
+
+
+async def _run_broadcast(message: Message, text: str) -> None:
+    import asyncio
+
+    from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
+
+    ids = db.all_user_ids()
+    if not ids:
+        await message.answer("Нет пользователей для рассылки.")
+        return
+    status = await message.answer(f"📤 Рассылка {len(ids)} пользователям…")
+    ok = fail = 0
+    for user_id in ids:
+        try:
+            await message.bot.send_message(user_id, text, parse_mode="HTML")
+            ok += 1
+        except TelegramRetryAfter as e:
+            await asyncio.sleep(float(e.retry_after) + 0.5)
+            try:
+                await message.bot.send_message(user_id, text, parse_mode="HTML")
+                ok += 1
+            except Exception:
+                fail += 1
+        except TelegramForbiddenError:
+            fail += 1
+        except Exception as e:
+            logger.warning("broadcast %s: %s", user_id, e)
+            fail += 1
+        await asyncio.sleep(0.05)
+    await status.edit_text(f"✅ Рассылка готова: доставлено {ok}, ошибок {fail}.")
+
+
 @router.message(Command("ref"))
 async def cmd_ref(message: Message) -> None:
     uid = message.from_user.id if message.from_user else 0
@@ -471,7 +525,7 @@ async def cb_deep(call: CallbackQuery) -> None:
     await call.answer()
     cont_id = int((call.data or "").split(":", 1)[1])
     uid = call.from_user.id
-    if db.is_premium(uid):
+    if db.is_premium(uid) or is_admin_user(uid):
         cont = db.get_continuation(cont_id)
         if cont and call.message:
             await call.message.answer(
@@ -1019,7 +1073,7 @@ async def palm_photo(message: Message, state: FSMContext) -> None:
         raw = await oracle_palm_reading(
             data,
             comment=message.caption or "",
-            premium=db.is_premium(uid),
+            premium=has_full_access(uid),
         )
         text, cont_id = funnel.deliver(
             user_id=uid,
@@ -1034,7 +1088,7 @@ async def palm_photo(message: Message, state: FSMContext) -> None:
         await state.clear()
         return
     db.bump_usage(uid, "palm")
-    premium = db.is_premium(uid)
+    premium = has_full_access(uid)
     analytics_mod.track_reading(uid, "palm", has_lock=bool(cont_id and not premium))
     if cont_id and not premium:
         from oracle_bot.pushes import schedule_after_teaser
@@ -1388,18 +1442,23 @@ async def on_webapp_data(message: Message, state: FSMContext) -> None:
 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
-    await message.answer(
+    uid = message.from_user.id if message.from_user else 0
+    text = (
         "🔮 <b>m-Oracul — помощь</b>\n\n"
         "• /menu — все разделы\n"
-        "• После любого чтения можно <b>написать или сказать голосом</b> уточнение — "
-        "бот ответит по тому же контексту\n"
-        "• 🎤 Голосовое — распознаётся и идёт в сценарий или коуч\n"
-        "• 🔓 Продолжить — скрытая часть чтения (Stars)\n"
-        "• ⭐ Премиум — безлимит и без 🔒\n"
-        "• /ref — пригласи друга и получи бонусные расклады\n"
-        "• /stop_push — отключить напоминания",
-        reply_markup=kb_main(),
+        "• После чтения можно написать или сказать голосом уточнение\n"
+        "• 🔓 Продолжить — скрытая часть (Stars)\n"
+        "• ⭐ Премиум — безлимит\n"
+        "• /ref — пригласи друга\n"
+        "• /stop_push — отключить напоминания"
     )
+    if _is_admin(uid):
+        text += (
+            "\n\n<b>Админ:</b>\n"
+            "• /stats — аналитика\n"
+            "• /broadcast текст — рассылка всем"
+        )
+    await message.answer(text, reply_markup=kb_main())
 
 
 @router.message(Command("stop_push"))

@@ -7,6 +7,7 @@ import re
 from aiogram.types import Message
 
 from oracle_bot import storage as db
+from oracle_bot.access import has_full_access
 from oracle_bot.llm_helpers import oracle_chat
 from oracle_bot.mystic_data import zodiac_label
 from oracle_bot.prompts import FULL_ONLY
@@ -38,7 +39,7 @@ def build_reading_context(
     if cont_id:
         cont = db.get_continuation(cont_id)
         if cont:
-            if db.is_premium(user_id) or cont.get("unlocked"):
+            if has_full_access(user_id) or cont.get("unlocked"):
                 ctx += "\n\n" + _strip_html(cont["locked_text"])
             else:
                 ctx += "\n\n[Полная часть скрыта — доступна через 🔓 Продолжить]"

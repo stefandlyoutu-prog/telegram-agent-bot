@@ -109,7 +109,8 @@ async def telegram_webhook(request: Request):
     if not _bot or not _dp:
         return {"ok": False}
     data = await request.json()
-    await _dp.feed_update(_bot, Update.model_validate(data))
+    update = Update.model_validate(data)
+    asyncio.create_task(_dp.feed_update(_bot, update))
     return {"ok": True}
 
 

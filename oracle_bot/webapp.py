@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from oracle_bot import storage as db
-from oracle_bot.card_of_day import card_for_user
+from oracle_bot.access import is_admin_user
 from oracle_bot.config import ORACLE_BOT_USERNAME, ORACLE_FREE_PER_DAY, cloud_webapp_url
 from oracle_bot.streak import get_streak, record_visit
 
@@ -64,7 +64,7 @@ def api_home(user_id: int = Query(...)):
         "credits": st["credits"],
         "used_today": db.total_usage_today(user_id),
         "free_limit": ORACLE_FREE_PER_DAY,
-        "premium": db.is_premium(user_id),
+        "premium": db.is_premium(user_id) or is_admin_user(user_id),
         "topic": meta.get("topic") or "",
         "card": {"title": card, "hint": hint},
         "bot": ORACLE_BOT_USERNAME,

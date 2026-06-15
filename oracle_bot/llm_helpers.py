@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 
 from bot.config import DEFAULT_MODEL, VISION_DESCRIBE_PROMPT, VISION_SYSTEM_PROMPT
 from bot.services.gemini_llm import (
@@ -22,6 +24,8 @@ from oracle_bot.prompts import ORACLE_SYSTEM, PALM_USER, FULL_ONLY, SPLIT_INSTRU
 
 logger = logging.getLogger(__name__)
 
+_LLM_SEM = asyncio.Semaphore(int(os.getenv("ORACLE_LLM_CONCURRENCY", "20")))
+
 _PALM_VISION_PROMPT = (
     "Опиши ладонь на фото для хироманта: форма ладони, основные линии "
     "(жизни, сердца, ума, судьбы), холмы, особые знаки. Только наблюдаемое."
@@ -29,6 +33,11 @@ _PALM_VISION_PROMPT = (
 
 
 async def oracle_chat(user_prompt: str, *, temperature: float = 0.8) -> str:
+    async with _LLM_SEM:
+        return await _oracle_chat_inner(user_prompt, temperature=temperature)
+
+
+async def _oracle_chat_inner(user_prompt: str, *, temperature: float = 0.8) -> str:
     errors: list[str] = []
 
     if groq_configured():

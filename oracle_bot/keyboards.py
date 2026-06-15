@@ -139,10 +139,10 @@ def kb_after_reading(
     cont_id: int | None,
     user_id: int,
 ) -> InlineKeyboardMarkup:
-    from oracle_bot import storage as db
+    from oracle_bot.access import has_full_access
 
     rows: list[list[InlineKeyboardButton]] = []
-    if cont_id and not db.is_premium(user_id):
+    if cont_id and not has_full_access(user_id):
         rows.append([
             InlineKeyboardButton(
                 text=f"Полная версия · {ORACLE_DEEP_STARS}⭐",

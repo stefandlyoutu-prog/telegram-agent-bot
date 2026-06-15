@@ -12,8 +12,11 @@ DB_PATH = Path(os.getenv("ORACLE_DB_PATH", str(_default_db)))
 
 def _connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
@@ -285,7 +288,9 @@ def bump_usage(user_id: int, module: str, *, free_limit: int | None = None) -> N
     limit = ORACLE_FREE_PER_DAY if free_limit is None else free_limit
     d = _today()
     with _connect() as conn:
-        if not is_premium(user_id):
+        from oracle_bot.access import has_full_access
+
+        if not has_full_access(user_id):
             row = conn.execute(
                 "SELECT count FROM usage WHERE user_id = ? AND day = ? AND module = ?",
                 (user_id, d, module),
@@ -310,8 +315,22 @@ def bump_usage(user_id: int, module: str, *, free_limit: int | None = None) -> N
         )
 
 
+def all_user_ids() -> list[int]:
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT user_id FROM users
+            UNION
+            SELECT user_id FROM user_meta
+            """
+        ).fetchall()
+    return sorted({int(r["user_id"]) for r in rows if r["user_id"]})
+
+
 def can_use(user_id: int, module: str, free_limit: int) -> bool:
-    if is_premium(user_id):
+    from oracle_bot.access import has_full_access
+
+    if has_full_access(user_id):
         return True
     if usage_count(user_id, module) < free_limit:
         return True
