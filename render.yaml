@@ -1,0 +1,37 @@
+# Render Blueprint: @MOracul_bot 24/7 (webhook + Mini App)
+# Деплой: https://dashboard.render.com/blueprints → New Blueprint Instance → этот репозиторий
+services:
+  - type: web
+    name: moracul
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-oracle.txt
+    startCommand: python scripts/run_oracle_cloud.py
+    healthCheckPath: /health
+    envVars:
+      - key: ORACLE_CLOUD
+        value: "1"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: ORACLE_BOT_TOKEN
+        sync: false
+      - key: ORACLE_BOT_USERNAME
+        value: MOracul_bot
+      - key: GROK_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        value: https://kupiapi.ru/v1
+      - key: LLM_PROXY
+        value: ""
+      - key: TELEGRAM_PROXY
+        value: ""
+      - key: MONEY_ADMIN_IDS
+        sync: false
+      - key: ORACLE_PUSH_ENABLED
+        value: "1"
+      - key: ORACLE_FREE_PER_DAY
+        value: "2"

@@ -1,0 +1,22 @@
+.env
+.env.bak
+.venv/
+.venv-py311/
+.venv-py313/
+__pycache__/
+*.pyc
+data/*.db
+# Тяжёлые локальные данные (на диске остаются, в git — нет)
+data/reference_models/
+data/mesh_cache/
+data/_show_boeing/
+data/*.3mf
+data/*.stl
+*.mov
+*.mp4
+.bot.lock
+.oracle.lock
+.tools/
+.DS_Store
+*.log
+/tmp/

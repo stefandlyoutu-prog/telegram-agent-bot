@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>m-Oracul</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="hero">
+      <p class="eyebrow">m-Oracul</p>
+      <h1 id="greeting">Привет</h1>
+      <p class="sub" id="subtitle">Личные разборы без лишнего шума</p>
+    </header>
+
+    <section class="stats" id="stats">
+      <div class="stat"><span id="streak">0</span><small>дней подряд</small></div>
+      <div class="stat"><span id="credits">0</span><small>бонусов</small></div>
+      <div class="stat"><span id="used">0</span><small>сегодня</small></div>
+    </section>
+
+    <section class="card-day" id="cardDay">
+      <p class="label">Карта дня</p>
+      <h2 id="cardTitle">—</h2>
+      <p id="cardHint"></p>
+    </section>
+
+    <section class="grid" id="modules"></section>
+
+    <section class="topics">
+      <p class="label">Подписка на тему (утренний пуш)</p>
+      <div class="chips" id="topics">
+        <button data-topic="love">Любовь</button>
+        <button data-topic="money">Деньги</button>
+        <button data-topic="career">Карьера</button>
+        <button data-topic="">Выкл</button>
+      </div>
+    </section>
+
+    <footer class="cta">
+      <button class="btn primary" id="btnPremium">Премиум 30 дней</button>
+      <button class="btn ghost" id="btnRef">Пригласить друга</button>
+    </footer>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

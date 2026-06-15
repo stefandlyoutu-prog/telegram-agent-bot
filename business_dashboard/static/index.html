@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Центр доходов</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header__left">
+      <span class="header__logo">◈</span>
+      <div>
+        <h1>Центр доходов</h1>
+        <p class="header__sub" id="header-date">—</p>
+      </div>
+    </div>
+    <button type="button" class="btn btn--gold" id="btn-close-day">Отчёт за день</button>
+  </header>
+
+  <section class="money-bar" id="money-bar">
+    <div class="money-cell">
+      <span class="money-cell__lbl">План на сегодня</span>
+      <span class="money-cell__val" id="m-target">—</span>
+    </div>
+    <div class="money-cell money-cell--accent">
+      <span class="money-cell__lbl">Заработали</span>
+      <span class="money-cell__val" id="m-actual">—</span>
+    </div>
+    <div class="money-cell">
+      <span class="money-cell__lbl">Разрыв</span>
+      <span class="money-cell__val" id="m-gap">—</span>
+    </div>
+    <div class="money-cell money-cell--dim">
+      <span class="money-cell__lbl">Если запустить онлайн</span>
+      <span class="money-cell__val money-cell__val--sm" id="m-potential">—</span>
+    </div>
+  </section>
+
+  <section class="today-strip">
+    <div class="today-strip__head">
+      <h2>План на сегодня</h2>
+      <span class="today-strip__hint" id="plan-hint">Добавь онлайн-проекты — цель на день</span>
+    </div>
+    <div class="today-strip__list" id="today-plan"></div>
+  </section>
+
+  <section class="vault" id="vault-section">
+    <div class="vault__head">
+      <h2>Сделал один раз <span id="assets-done">0/0</span></h2>
+      <span class="vault__hint">Отмечай готовое — подтянется во все проекты автоматически</span>
+    </div>
+    <div class="vault__grid" id="assets-grid"></div>
+  </section>
+
+  <section class="channels" id="channels-section">
+    <div class="channels__head">
+      <h2>Telegram-каналы <span id="channels-count">0</span></h2>
+      <button type="button" class="btn btn--sm" id="btn-channels-sync">Синхронизировать</button>
+    </div>
+    <p class="channels__hint">Добавь @MOracul_bot админом → канал появится здесь. Воронка ведёт на бота и реф. ссылки.</p>
+    <form class="channels__add" id="channels-add-form">
+      <input type="text" id="channel-username" class="search" placeholder="@username или t.me/..." autocomplete="off">
+      <button type="submit" class="btn btn--primary btn--sm">Добавить</button>
+    </form>
+    <div class="channels__grid" id="channels-grid"></div>
+  </section>
+
+  <section class="scout" id="scout-section">
+    <div class="scout__head">
+      <h2>Разведка идей <span id="scout-count">0</span></h2>
+      <button type="button" class="btn btn--primary btn--sm" id="btn-scout-scan">Обновить тренды</button>
+    </div>
+    <div class="scout__pipe" id="scout-pipeline"></div>
+    <div class="scout__list" id="scout-list"></div>
+  </section>
+
+  <section class="blockers" id="blockers-section">
+    <div class="blockers__head">
+      <h2>Нужно от вас <span id="blockers-count">0</span></h2>
+      <span class="blockers__hint">Почта, логин, регистрация — без этого деньги не пойдут</span>
+    </div>
+    <div id="blockers-list"></div>
+  </section>
+
+  <div class="toolbar">
+    <input type="search" id="search" class="search" placeholder="Поиск…" autocomplete="off">
+    <div class="filters" id="filters">
+      <button class="chip chip--active" data-filter="all">Все</button>
+      <button class="chip chip--online" data-filter="online">🌐 Онлайн</button>
+      <button class="chip chip--physical" data-filter="physical">🔧 Физика</button>
+      <button class="chip" data-filter="flagship">★ Флагманы</button>
+    </div>
+  </div>
+
+  <section class="chart-wrap">
+    <h3 class="chart-wrap__title">Доход: план vs факт (7 дней)</h3>
+    <div class="chart" id="chart"></div>
+  </section>
+
+  <main class="layout">
+    <section class="panel panel--tl">
+      <header class="panel__head panel__head--blue">
+        <h2>Подключено <span class="count" id="count-connected">0</span></h2>
+      </header>
+      <div class="panel__body" id="list-connected"></div>
+    </section>
+    <section class="panel panel--tr">
+      <header class="panel__head panel__head--live">
+        <h2>Онлайн сейчас <span class="count count--live" id="count-running">0</span></h2>
+      </header>
+      <div class="panel__body" id="list-running"></div>
+    </section>
+    <section class="panel panel--bl">
+      <header class="panel__head panel__head--warn">
+        <h2>Нужно действие <span class="count count--warn" id="count-pending">0</span></h2>
+      </header>
+      <div class="panel__body">
+        <div class="flagship-row" id="flagship-row"></div>
+        <div id="list-pending"></div>
+      </div>
+    </section>
+    <section class="panel panel--br">
+      <header class="panel__head">
+        <h2>12 сфер жизни</h2>
+      </header>
+      <div class="panel__body panel__body--spheres">
+        <div class="spheres" id="spheres-grid"></div>
+        <div class="sphere-detail" id="sphere-detail">
+          <p class="sphere-detail__placeholder">Клик по сфере → идеи</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="idea-modal" class="modal">
+    <div class="modal__inner">
+      <button class="modal__close" type="button" id="modal-close">×</button>
+      <div id="modal-content"></div>
+    </div>
+  </dialog>
+
+  <dialog id="report-modal" class="modal modal--wide">
+    <div class="modal__inner">
+      <button class="modal__close" type="button" id="report-close">×</button>
+      <div id="report-content"></div>
+    </div>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

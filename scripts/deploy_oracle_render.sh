@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Деплой @MOracul_bot на Render (24/7 без Mac)
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+echo "=== m-Oracul → Render ==="
+echo ""
+echo "1. Залей проект на GitHub (если ещё нет):"
+echo "   git init && git add . && git commit -m 'oracle cloud'"
+echo "   git remote add origin https://github.com/YOU/telegram-agent-bot.git"
+echo "   git push -u origin main"
+echo ""
+echo "2. Открой https://dashboard.render.com/blueprints"
+echo "   → New Blueprint Instance → выбери репозиторий"
+echo ""
+echo "3. В Render задай секреты (Environment):"
+echo "   ORACLE_BOT_TOKEN, GROK_API_KEY, GEMINI_API_KEY, LLM_API_KEY, MONEY_ADMIN_IDS"
+echo ""
+echo "4. После деплоя URL будет вида https://moracul-xxxx.onrender.com"
+echo "   Mini App подхватится автоматически (RENDER_EXTERNAL_URL)"
+echo ""
+echo "5. Останови локального бота на Mac:"
+echo "   pkill -f run_oracle_bot"
+echo ""
+echo "Локальная проверка облачного режима:"
+echo "  ORACLE_CLOUD=1 ORACLE_WEBHOOK_URL=https://your-url .venv/bin/python3 scripts/run_oracle_cloud.py"

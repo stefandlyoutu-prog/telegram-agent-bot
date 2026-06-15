@@ -1,0 +1,37 @@
+---
+description: Корпус-трубка «8» — геометрия, verify, запрет регрессий (чаша в центре)
+globs: bot/services/figure8_tube_mesh.py,bot/services/hybrid_v3_figure8_corpus.py,scripts/build_v3_print_pack.py
+alwaysApply: false
+---
+
+# Figure-8 corpus (tube shell)
+
+## Product intent
+
+Printed **PETG tube shaped as ∞** (not a flat groove + silicone insert). Reference: `~/Downloads/storyboard 3.html`.
+
+## Non-negotiable specs
+
+- **2 parts** in pack: lower + upper (`fig8_body_lower`, `fig8_body_upper`)
+- Channel **Ø ≥ 40 mm** (`tube_bore_radius_mm = 20`), half height **≥ 40 mm**, wall **≥ 5 mm**
+- **One closed flow loop**; **no mixing** at center — over/under + **±X bridges**, **solid hub at (0,0)**
+- No stand, no piezo in print pack
+
+## Implementation (do not revert)
+
+- Channel path: `fig8_closed_bridge_path_3d` + `fig8_lobes_bridged` — **never** single lemniscate through (0,0)
+- Shell: `_build_tube_corpus_half_manifold` (manifold3d pipe sweep), not full-height 2D `bore_blob` extrude
+- Bridges: `bridge_via_x` along X; hub size must not block bridge path
+- Default `channel_mode`: `"infinity"`
+
+## Before delivering ZIP
+
+```bash
+.venv/bin/python3 scripts/build_v3_print_pack.py
+```
+
+Must pass shell verify **and** `verify_figure8_part_mesh` on both `build_v3_part_mesh` outputs (STL > 100 KB each).
+
+## Slicer acceptance (top view, open half)
+
+Center must show **plastic island**, not one shared circular basin where both lobes merge.

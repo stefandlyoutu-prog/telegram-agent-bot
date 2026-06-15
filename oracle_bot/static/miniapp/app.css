@@ -1,0 +1,162 @@
+:root {
+  --bg: #0f0e14;
+  --card: #1a1824;
+  --card2: #221f2e;
+  --text: #f4f2ff;
+  --muted: #9b96ad;
+  --accent: #8b7cf6;
+  --accent2: #c4a1ff;
+  --line: rgba(255, 255, 255, 0.08);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px 16px 32px;
+}
+
+.hero .eyebrow {
+  color: var(--accent2);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.hero h1 {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.hero .sub {
+  color: var(--muted);
+  margin-top: 8px;
+  font-size: 15px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.stat {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  text-align: center;
+}
+
+.stat span {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.stat small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.card-day {
+  background: linear-gradient(145deg, var(--card2), var(--card));
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.label {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.card-day h2 {
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+.card-day p {
+  color: #ddd8ef;
+  line-height: 1.45;
+  font-size: 15px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.mod {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  text-align: left;
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.mod:active { transform: scale(0.98); }
+
+.topics { margin-bottom: 24px; }
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chips button {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+
+.chips button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.cta { display: grid; gap: 10px; }
+
+.btn {
+  border: none;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, var(--accent), #6b5ce7);
+  color: white;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--accent2);
+  border: 1px solid var(--line);
+}
