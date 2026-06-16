@@ -385,6 +385,11 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
 
     await message.answer(_start_text(uid), reply_markup=kb_main())
 
+    args = (command.args or "").strip()
+    if args.startswith("mod_"):
+        await _open_module(message, state, uid, args[4:])
+        return
+
     if welcome_bonus:
         await message.answer(
             f"🎁 Добро пожаловать! +{ORACLE_REFERRAL_WELCOME} бонусный расклад за переход по ссылке друга."
@@ -614,17 +619,18 @@ async def paid(message: Message) -> None:
 async def pick_module(call: CallbackQuery, state: FSMContext) -> None:
     mod = (call.data or "").split(":", 1)[-1]
     await call.answer()
-    if mod == "premium" or mod == "referral":
+    if mod in ("premium", "referral") or not call.message:
         return
+    await _open_module(call.message, state, call.from_user.id, mod)
 
-    uid = call.from_user.id
+
+async def _open_module(msg: Message, state: FSMContext, uid: int, mod: str) -> None:
+    if not mod:
+        await msg.answer("Выбери раздел в меню 👇", reply_markup=kb_main())
+        return
     blocked = await _guard(uid, mod)
-    if blocked and call.message:
-        await call.message.answer(blocked, reply_markup=kb_limit_reached(uid))
-        return
-
-    msg = call.message
-    if not msg:
+    if blocked:
+        await msg.answer(blocked, reply_markup=kb_limit_reached(uid))
         return
 
     if mod == "horo_today":
@@ -1420,24 +1426,8 @@ async def on_webapp_data(message: Message, state: FSMContext) -> None:
         await cmd_ref(message)
         return
     if action == "mod":
-        mod = data.get("module", "")
-        if mod == "card_day":
-            from oracle_bot.card_of_day import format_card_message
-
-            await message.answer(format_card_message(uid), reply_markup=kb_main())
-            return
-        if mod == "horo_today":
-            await message.answer("Выбери знак:", reply_markup=kb_zodiac("htoday"))
-            return
-        if mod == "tarot":
-            await state.set_state(Flow.tarot_question)
-            await message.answer("Вопрос для расклада (или «без вопроса»):")
-            return
-        if mod == "palm":
-            await state.set_state(Flow.palm_wait)
-            await message.answer("Отправь фото ладони 📷")
-            return
-        await message.answer("Раздел открыт — выбери в меню или напиши /menu", reply_markup=kb_main())
+        await _open_module(message, state, uid, data.get("module", ""))
+        return
 
 
 @router.message(Command("help"))

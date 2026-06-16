@@ -1,25 +1,14 @@
 const tg = window.Telegram?.WebApp;
+let botUsername = "MOracul_bot";
+let botLink = "https://t.me/MOracul_bot";
+
 if (tg) {
   tg.ready();
   tg.expand();
+  tg.enableClosingConfirmation();
   tg.setHeaderColor("#0f0e14");
   tg.setBackgroundColor("#0f0e14");
 }
-
-const MODULES = [
-  ["horo_today", "Сегодня"],
-  ["tarot", "Таро"],
-  ["natal", "Натальная"],
-  ["compat", "Пара"],
-  ["karma", "Карма"],
-  ["palm", "Ладонь"],
-  ["career", "Карьера"],
-  ["dating", "Любовь"],
-  ["dream", "Сонник"],
-  ["destiny", "Судьба дня"],
-  ["portrait", "Портрет"],
-  ["numerology", "Числа"],
-];
 
 function uid() {
   return tg?.initDataUnsafe?.user?.id || new URLSearchParams(location.search).get("uid");
@@ -33,19 +22,71 @@ async function api(path, opts = {}) {
   return r.json();
 }
 
-function openMod(mod) {
-  if (tg) tg.sendData(JSON.stringify({ action: "mod", module: mod }));
-  else alert("Открой через Telegram: @" + (window.BOT_USERNAME || "MOracul_bot"));
+function haptic() {
+  try {
+    tg?.HapticFeedback?.impactOccurred("light");
+  } catch (_) {}
 }
 
-function renderModules() {
-  const el = document.getElementById("modules");
-  el.innerHTML = MODULES.map(
-    ([k, t]) => `<button class="mod" data-mod="${k}">${t}</button>`
-  ).join("");
-  el.querySelectorAll(".mod").forEach((b) =>
-    b.addEventListener("click", () => openMod(b.dataset.mod))
-  );
+function openMod(mod) {
+  haptic();
+  const payload = JSON.stringify({ action: "mod", module: mod });
+  if (tg?.sendData) {
+    tg.sendData(payload);
+    setTimeout(() => tg.close?.(), 150);
+    return;
+  }
+  window.location.href = `${botLink}?start=mod_${mod}`;
+}
+
+function openAction(action) {
+  haptic();
+  const payload = JSON.stringify({ action });
+  if (tg?.sendData) {
+    tg.sendData(payload);
+    setTimeout(() => tg.close?.(), 150);
+    return;
+  }
+  window.location.href = botLink;
+}
+
+function renderModules(modules, sections) {
+  const root = document.getElementById("moduleSections");
+  if (!root || !modules?.length) return;
+
+  const order = ["top", "popular", "deep"];
+  const bySection = {};
+  modules.forEach((m) => {
+    (bySection[m.section] ||= []).push(m);
+  });
+
+  root.innerHTML = order
+    .filter((s) => bySection[s]?.length)
+    .map((section) => {
+      const label = sections?.[section] || section;
+      const cards = bySection[section]
+        .map(
+          (m) => `
+        <button type="button" class="mod" data-mod="${m.id}">
+          <span class="mod-emoji">${m.emoji || ""}</span>
+          <span class="mod-body">
+            <span class="mod-title">${m.title}</span>
+            <span class="mod-desc">${m.desc}</span>
+          </span>
+        </button>`
+        )
+        .join("");
+      return `
+        <section class="mod-section">
+          <p class="label">${label}</p>
+          <div class="grid">${cards}</div>
+        </section>`;
+    })
+    .join("");
+
+  root.querySelectorAll(".mod").forEach((btn) => {
+    btn.addEventListener("click", () => openMod(btn.dataset.mod));
+  });
 }
 
 async function load() {
@@ -58,35 +99,38 @@ async function load() {
     document.getElementById("used").textContent = data.used_today ?? 0;
     document.getElementById("cardTitle").textContent = data.card?.title || "—";
     document.getElementById("cardHint").textContent = data.card?.hint || "";
+    botUsername = data.bot || botUsername;
+    botLink = data.bot_link || `https://t.me/${botUsername}`;
+    renderModules(data.modules, data.sections);
     document.querySelectorAll("#topics button").forEach((b) => {
       b.classList.toggle("active", b.dataset.topic === (data.topic || ""));
     });
   } catch (e) {
     console.warn(e);
+    renderModules([], {});
   }
 }
 
-document.getElementById("btnPremium")?.addEventListener("click", () => {
-  if (tg) tg.sendData(JSON.stringify({ action: "premium" }));
-});
-
-document.getElementById("btnRef")?.addEventListener("click", () => {
-  if (tg) tg.sendData(JSON.stringify({ action: "ref" }));
-});
+document.getElementById("btnPremium")?.addEventListener("click", () => openAction("premium"));
+document.getElementById("btnRef")?.addEventListener("click", () => openAction("ref"));
 
 document.querySelectorAll("#topics button").forEach((btn) => {
   btn.addEventListener("click", async () => {
+    haptic();
     const topic = btn.dataset.topic;
-    await api("/api/topic", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic, user_id: Number(uid()) }),
-    });
-    document.querySelectorAll("#topics button").forEach((b) =>
-      b.classList.toggle("active", b === btn)
-    );
+    try {
+      await api("/api/topic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic, user_id: Number(uid()) }),
+      });
+      document.querySelectorAll("#topics button").forEach((b) =>
+        b.classList.toggle("active", b === btn)
+      );
+    } catch (e) {
+      console.warn(e);
+    }
   });
 });
 
-renderModules();
 load();
