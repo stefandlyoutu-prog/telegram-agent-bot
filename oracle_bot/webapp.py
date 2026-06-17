@@ -103,8 +103,74 @@ def api_topic(body: TopicBody):
 
 @app.get("/api/stats")
 def api_stats(user_id: int = Query(...)):
-    if user_id <= 0:
-        raise HTTPException(400)
+    if user_id <= 0 or not is_admin_user(user_id):
+        raise HTTPException(403, "Нет доступа")
     from oracle_bot.analytics import format_stats_report
 
     return {"text": format_stats_report()}
+
+
+@app.get("/api/admin/funnel")
+def api_admin_funnel(user_id: int = Query(...)):
+    if user_id <= 0 or not is_admin_user(user_id):
+        raise HTTPException(403, "Нет доступа")
+    from oracle_bot.analytics import funnel_snapshot
+
+    return funnel_snapshot()
+
+
+class AdminBroadcastBody(BaseModel):
+    user_id: int
+    text: str = ""
+
+
+class AdminLaunchBody(BaseModel):
+    user_id: int
+    channels: list[str] = []
+    broadcast: bool = True
+    channel_posts: int = 1
+
+
+@app.post("/api/admin/broadcast")
+async def api_admin_broadcast(body: AdminBroadcastBody):
+    if body.user_id <= 0 or not is_admin_user(body.user_id):
+        raise HTTPException(403, "Нет доступа")
+    text = (body.text or "").strip()
+    if len(text) < 2:
+        raise HTTPException(400, "Пустой текст")
+    from oracle_bot.cloud import _bot
+    from oracle_bot.broadcast import broadcast_text
+
+    if not _bot:
+        raise HTTPException(503, "Бот не инициализирован")
+    return await broadcast_text(_bot, text)
+
+
+@app.post("/api/admin/launch-promo")
+async def api_admin_launch_promo(body: AdminLaunchBody):
+    if body.user_id <= 0 or not is_admin_user(body.user_id):
+        raise HTTPException(403, "Нет доступа")
+    from oracle_bot.cloud import _bot
+    from oracle_bot.broadcast import broadcast_text, post_to_channels
+    from oracle_bot.promo import all_channel_posts, post_launch_broadcast
+
+    if not _bot:
+        raise HTTPException(503, "Бот не инициализирован")
+
+    channels = [c.strip().lstrip("@") for c in body.channels if c.strip()]
+    if not channels:
+        import os
+
+        raw = os.getenv("ORACLE_PROMO_CHANNELS", "M_Topgoroskop")
+        channels = [x.strip() for x in raw.split(",") if x.strip()]
+
+    posts = all_channel_posts()[: max(1, min(body.channel_posts, len(all_channel_posts())))]
+    channel_result = await post_to_channels(_bot, posts[:1] if body.channel_posts == 1 else posts, channels)
+    broadcast_result = None
+    if body.broadcast:
+        broadcast_result = await broadcast_text(_bot, post_launch_broadcast())
+    return {
+        "channels": channel_result,
+        "broadcast": broadcast_result,
+        "posts_used": len(posts[:1] if body.channel_posts == 1 else posts),
+    }

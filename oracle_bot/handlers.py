@@ -327,6 +327,9 @@ async def _instant(
 
 
 async def _send_premium_invoice(message: Message) -> None:
+    uid = message.from_user.id if message.from_user else 0
+    if uid:
+        analytics_mod.track_payment_intent(uid, "premium_30d")
     await message.answer_invoice(
         title="Оракул — Премиум 30 дней",
         description="Безлимит + все продолжения без 🔒. Все 15+ разделов.",
@@ -341,6 +344,9 @@ async def _send_deep_invoice(message: Message, cont_id: int) -> None:
     if not cont:
         await message.answer("Чтение устарело — запроси новое из меню.", reply_markup=kb_main())
         return
+    uid = message.from_user.id if message.from_user else 0
+    if uid:
+        analytics_mod.track_payment_intent(uid, f"deep:{cont_id}")
     await message.answer_invoice(
         title="🔓 Продолжение чтения",
         description="Скрытая часть: детали, прогноз, личный совет",
@@ -510,6 +516,9 @@ async def cb_mystic_menu(call: CallbackQuery) -> None:
 @router.callback_query(F.data == "mod:premium")
 async def cb_premium(call: CallbackQuery) -> None:
     await call.answer()
+    uid = call.from_user.id if call.from_user else 0
+    if uid:
+        analytics_mod.track_click(uid, "mod:premium")
     if call.message:
         await _send_premium_invoice(call.message)
 
@@ -530,6 +539,7 @@ async def cb_deep(call: CallbackQuery) -> None:
     await call.answer()
     cont_id = int((call.data or "").split(":", 1)[1])
     uid = call.from_user.id
+    analytics_mod.track_click(uid, f"deep:{cont_id}")
     if db.is_premium(uid) or is_admin_user(uid):
         cont = db.get_continuation(cont_id)
         if cont and call.message:
@@ -545,7 +555,10 @@ async def cb_deep(call: CallbackQuery) -> None:
 @router.pre_checkout_query()
 async def pre_checkout(query: PreCheckoutQuery) -> None:
     payload = query.invoice_payload or ""
+    uid = query.from_user.id if query.from_user else 0
     if payload == "premium_30d":
+        if uid:
+            analytics_mod.track_checkout(uid, "premium_30d")
         await query.answer(ok=True)
         return
     if payload.startswith("deep:"):
@@ -556,6 +569,8 @@ async def pre_checkout(query: PreCheckoutQuery) -> None:
             return
         cont = db.get_continuation(cid)
         if cont and cont["user_id"] == query.from_user.id:
+            if uid:
+                analytics_mod.track_checkout(uid, f"deep:{cid}")
             await query.answer(ok=True)
         else:
             await query.answer(ok=False, error_message="Чтение не найдено")
@@ -619,6 +634,9 @@ async def paid(message: Message) -> None:
 async def pick_module(call: CallbackQuery, state: FSMContext) -> None:
     mod = (call.data or "").split(":", 1)[-1]
     await call.answer()
+    uid = call.from_user.id if call.from_user else 0
+    if uid and mod not in ("premium", "referral"):
+        analytics_mod.track_click(uid, f"mod:{mod}")
     if mod in ("premium", "referral") or not call.message:
         return
     await _open_module(call.message, state, call.from_user.id, mod)
@@ -1419,6 +1437,7 @@ async def on_webapp_data(message: Message, state: FSMContext) -> None:
     except (TypeError, json.JSONDecodeError):
         return
     action = data.get("action")
+    analytics_mod.track_miniapp(uid, action or "unknown", data.get("module", ""))
     if action == "premium":
         await _send_premium_invoice(message)
         return
