@@ -23,6 +23,24 @@ if not ORACLE_WEBAPP_URL:
     ORACLE_WEBAPP_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
 ORACLE_COACH_SEPARATE = os.getenv("ORACLE_COACH_SEPARATE", "0") not in {"1", "true", "True"}
 
+ORACLE_ADMIN_IDS: set[int] = {
+    int(x.strip())
+    for x in os.getenv(
+        "MONEY_ADMIN_IDS",
+        os.getenv("ORACLE_ADMIN_IDS", "5845195049"),
+    ).split(",")
+    if x.strip().isdigit()
+}
+
+ORACLE_PROMO_CHANNELS: tuple[str, ...] = tuple(
+    x.strip().lstrip("@")
+    for x in os.getenv(
+        "ORACLE_PROMO_CHANNELS",
+        "M_Topgoroskop,signsvishe,auragirlss",
+    ).split(",")
+    if x.strip()
+)
+
 
 def cloud_webapp_url() -> str:
     """HTTPS URL Mini App: явный ORACLE_WEBAPP_URL или Render."""

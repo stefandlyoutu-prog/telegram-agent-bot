@@ -75,12 +75,9 @@ router = Router()
 def _is_admin(user_id: int | None) -> bool:
     if not user_id:
         return False
-    try:
-        from business_dashboard.config import MONEY_ADMIN_IDS
+    from oracle_bot.config import ORACLE_ADMIN_IDS
 
-        return not MONEY_ADMIN_IDS or user_id in MONEY_ADMIN_IDS
-    except Exception:
-        return False
+    return not ORACLE_ADMIN_IDS or user_id in ORACLE_ADMIN_IDS
 
 
 class _ActivityMiddleware(BaseMiddleware):
@@ -388,6 +385,19 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
         analytics_mod.track_signup(uid, referred_by=ref_id if ok else None)
         schedule_welcome_series(uid)
         schedule_inactive(uid)
+        try:
+            from oracle_bot.admin_notify import notify_new_user
+
+            await notify_new_user(message.bot, uid, message.from_user, start_args=command.args)
+        except Exception as e:
+            logger.warning("admin new user notify: %s", e)
+    else:
+        try:
+            from oracle_bot.admin_notify import notify_return_visit
+
+            await notify_return_visit(message.bot, uid, message.from_user)
+        except Exception as e:
+            logger.warning("admin return notify: %s", e)
 
     await message.answer(_start_text(uid), reply_markup=kb_main())
 

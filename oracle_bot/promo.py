@@ -73,6 +73,26 @@ def post_launch_broadcast() -> str:
     )
 
 
+def post_for_channel(username: str) -> str:
+    u = username.lstrip("@").lower()
+    if u == "signsvishe":
+        return (
+            "✨ <b>Знаки свыше — не абстракция</b>\n\n"
+            "Когда хочется не общий текст, а <b>личный</b> ответ: "
+            "Таро, карта дня, совместимость, линии на ладони — "
+            "всё в Telegram, первая часть бесплатно.\n\n"
+            + _cta()
+        )
+    if u == "auragirlss":
+        return (
+            "💫 <b>Аура, энергия, отношения</b>\n\n"
+            "Разбор чакр, совместимость по датам, «судьба дня» — "
+            "для тех, кто чувствует тонко. Бот без приложений и регистраций.\n\n"
+            + _cta()
+        )
+    return pick_channel_post()
+
+
 def pick_channel_post() -> str:
     posts = [
         post_tarot_hook,

@@ -36,4 +36,4 @@ services:
       - key: ORACLE_FREE_PER_DAY
         value: "2"
       - key: ORACLE_PROMO_CHANNELS
-        value: "M_Topgoroskop"
+        value: "M_Topgoroskop,signsvishe,auragirlss"

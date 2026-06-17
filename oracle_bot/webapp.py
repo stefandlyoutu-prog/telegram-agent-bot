@@ -159,13 +159,13 @@ async def api_admin_launch_promo(body: AdminLaunchBody):
 
     channels = [c.strip().lstrip("@") for c in body.channels if c.strip()]
     if not channels:
-        import os
+        from oracle_bot.config import ORACLE_PROMO_CHANNELS
 
-        raw = os.getenv("ORACLE_PROMO_CHANNELS", "M_Topgoroskop")
-        channels = [x.strip() for x in raw.split(",") if x.strip()]
+        channels = list(ORACLE_PROMO_CHANNELS)
 
     posts = all_channel_posts()[: max(1, min(body.channel_posts, len(all_channel_posts())))]
-    channel_result = await post_to_channels(_bot, posts[:1] if body.channel_posts == 1 else posts, channels)
+    use_posts = posts if body.channel_posts != 1 else [""]
+    channel_result = await post_to_channels(_bot, use_posts, channels)
     broadcast_result = None
     if body.broadcast:
         broadcast_result = await broadcast_text(_bot, post_launch_broadcast())

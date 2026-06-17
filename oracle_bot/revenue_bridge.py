@@ -184,22 +184,6 @@ def register_gap(
 
 
 async def notify_admins(bot, text: str) -> None:
-    try:
-        from business_dashboard.config import MONEY_ADMIN_IDS
-        from oracle_bot.config import ORACLE_BOT_USERNAME
+    from oracle_bot.admin_notify import notify_admins as _notify
 
-        ids = MONEY_ADMIN_IDS or set()
-        if not ids:
-            return
-        footer = (
-            f"\n\n📬 Это сообщение от бота <b>@{ORACLE_BOT_USERNAME}</b>.\n"
-            f"📊 Идеи: открой <code>/money</code> в основном боте или "
-            f"дашборд http://127.0.0.1:8765 → блок «Разведка»"
-        )
-        for aid in ids:
-            try:
-                await bot.send_message(aid, text + footer, parse_mode="HTML", disable_web_page_preview=True)
-            except Exception as e:
-                logger.warning("admin notify %s: %s", aid, e)
-    except Exception as e:
-        logger.warning("notify_admins: %s", e)
+    await _notify(bot, text)

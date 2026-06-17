@@ -37,13 +37,16 @@ async def broadcast_text(bot, text: str) -> dict[str, Any]:
 
 
 async def post_to_channels(bot, posts: list[str], channels: list[str]) -> list[dict[str, Any]]:
+    from oracle_bot.promo import post_for_channel
+
     results: list[dict[str, Any]] = []
     for username in channels:
         u = username.strip().lstrip("@")
         if not u:
             continue
         chat_id = f"@{u}"
-        for text in posts:
+        texts = posts if len(posts) > 1 else [post_for_channel(u)]
+        for text in texts:
             try:
                 msg = await bot.send_message(chat_id, text, parse_mode="HTML")
                 results.append({"channel": u, "ok": True, "message_id": msg.message_id})
