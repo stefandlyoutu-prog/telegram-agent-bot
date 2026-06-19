@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Запуск промо @MOracul_bot: профиль бота, пост в канал, рассылка пользователям."""
+"""Запуск промо @MOracul_bot: профиль бота, прогрев, пост в канал, рассылка."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -18,7 +19,8 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env")
 
-from oracle_bot.promo import all_channel_posts, post_launch_broadcast, pick_channel_post
+from oracle_bot.config import ORACLE_PROMO_CHANNELS
+from oracle_bot.promo import post_for_channel, post_launch_broadcast, warmup_post_for_channel
 
 
 def _token() -> str:
@@ -88,7 +90,7 @@ def post_channel(token: str, username: str, text: str, *, pin: bool = False) -> 
     )
     mid = int(msg["message_id"])
     if pin:
-        _api(token, "pinChatMessage", {"chat_id": f"@{u}", "message_id": mid})
+        _api(token, "pinChatMessage", {"chat_id": f"@{u}", "message_id": mid, "disable_notification": True})
     print(f"OK  posted to @{u} message_id={mid}")
     return mid
 
@@ -128,11 +130,14 @@ def launch_on_render(base_url: str, admin_id: int) -> dict:
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Promo launch for @MOracul_bot")
-    p.add_argument("--channel-only", action="store_true", help="Only post to TG channel")
-    p.add_argument("--all-posts", action="store_true", help="Post all 5 variants (one per channel run)")
-    p.add_argument("--pin", action="store_true", help="Pin channel post")
+    p.add_argument("--warmup", action="store_true", help="Post warmup (no bot link)")
+    p.add_argument("--warmup-day", type=int, default=1, help="Warmup day 1-3")
+    p.add_argument("--promo", action="store_true", help="Post channel promo with deep-links")
+    p.add_argument("--channel-only", action="store_true", help="Only post to TG channel (promo)")
+    p.add_argument("--pin", action="store_true", help="Pin promo post")
     p.add_argument("--render", action="store_true", help="Call Render /api/admin/launch-promo")
     p.add_argument("--skip-profile", action="store_true")
+    p.add_argument("--delay", type=float, default=2.0, help="Pause between channel posts")
     args = p.parse_args()
 
     token = _token()
@@ -141,30 +146,42 @@ def main() -> None:
         sys.exit(1)
 
     admin_id = int(os.getenv("MONEY_ADMIN_IDS", "5845195049").split(",")[0])
-    channels_raw = os.getenv("ORACLE_PROMO_CHANNELS", "M_Topgoroskop")
-    channels = [x.strip() for x in channels_raw.split(",") if x.strip()]
+    channels = list(ORACLE_PROMO_CHANNELS) or ["M_Topgoroskop"]
     render_url = os.getenv("ORACLE_WEBAPP_URL", "https://moracul.onrender.com").strip()
 
     if not args.skip_profile:
         setup_bot_profile(token)
 
-    for ch in channels:
-        try:
-            st = check_channel(token, ch)
-            print(f"channel @{st['username']}: status={st['status']} can_post={st['can_post']}")
-            if not st["can_post"]:
-                print(f"SKIP @{st['username']} — добавь @MOracul_bot админом с правом постить")
-                continue
-        except urllib.error.HTTPError as e:
-            print(f"SKIP @{ch}: {e.read().decode()[:200]}")
-            continue
+    do_warmup = args.warmup or (not args.promo and not args.render and not args.channel_only)
+    do_promo = args.promo or args.channel_only
 
-        posts = all_channel_posts() if args.all_posts else [pick_channel_post()]
-        for i, text in enumerate(posts):
+    if do_warmup:
+        print(f"=== Warmup day {args.warmup_day} ===")
+        for ch in channels:
             try:
-                post_channel(token, ch, text, pin=args.pin and i == 0)
+                st = check_channel(token, ch)
+                if not st["can_post"]:
+                    print(f"SKIP warmup @{st['username']}")
+                    continue
+                text = warmup_post_for_channel(st["username"], day=args.warmup_day)
+                post_channel(token, st["username"], text)
+                time.sleep(args.delay)
             except Exception as e:
-                print(f"FAIL post @{ch}: {e}")
+                print(f"FAIL warmup @{ch}: {e}")
+
+    if do_promo:
+        print("=== Promo (deep-links) ===")
+        for ch in channels:
+            try:
+                st = check_channel(token, ch)
+                if not st["can_post"]:
+                    print(f"SKIP promo @{st['username']}")
+                    continue
+                text = post_for_channel(st["username"])
+                post_channel(token, st["username"], text, pin=args.pin)
+                time.sleep(args.delay)
+            except Exception as e:
+                print(f"FAIL promo @{ch}: {e}")
 
     if args.render:
         try:
@@ -173,14 +190,14 @@ def main() -> None:
         except urllib.error.HTTPError as e:
             body = e.read().decode()[:300]
             print(f"WARN render launch: HTTP {e.code} {body}")
-            print("     Задеплой m-oracul и повтори: python3 scripts/launch_oracle_promo.py --render")
         except Exception as e:
             print(f"WARN render launch: {e}")
 
-    if not args.channel_only and not args.render:
-        print("\nРассылка пользователям — только на сервере (БД на Render):")
-        print(f"  python3 scripts/launch_oracle_promo.py --render")
-        print("  или в боте: /broadcast " + post_launch_broadcast()[:40].replace("\n", " ") + "…")
+    if not do_warmup and not do_promo and not args.render:
+        print("Использование:")
+        print("  python3 scripts/launch_oracle_promo.py --warmup          # прогрев без ссылки")
+        print("  python3 scripts/launch_oracle_promo.py --promo --pin     # реклама + закреп")
+        print("  python3 scripts/launch_oracle_promo.py --warmup --promo  # прогрев и реклама")
 
 
 if __name__ == "__main__":

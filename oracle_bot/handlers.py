@@ -377,12 +377,17 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
         ok, notify_referrer = process_new_user(uid, command.args)
         welcome_bonus = ok and ORACLE_REFERRAL_WELCOME > 0
         ref_id = None
-        if command.args and command.args.strip().lower().startswith("ref"):
+        start_args = (command.args or "").strip()
+        source = None
+        if start_args.lower().startswith("ref"):
             try:
-                ref_id = int(command.args.strip()[3:])
+                ref_id = int(start_args[3:])
             except ValueError:
                 ref_id = None
-        analytics_mod.track_signup(uid, referred_by=ref_id if ok else None)
+        elif start_args.lower().startswith("src_"):
+            source = start_args[4:].lower()
+            db.set_signup_source(uid, source)
+        analytics_mod.track_signup(uid, referred_by=ref_id if ok else None, source=source)
         schedule_welcome_series(uid)
         schedule_inactive(uid)
         try:
@@ -404,6 +409,13 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
     args = (command.args or "").strip()
     if args.startswith("mod_"):
         await _open_module(message, state, uid, args[4:])
+        return
+
+    if is_new and args.lower().startswith("src_") and not args.startswith("mod_"):
+        await message.answer(
+            "👇 Сейчас открою <b>Таро</b> — задай один вопрос, первая часть бесплатно."
+        )
+        await _open_module(message, state, uid, "tarot")
         return
 
     if welcome_bonus:

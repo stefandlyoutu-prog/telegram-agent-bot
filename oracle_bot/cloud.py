@@ -77,9 +77,24 @@ async def start_cloud() -> None:
     if not webhook_base:
         raise RuntimeError("Задай RENDER_EXTERNAL_URL или ORACLE_WEBHOOK_URL")
     webhook_url = webhook_base.rstrip("/") + "/webhook"
+    allowed = [
+        "message",
+        "edited_message",
+        "callback_query",
+        "pre_checkout_query",
+        "inline_query",
+        "chosen_inline_result",
+        "my_chat_member",
+        "chat_member",
+        "chat_join_request",
+    ]
     await _bot.delete_webhook(drop_pending_updates=True)
-    await _bot.set_webhook(webhook_url, drop_pending_updates=True)
-    logger.info("Webhook: %s", webhook_url)
+    await _bot.set_webhook(
+        webhook_url,
+        allowed_updates=allowed,
+        drop_pending_updates=True,
+    )
+    logger.info("Webhook: %s (updates: %s)", webhook_url, len(allowed))
 
     if ORACLE_PUSH_ENABLED:
         _push_task = asyncio.create_task(push_worker(_bot, ORACLE_PUSH_INTERVAL_SEC))

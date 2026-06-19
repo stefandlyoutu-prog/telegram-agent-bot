@@ -5,9 +5,18 @@ from __future__ import annotations
 from oracle_bot import storage as db
 
 
-def track_signup(user_id: int, *, referred_by: int | None = None) -> None:
-    payload = f"ref={referred_by}" if referred_by else ""
-    db.log_event(user_id, "signup", payload)
+def track_signup(
+    user_id: int,
+    *,
+    referred_by: int | None = None,
+    source: str | None = None,
+) -> None:
+    parts: list[str] = []
+    if referred_by:
+        parts.append(f"ref={referred_by}")
+    if source:
+        parts.append(f"src={source}")
+    db.log_event(user_id, "signup", ":".join(parts))
 
 
 def track_reading(user_id: int, module: str, *, has_lock: bool = False) -> None:

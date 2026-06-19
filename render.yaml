@@ -37,3 +37,9 @@ services:
         value: "2"
       - key: ORACLE_PROMO_CHANNELS
         value: "M_Topgoroskop,signsvishe,auragirlss"
+      - key: ORACLE_DB_PATH
+        value: /var/data/oracle_bot.db
+    disk:
+      name: oracle-data
+      mountPath: /var/data
+      sizeGB: 1

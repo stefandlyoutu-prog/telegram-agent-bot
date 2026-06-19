@@ -152,7 +152,7 @@ async def api_admin_launch_promo(body: AdminLaunchBody):
         raise HTTPException(403, "Нет доступа")
     from oracle_bot.cloud import _bot
     from oracle_bot.broadcast import broadcast_text, post_to_channels
-    from oracle_bot.promo import all_channel_posts, post_launch_broadcast
+    from oracle_bot.promo import post_for_channel, post_launch_broadcast
 
     if not _bot:
         raise HTTPException(503, "Бот не инициализирован")
@@ -163,14 +163,12 @@ async def api_admin_launch_promo(body: AdminLaunchBody):
 
         channels = list(ORACLE_PROMO_CHANNELS)
 
-    posts = all_channel_posts()[: max(1, min(body.channel_posts, len(all_channel_posts())))]
-    use_posts = posts if body.channel_posts != 1 else [""]
-    channel_result = await post_to_channels(_bot, use_posts, channels)
+    channel_result = await post_to_channels(_bot, [], channels)
     broadcast_result = None
     if body.broadcast:
         broadcast_result = await broadcast_text(_bot, post_launch_broadcast())
     return {
         "channels": channel_result,
         "broadcast": broadcast_result,
-        "posts_used": len(posts[:1] if body.channel_posts == 1 else posts),
+        "posts_used": len(channel_result),
     }

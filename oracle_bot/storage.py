@@ -137,6 +137,10 @@ def init_db() -> None:
             conn.execute("ALTER TABLE user_meta ADD COLUMN topic TEXT")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE user_meta ADD COLUMN signup_source TEXT")
+        except sqlite3.OperationalError:
+            pass
 
 
 def _today() -> str:
@@ -598,6 +602,33 @@ def get_user_meta(user_id: int) -> dict[str, Any]:
     with _connect() as conn:
         row = conn.execute("SELECT * FROM user_meta WHERE user_id = ?", (user_id,)).fetchone()
     return dict(row) if row else {}
+
+
+def set_signup_source(user_id: int, source: str) -> None:
+    src = (source or "").strip().lower()[:64]
+    if not src:
+        return
+    ensure_user(user_id)
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT signup_source FROM user_meta WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        if row and row["signup_source"]:
+            return
+        if row:
+            conn.execute(
+                "UPDATE user_meta SET signup_source = ? WHERE user_id = ?",
+                (src, user_id),
+            )
+        else:
+            now = _now_iso()
+            conn.execute(
+                """
+                INSERT INTO user_meta (user_id, signup_source, push_opt_out, signup_at, last_active_at)
+                VALUES (?, ?, 0, ?, ?)
+                """,
+                (user_id, src, now, now),
+            )
 
 
 def schedule_push(
