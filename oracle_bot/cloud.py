@@ -156,3 +156,7 @@ async def telegram_webhook(request: Request):
 @router_cloud.get("/health")
 async def health():
     return {"ok": True, "webapp": ORACLE_WEBAPP_URL or cloud_webapp_url()}
+
+
+def cloud_runtime() -> tuple[Optional[Bot], Optional[Dispatcher]]:
+    return _bot, _dp

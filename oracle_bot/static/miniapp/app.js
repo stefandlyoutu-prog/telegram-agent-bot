@@ -1,11 +1,11 @@
 const tg = window.Telegram?.WebApp;
 let botUsername = "MOracul_bot";
 let botLink = "https://t.me/MOracul_bot";
+let busy = false;
 
 if (tg) {
   tg.ready();
   tg.expand();
-  tg.enableClosingConfirmation();
   tg.setHeaderColor("#0f0e14");
   tg.setBackgroundColor("#0f0e14");
 }
@@ -14,8 +14,22 @@ function uid() {
   return tg?.initDataUnsafe?.user?.id || new URLSearchParams(location.search).get("uid");
 }
 
+function initData() {
+  return tg?.initData || "";
+}
+
+async function waitForUid(ms = 2500) {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    const id = uid();
+    if (id) return id;
+    await new Promise((r) => setTimeout(r, 80));
+  }
+  return uid();
+}
+
 async function api(path, opts = {}) {
-  const id = uid();
+  const id = await waitForUid();
   const url = id ? `${path}?user_id=${id}` : path;
   const r = await fetch(url, opts);
   if (!r.ok) throw new Error(await r.text());
@@ -28,10 +42,18 @@ function haptic() {
   } catch (_) {}
 }
 
-function useSendData() {
-  // sendData работает ТОЛЬКО при запуске из Reply Keyboard (web_app).
-  // Кнопка меню «Приложение» и inline web_app — sendData не доставляет данные боту.
-  return false;
+function toast(text) {
+  try {
+    if (tg?.showAlert) {
+      tg.showAlert(text);
+      return;
+    }
+  } catch (_) {}
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.textContent = text;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2200);
 }
 
 function openBotDeepLink(start) {
@@ -47,27 +69,63 @@ function openBotDeepLink(start) {
   window.location.href = url;
 }
 
-function openMod(mod) {
+function closeSoon(ms = 450) {
+  setTimeout(() => {
+    try {
+      tg?.close();
+    } catch (_) {}
+  }, ms);
+}
+
+async function triggerAction(payload) {
+  if (busy) return;
+  busy = true;
   haptic();
-  const payload = JSON.stringify({ action: "mod", module: mod });
-  if (useSendData() && tg?.sendData) {
-    tg.sendData(payload);
-    return;
+
+  const data = initData();
+  if (data) {
+    try {
+      const r = await fetch("/api/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ init_data: data, ...payload }),
+      });
+      if (r.ok) {
+        toast("Готово — смотри ответ в чате с ботом");
+        closeSoon(500);
+        busy = false;
+        return;
+      }
+    } catch (e) {
+      console.warn("api/action", e);
+    }
   }
-  openBotDeepLink(`mod_${mod}`);
+
+  const action = payload.action;
+  if (action === "mod" && payload.module) {
+    openBotDeepLink(`mod_${payload.module}`);
+  } else if (action === "premium") {
+    openBotDeepLink("premium");
+  } else if (action === "ref") {
+    openBotDeepLink("ref");
+  } else if (action === "voice") {
+    openBotDeepLink("voice");
+  } else {
+    openBotDeepLink("");
+  }
+  toast("Открываю чат с ботом…");
+  closeSoon(700);
+  busy = false;
+}
+
+function openMod(mod) {
+  if (!mod) return;
+  triggerAction({ action: "mod", module: mod });
 }
 
 function openAction(action) {
-  haptic();
-  const payload = JSON.stringify({ action });
-  if (useSendData() && tg?.sendData) {
-    tg.sendData(payload);
-    return;
-  }
-  if (action === "premium") openBotDeepLink("premium");
-  else if (action === "ref") openBotDeepLink("ref");
-  else if (action === "voice") openBotDeepLink("voice");
-  else openBotDeepLink("");
+  if (!action) return;
+  triggerAction({ action });
 }
 
 function renderModules(modules, sections) {
@@ -103,9 +161,52 @@ function renderModules(modules, sections) {
         </section>`;
     })
     .join("");
+}
 
-  root.querySelectorAll(".mod").forEach((btn) => {
-    btn.addEventListener("click", () => openMod(btn.dataset.mod));
+function bindUi() {
+  document.querySelector(".app")?.addEventListener("click", (e) => {
+    const modBtn = e.target.closest("[data-mod]");
+    if (modBtn?.dataset.mod) {
+      e.preventDefault();
+      openMod(modBtn.dataset.mod);
+      return;
+    }
+    const actionBtn = e.target.closest("[data-action]");
+    if (actionBtn?.dataset.action) {
+      e.preventDefault();
+      openAction(actionBtn.dataset.action);
+    }
+  });
+
+  document.getElementById("cardDay")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openMod("card_day");
+    }
+  });
+
+  document.querySelectorAll("#topics button").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      haptic();
+      const topic = btn.dataset.topic;
+      const userId = Number(await waitForUid());
+      if (!userId) {
+        toast("Открой приложение из @MOracul_bot");
+        return;
+      }
+      try {
+        await api("/api/topic", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topic, user_id: userId }),
+        });
+        document.querySelectorAll("#topics button").forEach((b) =>
+          b.classList.toggle("active", b === btn)
+        );
+      } catch (e) {
+        console.warn(e);
+      }
+    });
   });
 }
 
@@ -125,47 +226,20 @@ async function load() {
     document.querySelectorAll("#topics button").forEach((b) => {
       b.classList.toggle("active", b.dataset.topic === (data.topic || ""));
     });
-    document.getElementById("cardDay")?.addEventListener("click", () => openMod("card_day"));
-    document.getElementById("cardDay")?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        openMod("card_day");
-      }
-    });
-    document.querySelectorAll("#quickBar .quick-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        if (btn.dataset.mod) openMod(btn.dataset.mod);
-        else if (btn.dataset.action) openAction(btn.dataset.action);
-      });
-    });
   } catch (e) {
     console.warn(e);
     document.getElementById("subtitle").textContent =
-      "Открой из @MOracul_bot → Приложение";
-    renderModules([], {});
+      "Нажми раздел — ответ придёт в чат с ботом";
+    try {
+      const cat = await fetch("/api/catalog").then((r) => r.json());
+      botUsername = cat.bot || botUsername;
+      botLink = cat.bot_link || botLink;
+      renderModules(cat.modules, cat.sections);
+    } catch (_) {
+      renderModules([], {});
+    }
   }
 }
 
-document.getElementById("btnPremium")?.addEventListener("click", () => openAction("premium"));
-document.getElementById("btnRef")?.addEventListener("click", () => openAction("ref"));
-
-document.querySelectorAll("#topics button").forEach((btn) => {
-  btn.addEventListener("click", async () => {
-    haptic();
-    const topic = btn.dataset.topic;
-    try {
-      await api("/api/topic", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, user_id: Number(uid()) }),
-      });
-      document.querySelectorAll("#topics button").forEach((b) =>
-        b.classList.toggle("active", b === btn)
-      );
-    } catch (e) {
-      console.warn(e);
-    }
-  });
-});
-
+bindUi();
 load();

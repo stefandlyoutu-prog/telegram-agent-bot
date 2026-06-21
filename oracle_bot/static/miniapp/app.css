@@ -231,3 +231,29 @@ body {
   color: var(--accent2);
   border: 1px solid var(--line);
 }
+
+.toast {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 24px;
+  max-width: 448px;
+  margin: 0 auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(26, 24, 36, 0.96);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 20;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}

@@ -50,8 +50,38 @@ def index():
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
+@app.get("/api/catalog")
+def api_catalog():
+    return {
+        "modules": modules_for_api(),
+        "sections": SECTION_LABELS,
+        "bot": ORACLE_BOT_USERNAME,
+        "bot_link": f"https://t.me/{ORACLE_BOT_USERNAME}",
+    }
+
+
+def _guest_home() -> dict:
+    return {
+        "greeting": "Привет",
+        "subtitle": "Нажми раздел — ответ придёт в чат с ботом",
+        "streak": 0,
+        "credits": 0,
+        "used_today": 0,
+        "free_limit": ORACLE_FREE_PER_DAY,
+        "premium": False,
+        "topic": "",
+        "card": {"title": "—", "hint": "Карта дня откроется в чате"},
+        "bot": ORACLE_BOT_USERNAME,
+        "bot_link": f"https://t.me/{ORACLE_BOT_USERNAME}",
+        "modules": modules_for_api(),
+        "sections": SECTION_LABELS,
+    }
+
+
 @app.get("/api/home")
-def api_home(user_id: int = Query(...)):
+def api_home(user_id: int | None = Query(None)):
+    if not user_id or user_id <= 0:
+        return _guest_home()
     db.ensure_user(user_id)
     record_visit(user_id)
     p = db.get_profile(user_id)
@@ -79,6 +109,35 @@ def api_home(user_id: int = Query(...)):
 class TopicBody(BaseModel):
     user_id: int
     topic: str = ""
+
+
+class ActionBody(BaseModel):
+    init_data: str = ""
+    action: str
+    module: str = ""
+
+
+@app.post("/api/action")
+async def api_action(body: ActionBody):
+    from oracle_bot.cloud import cloud_runtime
+    from oracle_bot.webapp_actions import dispatch_webapp_action
+
+    bot, dp = cloud_runtime()
+    if not bot or not dp:
+        raise HTTPException(503, "Бот не инициализирован")
+    try:
+        await dispatch_webapp_action(
+            bot,
+            dp,
+            body.init_data,
+            action=body.action.strip(),
+            module=body.module.strip(),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except Exception as e:
+        raise HTTPException(500, "Не удалось выполнить действие") from e
+    return {"ok": True}
 
 
 @app.post("/api/topic")

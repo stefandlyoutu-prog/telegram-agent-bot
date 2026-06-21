@@ -21,7 +21,7 @@
       <div class="stat"><span id="used">0</span><small>сегодня</small></div>
     </section>
 
-    <section class="card-day card-day-btn" id="cardDay" role="button" tabindex="0" aria-label="Открыть карту дня">
+    <section class="card-day card-day-btn" id="cardDay" role="button" tabindex="0" data-mod="card_day" aria-label="Открыть карту дня">
       <p class="label">Карта дня · нажми</p>
       <h2 id="cardTitle">—</h2>
       <p id="cardHint"></p>
@@ -47,9 +47,10 @@
     </section>
 
     <footer class="cta">
-      <button type="button" class="btn primary" id="btnPremium">Премиум 30 дней</button>
-      <button type="button" class="btn ghost" id="btnRef">Пригласить друга</button>
+      <button type="button" class="btn primary" id="btnPremium" data-action="premium">Премиум 30 дней</button>
+      <button type="button" class="btn ghost" id="btnRef" data-action="ref">Пригласить друга</button>
     </footer>
+    <p class="toast" id="toast" aria-live="polite"></p>
   </div>
   <script src="/static/app.js"></script>
 </body>
