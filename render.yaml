@@ -45,3 +45,36 @@ services:
       name: oracle-data
       mountPath: /var/data
       sizeGB: 1
+
+  - type: web
+    name: work-online
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-work.txt
+    startCommand: python scripts/run_work_cloud.py
+    healthCheckPath: /health
+    envVars:
+      - key: WORK_CLOUD
+        value: "1"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: WORK_BOT_TOKEN
+        sync: false
+      - key: WORK_BOT_USERNAME
+        value: WorkOnline_ru_bot
+      - key: MONEY_ADMIN_IDS
+        sync: false
+      - key: WORK_PUSH_ENABLED
+        value: "1"
+      - key: MIN_WITHDRAWAL_RUB
+        value: "5000"
+      - key: WORKER_SHARE
+        value: "0.1"
+      - key: WORK_DB_PATH
+        value: /var/data/work_bot.db
+      - key: ORACLE_BOT_USERNAME
+        value: MOracul_bot
+    disk:
+      name: work-data
+      mountPath: /var/data
+      sizeGB: 1

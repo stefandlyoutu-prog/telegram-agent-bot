@@ -39,6 +39,8 @@ IDEA_ASSET_REQUIRES: Dict[str, List[str]] = {
     "biz-automation-matcher": ["botfather", "yukassa"],
     "watch-earn-platform": ["botfather", "yukassa"],
     "referral-hub": ["email", "samozanyatost"],
+    "work-online-bot": ["email", "samozanyatost", "botfather", "yandex_partner", "ozon_blogger", "leadgid_cpa"],
+    "cpa-micro-tasks": ["email", "samozanyatost", "botfather"],
 }
 
 # Триггеры в action_required → ключ актива
