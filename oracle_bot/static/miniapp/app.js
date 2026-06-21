@@ -28,26 +28,46 @@ function haptic() {
   } catch (_) {}
 }
 
+function useSendData() {
+  // sendData работает ТОЛЬКО при запуске из Reply Keyboard (web_app).
+  // Кнопка меню «Приложение» и inline web_app — sendData не доставляет данные боту.
+  return false;
+}
+
+function openBotDeepLink(start) {
+  const url = start ? `${botLink}?start=${encodeURIComponent(start)}` : botLink;
+  if (tg?.openTelegramLink) {
+    tg.openTelegramLink(url);
+    return;
+  }
+  if (tg?.openLink) {
+    tg.openLink(url);
+    return;
+  }
+  window.location.href = url;
+}
+
 function openMod(mod) {
   haptic();
   const payload = JSON.stringify({ action: "mod", module: mod });
-  if (tg?.sendData) {
+  if (useSendData() && tg?.sendData) {
     tg.sendData(payload);
-    setTimeout(() => tg.close?.(), 400);
     return;
   }
-  window.location.href = `${botLink}?start=mod_${mod}`;
+  openBotDeepLink(`mod_${mod}`);
 }
 
 function openAction(action) {
   haptic();
   const payload = JSON.stringify({ action });
-  if (tg?.sendData) {
+  if (useSendData() && tg?.sendData) {
     tg.sendData(payload);
-    setTimeout(() => tg.close?.(), 400);
     return;
   }
-  window.location.href = botLink;
+  if (action === "premium") openBotDeepLink("premium");
+  else if (action === "ref") openBotDeepLink("ref");
+  else if (action === "voice") openBotDeepLink("voice");
+  else openBotDeepLink("");
 }
 
 function renderModules(modules, sections) {

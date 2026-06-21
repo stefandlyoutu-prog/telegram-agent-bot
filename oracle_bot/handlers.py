@@ -407,6 +407,20 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
     await message.answer(_start_text(uid), reply_markup=kb_main())
 
     args = (command.args or "").strip()
+    if args == "premium":
+        await _send_premium_invoice(message)
+        return
+    if args == "ref":
+        await cmd_ref(message)
+        return
+    if args == "voice":
+        await message.answer(
+            "🎤 <b>Голосом — удобно с утра</b>\n\n"
+            "Запиши голосовое: сон, вопрос к Таро, ситуация в отношениях — "
+            "я распознаю и отвечу.\n\n"
+            "Или выбери раздел в /menu и уточни голосом после расклада."
+        )
+        return
     if args.startswith("mod_"):
         await _open_module(message, state, uid, args[4:])
         return
