@@ -146,13 +146,34 @@ async def api_admin_broadcast(body: AdminBroadcastBody):
     return await broadcast_text(_bot, text)
 
 
+@app.get("/api/admin/channel-queue")
+def api_admin_channel_queue(user_id: int = Query(...)):
+    if user_id <= 0 or not is_admin_user(user_id):
+        raise HTTPException(403, "Нет доступа")
+    return db.channel_queue_summary()
+
+
+class AdminSeedQueueBody(BaseModel):
+    user_id: int
+    days: int = 7
+
+
+@app.post("/api/admin/seed-channel-queue")
+def api_admin_seed_channel_queue(body: AdminSeedQueueBody):
+    if body.user_id <= 0 or not is_admin_user(body.user_id):
+        raise HTTPException(403, "Нет доступа")
+    from oracle_bot.channel_queue import seed_week_queue
+
+    return seed_week_queue(days=max(1, min(body.days, 14)))
+
+
 @app.post("/api/admin/launch-promo")
 async def api_admin_launch_promo(body: AdminLaunchBody):
     if body.user_id <= 0 or not is_admin_user(body.user_id):
         raise HTTPException(403, "Нет доступа")
     from oracle_bot.cloud import _bot
     from oracle_bot.broadcast import broadcast_text, post_to_channels
-    from oracle_bot.promo import post_for_channel, post_launch_broadcast
+    from oracle_bot.promo import post_for_channel, post_launch_broadcast, pick_promo_variant
 
     if not _bot:
         raise HTTPException(503, "Бот не инициализирован")
@@ -163,7 +184,13 @@ async def api_admin_launch_promo(body: AdminLaunchBody):
 
         channels = list(ORACLE_PROMO_CHANNELS)
 
-    channel_result = await post_to_channels(_bot, [], channels)
+    posts = [post_for_channel(ch) for ch in channels]
+    if body.channel_posts > 1:
+        posts = []
+        for i, ch in enumerate(channels):
+            vid, text = pick_promo_variant(i, ch)
+            posts.append(text)
+    channel_result = await post_to_channels(_bot, posts, channels)
     broadcast_result = None
     if body.broadcast:
         broadcast_result = await broadcast_text(_bot, post_launch_broadcast())

@@ -33,7 +33,7 @@ function openMod(mod) {
   const payload = JSON.stringify({ action: "mod", module: mod });
   if (tg?.sendData) {
     tg.sendData(payload);
-    setTimeout(() => tg.close?.(), 150);
+    setTimeout(() => tg.close?.(), 400);
     return;
   }
   window.location.href = `${botLink}?start=mod_${mod}`;
@@ -44,7 +44,7 @@ function openAction(action) {
   const payload = JSON.stringify({ action });
   if (tg?.sendData) {
     tg.sendData(payload);
-    setTimeout(() => tg.close?.(), 150);
+    setTimeout(() => tg.close?.(), 400);
     return;
   }
   window.location.href = botLink;
@@ -105,8 +105,23 @@ async function load() {
     document.querySelectorAll("#topics button").forEach((b) => {
       b.classList.toggle("active", b.dataset.topic === (data.topic || ""));
     });
+    document.getElementById("cardDay")?.addEventListener("click", () => openMod("card_day"));
+    document.getElementById("cardDay")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openMod("card_day");
+      }
+    });
+    document.querySelectorAll("#quickBar .quick-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.mod) openMod(btn.dataset.mod);
+        else if (btn.dataset.action) openAction(btn.dataset.action);
+      });
+    });
   } catch (e) {
     console.warn(e);
+    document.getElementById("subtitle").textContent =
+      "Открой из @MOracul_bot → Приложение";
     renderModules([], {});
   }
 }

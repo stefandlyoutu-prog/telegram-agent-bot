@@ -11,11 +11,20 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.services.telegram_net import create_telegram_session
-from oracle_bot.config import ORACLE_BOT_TOKEN, ORACLE_PUSH_ENABLED, ORACLE_PUSH_INTERVAL_SEC, ORACLE_WEBAPP_URL
+from oracle_bot.config import (
+    ORACLE_BOT_TOKEN,
+    ORACLE_CHANNEL_POST_INTERVAL_SEC,
+    ORACLE_CHANNEL_POSTS_ENABLED,
+    ORACLE_PUSH_ENABLED,
+    ORACLE_PUSH_INTERVAL_SEC,
+    ORACLE_WEBAPP_URL,
+)
 from oracle_bot.handlers import router
 from oracle_bot.voice import router as voice_router
 from oracle_bot.storage import init_db
 from oracle_bot.pushes import push_worker
+from oracle_bot.channel_queue import channel_post_worker, seed_week_queue
+from oracle_bot import storage as db
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,6 +82,12 @@ async def main() -> None:
     if ORACLE_PUSH_ENABLED:
         asyncio.create_task(push_worker(bot, ORACLE_PUSH_INTERVAL_SEC))
         logger.info("Push worker: каждые %s сек", ORACLE_PUSH_INTERVAL_SEC)
+    if ORACLE_CHANNEL_POSTS_ENABLED:
+        if db.count_channel_posts(status="pending") == 0:
+            seeded = seed_week_queue()
+            logger.info("Channel queue seeded: %s", seeded)
+        asyncio.create_task(channel_post_worker(bot, ORACLE_CHANNEL_POST_INTERVAL_SEC))
+        logger.info("Channel post worker: каждые %s сек", ORACLE_CHANNEL_POST_INTERVAL_SEC)
     await dp.start_polling(bot)
 
 

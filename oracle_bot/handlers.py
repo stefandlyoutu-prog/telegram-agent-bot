@@ -1466,6 +1466,14 @@ async def on_webapp_data(message: Message, state: FSMContext) -> None:
     if action == "ref":
         await cmd_ref(message)
         return
+    if action == "voice":
+        await message.answer(
+            "🎤 <b>Голосом — удобно с утра</b>\n\n"
+            "Запиши голосовое: сон, вопрос к Таро, ситуация в отношениях — "
+            "я распознаю и отвечу.\n\n"
+            "Или выбери раздел в /menu и уточни голосом после расклада."
+        )
+        return
     if action == "mod":
         await _open_module(message, state, uid, data.get("module", ""))
         return

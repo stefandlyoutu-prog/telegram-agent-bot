@@ -33,6 +33,8 @@ services:
         sync: false
       - key: ORACLE_PUSH_ENABLED
         value: "1"
+      - key: ORACLE_CHANNEL_POSTS_ENABLED
+        value: "1"
       - key: ORACLE_FREE_PER_DAY
         value: "2"
       - key: ORACLE_PROMO_CHANNELS

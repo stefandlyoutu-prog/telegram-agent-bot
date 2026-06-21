@@ -80,6 +80,37 @@ body {
   margin-bottom: 18px;
 }
 
+.card-day-btn {
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+}
+
+.card-day-btn:active {
+  transform: scale(0.99);
+  border-color: var(--accent);
+}
+
+.quick {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.quick-btn {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 10px 8px;
+  cursor: pointer;
+}
+
+.quick-btn:active {
+  background: var(--card2);
+}
+
 .label {
   color: var(--muted);
   font-size: 12px;

@@ -11,6 +11,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from oracle_bot import storage as db
 from oracle_bot.access import has_full_access
+from oracle_bot.config import ORACLE_DEEP_STARS, ORACLE_REFERRAL_BONUS
 from oracle_bot.mystic_data import zodiac_label
 
 logger = logging.getLogger(__name__)

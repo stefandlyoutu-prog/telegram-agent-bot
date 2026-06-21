@@ -21,10 +21,17 @@
       <div class="stat"><span id="used">0</span><small>сегодня</small></div>
     </section>
 
-    <section class="card-day" id="cardDay">
-      <p class="label">Карта дня</p>
+    <section class="card-day card-day-btn" id="cardDay" role="button" tabindex="0" aria-label="Открыть карту дня">
+      <p class="label">Карта дня · нажми</p>
       <h2 id="cardTitle">—</h2>
       <p id="cardHint"></p>
+    </section>
+
+    <section class="quick" id="quickBar">
+      <button type="button" class="quick-btn" data-mod="dream">🌙 Сонник</button>
+      <button type="button" class="quick-btn" data-action="voice">🎤 Голосом</button>
+      <button type="button" class="quick-btn" data-mod="tarot">🔮 Таро</button>
+      <button type="button" class="quick-btn" data-mod="horo_today">🌅 Гороскоп</button>
     </section>
 
     <div id="moduleSections"></div>

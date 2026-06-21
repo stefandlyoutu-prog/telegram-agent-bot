@@ -18,6 +18,12 @@ ORACLE_REFERRAL_BONUS = int(os.getenv("ORACLE_REFERRAL_BONUS", "2"))
 ORACLE_REFERRAL_WELCOME = int(os.getenv("ORACLE_REFERRAL_WELCOME", "1"))
 ORACLE_PUSH_ENABLED = os.getenv("ORACLE_PUSH_ENABLED", "1") not in {"0", "false", "False"}
 ORACLE_PUSH_INTERVAL_SEC = int(os.getenv("ORACLE_PUSH_INTERVAL_SEC", "120"))
+ORACLE_CHANNEL_POSTS_ENABLED = os.getenv("ORACLE_CHANNEL_POSTS_ENABLED", "1") not in {
+    "0",
+    "false",
+    "False",
+}
+ORACLE_CHANNEL_POST_INTERVAL_SEC = int(os.getenv("ORACLE_CHANNEL_POST_INTERVAL_SEC", "90"))
 ORACLE_WEBAPP_URL = os.getenv("ORACLE_WEBAPP_URL", "").strip().rstrip("/")
 if not ORACLE_WEBAPP_URL:
     ORACLE_WEBAPP_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")

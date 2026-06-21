@@ -118,6 +118,20 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_events_type_created ON events(event_type, created_at);
             CREATE INDEX IF NOT EXISTS idx_payments_created ON payments(created_at);
             CREATE INDEX IF NOT EXISTS idx_push_due ON push_queue(send_after, sent_at);
+            CREATE TABLE IF NOT EXISTS channel_post_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel TEXT NOT NULL,
+                scheduled_at TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                variant_id TEXT,
+                body TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                sent_at TEXT,
+                error TEXT,
+                message_id INTEGER,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_channel_post_due ON channel_post_queue(status, scheduled_at);
             """
         )
         for table, col in (("profiles", "birth_time"), ("profiles", "birth_place"), ("client_sessions", "last_context")):
@@ -811,3 +825,112 @@ def analytics_snapshot() -> dict[str, Any]:
         "conversion_pct": round(conv, 2),
         "limit_hits_today": int(limit_hits_today),
     }
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def enqueue_channel_post(
+    channel: str,
+    scheduled_at: str,
+    kind: str,
+    body: str,
+    *,
+    variant_id: str = "",
+) -> int:
+    u = channel.strip().lstrip("@")
+    now = _utc_now()
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO channel_post_queue (
+                channel, scheduled_at, kind, variant_id, body, status, created_at
+            ) VALUES (?, ?, ?, ?, ?, 'pending', ?)
+            """,
+            (u, scheduled_at, kind, variant_id or None, body, now),
+        )
+        return int(cur.lastrowid)
+
+
+def fetch_due_channel_posts(*, limit: int = 8) -> list[sqlite3.Row]:
+    now = _utc_now()
+    with _connect() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM channel_post_queue
+            WHERE status = 'pending' AND scheduled_at <= ?
+            ORDER BY scheduled_at ASC
+            LIMIT ?
+            """,
+            (now, limit),
+        ).fetchall()
+
+
+def mark_channel_post_sent(post_id: int, message_id: int) -> None:
+    now = _utc_now()
+    with _connect() as conn:
+        conn.execute(
+            """
+            UPDATE channel_post_queue
+            SET status = 'sent', sent_at = ?, message_id = ?
+            WHERE id = ?
+            """,
+            (now, message_id, post_id),
+        )
+
+
+def mark_channel_post_failed(post_id: int, error: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            UPDATE channel_post_queue
+            SET status = 'failed', error = ?
+            WHERE id = ?
+            """,
+            (error[:500], post_id),
+        )
+
+
+def count_channel_posts(*, status: str = "pending") -> int:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM channel_post_queue WHERE status = ?",
+            (status,),
+        ).fetchone()
+    return int(row[0] or 0)
+
+
+def clear_pending_channel_posts_from(day_iso: str) -> int:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            DELETE FROM channel_post_queue
+            WHERE status = 'pending' AND substr(scheduled_at, 1, 10) >= ?
+            """,
+            (day_iso,),
+        )
+        return cur.rowcount
+
+
+def channel_queue_summary() -> dict[str, Any]:
+    with _connect() as conn:
+        pending = conn.execute(
+            "SELECT COUNT(*) FROM channel_post_queue WHERE status = 'pending'"
+        ).fetchone()[0]
+        sent = conn.execute(
+            "SELECT COUNT(*) FROM channel_post_queue WHERE status = 'sent'"
+        ).fetchone()[0]
+        promo_sent = conn.execute(
+            """
+            SELECT variant_id, COUNT(*) AS c FROM channel_post_queue
+            WHERE status = 'sent' AND kind = 'promo'
+            GROUP BY variant_id ORDER BY c DESC
+            """
+        ).fetchall()
+    return {
+        "pending": int(pending or 0),
+        "sent": int(sent or 0),
+        "promo_variants": {r["variant_id"]: int(r["c"]) for r in promo_sent},
+    }
+
