@@ -180,6 +180,19 @@ def ensure_user(user_id: int) -> bool:
         return True
 
 
+def spend_referral_credit(user_id: int) -> bool:
+    """Списать 1 бонусный расклад. True если списали."""
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            UPDATE users SET referral_credits = referral_credits - 1
+            WHERE user_id = ? AND referral_credits > 0
+            """,
+            (user_id,),
+        )
+        return cur.rowcount > 0
+
+
 def get_referral_credits(user_id: int) -> int:
     with _connect() as conn:
         row = conn.execute(
@@ -804,6 +817,32 @@ def analytics_snapshot() -> dict[str, Any]:
             """,
             (today,),
         ).fetchone()[0]
+        payment_intents_total = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type = 'payment_intent'"
+        ).fetchone()[0]
+        payment_intents_week = conn.execute(
+            """
+            SELECT COUNT(*) FROM events
+            WHERE event_type = 'payment_intent' AND substr(created_at, 1, 10) >= ?
+            """,
+            (week_ago,),
+        ).fetchone()[0]
+        referral_prompts_week = conn.execute(
+            """
+            SELECT COUNT(*) FROM events
+            WHERE event_type = 'referral_prompt' AND substr(created_at, 1, 10) >= ?
+            """,
+            (week_ago,),
+        ).fetchone()[0]
+        referrals_week = conn.execute(
+            """
+            SELECT COUNT(*) FROM referrals WHERE substr(created_at, 1, 10) >= ?
+            """,
+            (week_ago,),
+        ).fetchone()[0]
+        signups_total = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type = 'signup'"
+        ).fetchone()[0]
     conv = (paying_users / total_users * 100) if total_users else 0.0
     return {
         "total_users": int(total_users),
@@ -824,6 +863,11 @@ def analytics_snapshot() -> dict[str, Any]:
         "paying_users": int(paying_users),
         "conversion_pct": round(conv, 2),
         "limit_hits_today": int(limit_hits_today),
+        "payment_intents_total": int(payment_intents_total),
+        "payment_intents_week": int(payment_intents_week),
+        "referral_prompts_week": int(referral_prompts_week),
+        "referrals_week": int(referrals_week),
+        "signups_total": int(signups_total),
     }
 
 

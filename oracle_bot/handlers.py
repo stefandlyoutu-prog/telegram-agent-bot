@@ -161,6 +161,8 @@ class Flow(StatesGroup):
 
 
 def _premium_line(user_id: int) -> str:
+    from oracle_bot.paywall import referral_primary
+
     if is_admin_user(user_id):
         return "\n\n👑 <b>Полный доступ</b> — все разделы без лимита"
     if db.is_premium(user_id):
@@ -171,6 +173,14 @@ def _premium_line(user_id: int) -> str:
     invited = db.referral_stats(user_id)["invited"]
     bonus = f"\n🎁 Бонусов: {credits}" if credits else ""
     refs = f"\n👥 Друзей: {invited}" if invited else ""
+    if referral_primary():
+        return (
+            f"\n\n🆓 Сегодня: {used} чтений"
+            f"{bonus}{refs}\n"
+            f"Бесплатно до {ORACLE_FREE_PER_DAY} на раздел\n"
+            f"🎁 Пригласи друга — +{ORACLE_REFERRAL_BONUS} расклада и 🔓 продолжения\n"
+            f"/ref — твоя ссылка"
+        )
     return (
         f"\n\n🆓 Сегодня: {used} чтений"
         f"{bonus}{refs}\n"
@@ -182,12 +192,39 @@ def _premium_line(user_id: int) -> str:
 
 
 def _limit_text() -> str:
+    from oracle_bot.paywall import referral_primary
+
+    if referral_primary():
+        return (
+            "Лимит бесплатных чтений в этом разделе на сегодня исчерпан.\n\n"
+            f"🎁 <b>Пригласи друга</b> — +{ORACLE_REFERRAL_BONUS} бонусных расклада "
+            "и можно открыть 🔓 продолжение.\n"
+            "Команда /ref — ссылка для отправки."
+        )
     return (
         "Лимит бесплатных чтений в этом разделе на сегодня исчерпан.\n\n"
         f"🎁 <b>Пригласи друга</b> — +{ORACLE_REFERRAL_BONUS} бонусных расклада за каждого "
         "(команда /ref).\n"
         f"🔓 Или открой продолжение за {ORACLE_DEEP_STARS}⭐ · ⭐ Премиум — безлимит на 30 дней."
     )
+
+
+async def _prompt_referral(
+    message: Message,
+    uid: int,
+    source: str,
+    *,
+    extra: str = "",
+) -> None:
+    from oracle_bot.paywall import experiment_label
+    from oracle_bot.referrals import stats_text
+
+    if uid:
+        analytics_mod.track_referral_prompt(uid, source)
+    head = experiment_label()
+    if extra:
+        head += extra + "\n\n"
+    await message.answer(head + stats_text(uid), reply_markup=kb_referral(uid))
 
 
 def _start_text(user_id: int) -> str:
@@ -324,7 +361,17 @@ async def _instant(
 
 
 async def _send_premium_invoice(message: Message) -> None:
+    from oracle_bot.paywall import stars_enabled
+
     uid = message.from_user.id if message.from_user else 0
+    if not stars_enabled():
+        await _prompt_referral(
+            message,
+            uid,
+            "premium",
+            extra="⭐ Сейчас безлимит — через приглашение друзей, не через Stars.",
+        )
+        return
     if uid:
         analytics_mod.track_payment_intent(uid, "premium_30d")
     await message.answer_invoice(
@@ -337,11 +384,31 @@ async def _send_premium_invoice(message: Message) -> None:
 
 
 async def _send_deep_invoice(message: Message, cont_id: int) -> None:
+    from oracle_bot.paywall import stars_enabled
+
     cont = db.get_continuation(cont_id)
     if not cont:
         await message.answer("Чтение устарело — запроси новое из меню.", reply_markup=kb_main())
         return
     uid = message.from_user.id if message.from_user else 0
+    if not stars_enabled():
+        if uid and db.get_referral_credits(uid) > 0 and db.spend_referral_credit(uid):
+            analytics_mod.track_reading(uid, cont["module"], has_lock=False)
+            await message.answer(
+                funnel.format_full(cont["teaser_text"], cont["locked_text"]),
+                reply_markup=kb_after_reading(cont["module"], None, uid),
+            )
+            return
+        await _prompt_referral(
+            message,
+            uid,
+            f"deep:{cont_id}",
+            extra=(
+                "🔓 <b>Полная версия</b> — пригласи друга (+бонус) "
+                "или потрать уже накопленный бонус при следующем нажатии."
+            ),
+        )
+        return
     if uid:
         analytics_mod.track_payment_intent(uid, f"deep:{cont_id}")
     await message.answer_invoice(
@@ -408,7 +475,12 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
 
     args = (command.args or "").strip()
     if args == "premium":
-        await _send_premium_invoice(message)
+        from oracle_bot.paywall import stars_enabled
+
+        if stars_enabled():
+            await _send_premium_invoice(message)
+        else:
+            await _prompt_referral(message, uid, "start:premium")
         return
     if args == "ref":
         await cmd_ref(message)

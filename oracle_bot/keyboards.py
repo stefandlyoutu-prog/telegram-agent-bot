@@ -6,6 +6,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from oracle_bot.config import ORACLE_DEEP_STARS, ORACLE_PREMIUM_STARS, ORACLE_REFERRAL_BONUS, ORACLE_WEBAPP_URL
 from oracle_bot.mystic_data import ZODIAC_SIGNS
+from oracle_bot.paywall import referral_primary, stars_enabled
 from oracle_bot.prompts import CROSS_SELL
 
 
@@ -37,38 +38,55 @@ def kb_main() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="Ещё разделы", callback_data="nav:mystic"),
             InlineKeyboardButton(text="Профиль", callback_data="mod:profile"),
         ],
-        [
+    ])
+    if referral_primary():
+        rows.append([
+            InlineKeyboardButton(
+                text=f"🎁 Пригласить (+{ORACLE_REFERRAL_BONUS})",
+                callback_data="mod:referral",
+            ),
+        ])
+    else:
+        rows.append([
             InlineKeyboardButton(text="Премиум", callback_data="mod:premium"),
             InlineKeyboardButton(text="Пригласить", callback_data="mod:referral"),
-        ],
-    ])
+        ])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def kb_referral(user_id: int) -> InlineKeyboardMarkup:
     from oracle_bot.referrals import share_url
 
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Поделиться ссылкой", url=share_url(user_id))],
-            [
-                InlineKeyboardButton(text="Премиум", callback_data="mod:premium"),
-                InlineKeyboardButton(text="Меню", callback_data="nav:menu"),
-            ],
-        ]
-    )
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="Поделиться ссылкой", url=share_url(user_id))],
+    ]
+    if stars_enabled():
+        rows.append([
+            InlineKeyboardButton(text="Премиум", callback_data="mod:premium"),
+            InlineKeyboardButton(text="Меню", callback_data="nav:menu"),
+        ])
+    else:
+        rows.append([InlineKeyboardButton(text="Меню", callback_data="nav:menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def kb_limit_reached(user_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=f"Пригласить (+{ORACLE_REFERRAL_BONUS})", callback_data="mod:referral")],
-            [
-                InlineKeyboardButton(text="Премиум", callback_data="mod:premium"),
-                InlineKeyboardButton(text="Меню", callback_data="nav:menu"),
-            ],
-        ]
-    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"🎁 Пригласить друга (+{ORACLE_REFERRAL_BONUS})",
+                callback_data="mod:referral",
+            )
+        ],
+    ]
+    if stars_enabled():
+        rows.append([
+            InlineKeyboardButton(text="Премиум", callback_data="mod:premium"),
+            InlineKeyboardButton(text="Меню", callback_data="nav:menu"),
+        ])
+    else:
+        rows.append([InlineKeyboardButton(text="Меню", callback_data="nav:menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def kb_mystic() -> InlineKeyboardMarkup:
@@ -143,21 +161,37 @@ def kb_after_reading(
 
     rows: list[list[InlineKeyboardButton]] = []
     if cont_id and not has_full_access(user_id):
-        rows.append([
-            InlineKeyboardButton(
-                text=f"Полная версия · {ORACLE_DEEP_STARS}⭐",
-                callback_data=f"deep:{cont_id}",
-            )
-        ])
+        if stars_enabled():
+            rows.append([
+                InlineKeyboardButton(
+                    text=f"Полная версия · {ORACLE_DEEP_STARS}⭐",
+                    callback_data=f"deep:{cont_id}",
+                )
+            ])
+        else:
+            rows.append([
+                InlineKeyboardButton(
+                    text="🔓 Полная версия · бонус или друг",
+                    callback_data=f"deep:{cont_id}",
+                )
+            ])
     cross = CROSS_SELL.get(module)
     if cross:
         label, data = cross
         clean = label.split(maxsplit=1)[-1] if label.startswith(("🖐", "➡️", "🌌", "🔮")) else label
         rows.append([InlineKeyboardButton(text=clean, callback_data=data)])
-    rows.append([
-        InlineKeyboardButton(text="Премиум", callback_data="mod:premium"),
-        InlineKeyboardButton(text="Меню", callback_data="nav:menu"),
-    ])
+    tail = [InlineKeyboardButton(text="Меню", callback_data="nav:menu")]
+    if stars_enabled():
+        tail.insert(0, InlineKeyboardButton(text="Премиум", callback_data="mod:premium"))
+    else:
+        tail.insert(
+            0,
+            InlineKeyboardButton(
+                text=f"🎁 Пригласить (+{ORACLE_REFERRAL_BONUS})",
+                callback_data="mod:referral",
+            ),
+        )
+    rows.append(tail)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

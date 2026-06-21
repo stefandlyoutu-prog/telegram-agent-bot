@@ -223,6 +223,16 @@ async function load() {
     botUsername = data.bot || botUsername;
     botLink = data.bot_link || `https://t.me/${botUsername}`;
     renderModules(data.modules, data.sections);
+    const premiumBtn = document.getElementById("btnPremium");
+    if (premiumBtn) {
+      if (data.paywall_mode === "referral") {
+        premiumBtn.textContent = "🎁 Пригласить друга";
+        premiumBtn.dataset.action = "ref";
+      } else {
+        premiumBtn.textContent = "Премиум 30 дней";
+        premiumBtn.dataset.action = "premium";
+      }
+    }
     document.querySelectorAll("#topics button").forEach((b) => {
       b.classList.toggle("active", b.dataset.topic === (data.topic || ""));
     });

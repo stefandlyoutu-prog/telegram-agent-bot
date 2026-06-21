@@ -118,10 +118,17 @@ def _kb_push(
         ])
 
     if push_type != "referral_nudge":
-        rows.append([
-            InlineKeyboardButton(text="🎁 Пригласить друга", callback_data="mod:referral"),
-            InlineKeyboardButton(text="⭐ Премиум", callback_data="mod:premium"),
-        ])
+        from oracle_bot.paywall import stars_enabled
+
+        if stars_enabled():
+            rows.append([
+                InlineKeyboardButton(text="🎁 Пригласить друга", callback_data="mod:referral"),
+                InlineKeyboardButton(text="⭐ Премиум", callback_data="mod:premium"),
+            ])
+        else:
+            rows.append([
+                InlineKeyboardButton(text="🎁 Пригласить друга", callback_data="mod:referral"),
+            ])
     else:
         rows.append([InlineKeyboardButton(text="🎁 Получить бесплатные расклады", callback_data="mod:referral")])
 
@@ -136,6 +143,14 @@ def build_push_message(user_id: int, push_type: str, ctx: dict[str, Any]) -> str
     sign = zodiac_label(profile["zodiac"]) if profile.get("zodiac") else ""
 
     if push_type == "unlock_tease":
+        from oracle_bot.paywall import referral_primary
+
+        if referral_primary():
+            return (
+                f"🔮 <b>{label}</b> — карты ещё шепчут…\n\n"
+                "Ты видел(а) только начало. В скрытой части — конкретика и совет.\n\n"
+                f"🎁 Пригласи друга — +{ORACLE_REFERRAL_BONUS} бонуса и можно открыть 🔓."
+            )
         return (
             f"🔮 <b>{label}</b> — карты ещё шепчут…\n\n"
             "Ты видел(а) только начало. В скрытой части — конкретные даты, "
@@ -143,6 +158,14 @@ def build_push_message(user_id: int, push_type: str, ctx: dict[str, Any]) -> str
             f"🔓 Открыть за {ORACLE_DEEP_STARS}⭐ или ⭐ Премиум — безлимит на 30 дней."
         )
     if push_type == "limit_hit":
+        from oracle_bot.paywall import referral_primary
+
+        if referral_primary():
+            return (
+                f"🌙 Лимит на сегодня в «{label}» исчерпан — но судьба не ставит пауз.\n\n"
+                f"🎁 Пригласи друга — +{ORACLE_REFERRAL_BONUS} расклада и 🔓 продолжения\n"
+                "/ref — твоя ссылка"
+            )
         return (
             f"🌙 Лимит на сегодня в «{label}» исчерпан — но судьба не ставит пауз.\n\n"
             f"⭐ Премиум — все разделы без 🔒\n"

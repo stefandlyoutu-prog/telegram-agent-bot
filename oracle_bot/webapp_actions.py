@@ -62,7 +62,13 @@ async def dispatch_webapp_action(
     analytics_mod.track_miniapp(uid, action or "unknown", module)
 
     if action == "premium":
-        await _send_premium_invoice_patched(msg)
+        from oracle_bot.paywall import stars_enabled
+
+        if stars_enabled():
+            await _send_premium_invoice_patched(msg)
+        else:
+            analytics_mod.track_referral_prompt(uid, "miniapp:premium")
+            await cmd_ref_patched(msg, uid)
         return
     if action == "ref":
         await cmd_ref_patched(msg, uid)

@@ -37,6 +37,8 @@ services:
         value: "1"
       - key: ORACLE_FREE_PER_DAY
         value: "2"
+      - key: ORACLE_PAYWALL_EXPERIMENT_UNTIL
+        value: "2026-06-24"
       - key: ORACLE_PROMO_CHANNELS
         value: "M_Topgoroskop,signsvishe,auragirlss"
       - key: ORACLE_DB_PATH
@@ -61,7 +63,7 @@ services:
       - key: WORK_BOT_TOKEN
         sync: false
       - key: WORK_BOT_USERNAME
-        value: MoRoZovGPTchat_bot
+        value: M_onetest_bot
       - key: MONEY_ADMIN_IDS
         sync: false
       - key: WORK_PUSH_ENABLED

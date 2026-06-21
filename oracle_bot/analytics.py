@@ -35,6 +35,10 @@ def track_payment_intent(user_id: int, kind: str) -> None:
     db.log_event(user_id, "payment_intent", kind)
 
 
+def track_referral_prompt(user_id: int, source: str) -> None:
+    db.log_event(user_id, "referral_prompt", source[:200])
+
+
 def track_checkout(user_id: int, kind: str) -> None:
     db.log_event(user_id, "checkout", kind)
 
@@ -150,23 +154,37 @@ def funnel_snapshot() -> dict:
 
 
 def format_stats_report() -> str:
+    from oracle_bot.paywall import experiment_label, paywall_mode
+
     s = db.analytics_snapshot()
+    mode = paywall_mode()
+    mode_line = (
+        f"🧪 Paywall: <b>рефералка</b> (эксперимент)\n"
+        if mode == "referral"
+        else "💳 Paywall: <b>Stars</b>\n"
+    )
+    exp = experiment_label()
     return (
         "📊 <b>Оракул — аналитика</b>\n\n"
-        f"👥 Пользователей: <b>{s['total_users']}</b> "
-        f"(+{s['new_week']} за 7д · +{s['new_today']} сегодня)\n"
+        f"{mode_line}"
+        + (exp if exp else "")
+        + f"👥 Зашли в бота (всего): <b>{s['total_users']}</b> "
+        f"(событий signup: {s.get('signups_total', s['total_users'])})\n"
+        f"📅 +{s['new_week']} за 7д · +{s['new_today']} сегодня\n"
         f"🟢 Активных сегодня: <b>{s['dau']}</b>\n"
         f"⭐ Премиум сейчас: <b>{s['premium_now']}</b>\n\n"
         f"🔮 Чтений сегодня: <b>{s['readings_today']}</b>\n"
-        f"🚫 Уперлись в лимит: <b>{s['limit_hits_today']}</b>\n\n"
-        f"💰 Оплат всего: <b>{s['payments_count']}</b> "
-        f"(премиум {s['premium_pays']} · 🔓 {s['deep_pays']})\n"
-        f"⭐ Stars всего: <b>{s['stars_total']}</b>\n"
-        f"💳 Сегодня: <b>{s['payments_today']}</b> оплат · "
-        f"<b>{s['stars_today']}</b>⭐\n"
+        f"🚫 Уперлись в лимит сегодня: <b>{s['limit_hits_today']}</b>\n\n"
+        f"💰 <b>Оплатили (всего):</b> {s['payments_count']} "
+        f"(премиум {s['premium_pays']} · 🔓 {s['deep_pays']}) · "
+        f"<b>{s['stars_total']}⭐</b>\n"
+        f"🧾 <b>Хотели оплатить:</b> открыли счёт {s.get('payment_intents_total', 0)} раз "
+        f"({s.get('payment_intents_week', 0)} за 7д)\n"
         f"📈 Конверсия в оплату: <b>{s['conversion_pct']}%</b> "
         f"({s['paying_users']} из {s['total_users']})\n\n"
-        f"🎁 Рефералов: <b>{s['referrals']}</b>\n"
+        f"🎁 Рефералов всего: <b>{s['referrals']}</b> "
+        f"(+{s.get('referrals_week', 0)} за 7д)\n"
+        f"📣 Показали «пригласи друга»: <b>{s.get('referral_prompts_week', 0)}</b> за 7д\n"
         f"📤 Пушей за 7д: <b>{s['pushes_sent_week']}</b> "
         f"(в очереди: {s['pushes_pending']})"
     )
