@@ -33,10 +33,17 @@ def _api(token: str, method: str, payload: dict) -> dict:
 
 
 def main() -> None:
-    token = os.getenv("WORK_BOT_TOKEN", "").strip()
+    token = (
+        os.getenv("WORK_BOT_TOKEN", "").strip()
+        or os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    )
     if not token:
-        print("FAIL: WORK_BOT_TOKEN не задан", file=sys.stderr)
+        print("FAIL: WORK_BOT_TOKEN / TELEGRAM_BOT_TOKEN не задан", file=sys.stderr)
         sys.exit(1)
+    try:
+        _api(token, "setMyName", {"name": "Работа онлайн"})
+    except Exception as e:
+        print(f"WARN setMyName: {e}")
     _api(
         token,
         "setMyDescription",

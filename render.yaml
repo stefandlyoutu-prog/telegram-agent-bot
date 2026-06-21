@@ -61,7 +61,7 @@ services:
       - key: WORK_BOT_TOKEN
         sync: false
       - key: WORK_BOT_USERNAME
-        value: WorkOnline_ru_bot
+        value: MoRoZovGPTchat_bot
       - key: MONEY_ADMIN_IDS
         sync: false
       - key: WORK_PUSH_ENABLED

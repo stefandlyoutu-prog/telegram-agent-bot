@@ -7,8 +7,11 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-WORK_BOT_TOKEN = os.getenv("WORK_BOT_TOKEN", "").strip()
-WORK_BOT_USERNAME = os.getenv("WORK_BOT_USERNAME", "WorkOnline_ru_bot").strip()
+WORK_BOT_TOKEN = (
+    os.getenv("WORK_BOT_TOKEN", "").strip()
+    or os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+)
+WORK_BOT_USERNAME = os.getenv("WORK_BOT_USERNAME", "MoRoZovGPTchat_bot").strip()
 
 # Доля исполнителя от вашей комиссии (1 к 10)
 WORKER_SHARE = float(os.getenv("WORKER_SHARE", "0.1"))
