@@ -12,10 +12,12 @@ ORACLE_BOT_USERNAME = os.getenv("ORACLE_BOT_USERNAME", "MOracul_bot").strip()
 ORACLE_PREMIUM_STARS = int(os.getenv("ORACLE_PREMIUM_STARS", "99"))
 ORACLE_DEEP_STARS = int(os.getenv("ORACLE_DEEP_STARS", "29"))
 ORACLE_FREE_PER_DAY = int(os.getenv("ORACLE_FREE_PER_DAY", "2"))
-# paywall: stars (по умолчанию) | referral (только рефералка)
+# paywall: stars (по умолчанию после эксперимента) | referral
 ORACLE_PAYWALL_MODE = os.getenv("ORACLE_PAYWALL_MODE", "stars").strip().lower()
-# Если задано — до этой даты (YYYY-MM-DD) принудительно referral (3-дневный тест)
-ORACLE_PAYWALL_EXPERIMENT_UNTIL = os.getenv("ORACLE_PAYWALL_EXPERIMENT_UNTIL", "").strip()
+# До этой даты (YYYY-MM-DD) — referral вместо Stars (3-дневный тест)
+ORACLE_PAYWALL_EXPERIMENT_UNTIL = os.getenv(
+    "ORACLE_PAYWALL_EXPERIMENT_UNTIL", "2026-06-24"
+).strip()
 ORACLE_LLM_MODEL = os.getenv("ORACLE_LLM_MODEL", "gpt-5.4-mini").strip()
 # Рефералка: бонусных чтений за приглашённого / welcome новичку
 ORACLE_REFERRAL_BONUS = int(os.getenv("ORACLE_REFERRAL_BONUS", "2"))
