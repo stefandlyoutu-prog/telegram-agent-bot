@@ -7,6 +7,7 @@ from typing import Any
 # section: top — самое популярное, popular — частое, deep — углубление
 MINIAPP_MODULES: list[dict[str, str]] = [
     # Топ
+    {"id": "psychology", "title": "Психолог", "desc": "Поддержка: тревога, отношения, выгорание", "section": "top", "emoji": "🧠"},
     {"id": "horo_today", "title": "Гороскоп", "desc": "Прогноз на сегодня по знаку", "section": "top", "emoji": "🌅"},
     {"id": "tarot", "title": "Таро", "desc": "3 карты: прошлое, настоящее, совет", "section": "top", "emoji": "🔮"},
     {"id": "card_day", "title": "Карта дня", "desc": "Бесплатный знак и подсказка", "section": "top", "emoji": "🃏"},

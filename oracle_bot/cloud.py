@@ -37,9 +37,16 @@ _bot: Optional[Bot] = None
 _dp: Optional[Dispatcher] = None
 _push_task: Optional[asyncio.Task] = None
 _channel_task: Optional[asyncio.Task] = None
-_update_sem = asyncio.Semaphore(12)
+_update_sem: Optional[asyncio.Semaphore] = None
 
 router_cloud = APIRouter()
+
+
+def _get_update_sem() -> asyncio.Semaphore:
+    global _update_sem
+    if _update_sem is None:
+        _update_sem = asyncio.Semaphore(12)
+    return _update_sem
 
 
 def cloud_enabled() -> bool:
@@ -154,7 +161,7 @@ async def stop_cloud() -> None:
 async def _process_update(update: Update) -> None:
     if not _bot or not _dp:
         return
-    async with _update_sem:
+    async with _get_update_sem():
         try:
             await _dp.feed_update(_bot, update)
         except Exception:

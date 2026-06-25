@@ -492,12 +492,29 @@ def test_broadcast_list() -> bool:
     return False
 
 
+def test_import_webapp() -> bool:
+    print("\n🚀 Import webapp (как на Render)")
+    import asyncio
+
+    asyncio.set_event_loop(asyncio.new_event_loop())
+    try:
+        from oracle_bot.webapp import app  # noqa: F401
+        from oracle_bot.prompts import PSYCHOLOGY_USER  # noqa: F401
+
+        _ok("oracle_bot.webapp + PSYCHOLOGY_USER")
+        return True
+    except Exception as e:
+        _fail("import webapp", str(e))
+        return False
+
+
 async def main() -> int:
     print("=" * 50)
     print("Тест всех функций @MOracul_bot")
     print("=" * 50)
 
     results: list[tuple[str, bool]] = []
+    results.append(("import_webapp", test_import_webapp()))
     results.append(("access", test_access()))
     results.append(("formatting", test_formatting()))
     results.append(("broadcast", test_broadcast_list()))
