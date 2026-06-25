@@ -12,7 +12,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import MenuButtonWebApp, Update, WebAppInfo
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 
 from bot.services.telegram_net import create_telegram_session
 from oracle_bot.config import (
@@ -66,6 +66,11 @@ async def start_cloud() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     _dp = Dispatcher(storage=MemoryStorage())
+
+    @_dp.errors()
+    async def _on_handler_error(event):  # noqa: ANN001
+        logger.exception("handler error: %s", event.exception)
+
     _dp.include_router(router)
     _dp.include_router(voice_router)
     me = await _bot.get_me()
@@ -160,21 +165,27 @@ async def stop_cloud() -> None:
 
 async def _process_update(update: Update) -> None:
     if not _bot or not _dp:
+        logger.error("webhook: bot not ready, drop update %s", update.update_id)
         return
     async with _get_update_sem():
         try:
-            await _dp.feed_update(_bot, update)
+            await asyncio.wait_for(_dp.feed_update(_bot, update), timeout=180)
+        except asyncio.TimeoutError:
+            logger.error("telegram update %s timed out", update.update_id)
         except Exception:
             logger.exception("telegram update %s failed", update.update_id)
 
 
 @router_cloud.post("/webhook")
-async def telegram_webhook(request: Request):
+async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     if not _bot or not _dp:
+        logger.warning("webhook hit before bot ready")
         return {"ok": False}
     data = await request.json()
     update = Update.model_validate(data)
-    asyncio.create_task(_process_update(update))
+    kind = "callback" if update.callback_query else "message" if update.message else "other"
+    logger.info("webhook update %s (%s)", update.update_id, kind)
+    background_tasks.add_task(_process_update, update)
     return {"ok": True}
 
 

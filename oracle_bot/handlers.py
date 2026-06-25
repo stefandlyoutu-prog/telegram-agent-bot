@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 import re
@@ -315,23 +316,31 @@ async def _send_reading(
 
         schedule_after_teaser(uid, module, cont_id)
     db.touch_user(uid, module=module)
-    try:
-        from oracle_bot.coach import reading_footer
-
-        footer = await reading_footer(
-            uid=uid,
-            module=module,
-            reading_text=text,
-            user_text=user_text or (message.text or message.caption or ""),
-        )
-        if footer:
-            text = text + footer
-    except Exception as e:
-        logger.warning("footer: %s", e)
     await wait.edit_text(
         text,
         reply_markup=kb_after_reading(module, cont_id, uid),
     )
+    try:
+        from oracle_bot.coach import reading_footer
+
+        footer = await asyncio.wait_for(
+            reading_footer(
+                uid=uid,
+                module=module,
+                reading_text=text,
+                user_text=user_text or (message.text or message.caption or ""),
+            ),
+            timeout=20,
+        )
+        if footer:
+            await wait.edit_text(
+                text + footer,
+                reply_markup=kb_after_reading(module, cont_id, uid),
+            )
+    except asyncio.TimeoutError:
+        logger.warning("footer timeout %s", module)
+    except Exception as e:
+        logger.warning("footer: %s", e)
     from oracle_bot.dialogue import build_reading_context
 
     db.save_session(
@@ -462,6 +471,8 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
     welcome_bonus = False
     notify_referrer: int | None = None
 
+    await message.answer(_start_text(uid), reply_markup=kb_main())
+
     if is_new:
         from oracle_bot.referrals import process_new_user
         from oracle_bot.pushes import schedule_inactive, schedule_welcome_series
@@ -498,8 +509,6 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
             await notify_return_visit(message.bot, uid, message.from_user, start_args=command.args)
         except Exception as e:
             logger.warning("admin return notify: %s", e)
-
-    await message.answer(_start_text(uid), reply_markup=kb_main())
 
     args = (command.args or "").strip()
     if args == "premium":
@@ -554,6 +563,11 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
                 await message.bot.send_message(notify_referrer, milestone)
         except Exception as e:
             logger.warning("referral notify %s: %s", notify_referrer, e)
+
+
+@router.message(Command("ping"))
+async def cmd_ping(message: Message) -> None:
+    await message.answer("🏓 <b>pong</b> — бот на связи, webhook OK")
 
 
 @router.message(Command("stats"))
