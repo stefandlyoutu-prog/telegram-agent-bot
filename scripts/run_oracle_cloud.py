@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -14,6 +15,13 @@ sys.path.insert(0, str(ROOT))
 
 # Облачный режим: webhook вместо polling, URL из Render
 os.environ.setdefault("ORACLE_CLOUD", "1")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    stream=sys.stdout,
+    force=True,
+)
 
 
 def main() -> None:

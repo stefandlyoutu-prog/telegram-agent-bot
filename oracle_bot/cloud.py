@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from typing import Optional
 
 from aiogram import Bot, Dispatcher
@@ -37,12 +38,22 @@ _bot: Optional[Bot] = None
 _dp: Optional[Dispatcher] = None
 _push_task: Optional[asyncio.Task] = None
 _channel_task: Optional[asyncio.Task] = None
-_webhook_tasks: set[asyncio.Task] = set()
+_seen_updates: dict[int, float] = {}
+_SEEN_TTL_SEC = 3600
 
 router_cloud = APIRouter()
 
-# Команды и callback — ждём ответа до 200 OK (иначе Render теряет фоновые задачи).
-_WEBHOOK_AWAIT_SEC = float(os.getenv("ORACLE_WEBHOOK_AWAIT_SEC", "25"))
+ALLOWED_UPDATES = [
+    "message",
+    "edited_message",
+    "callback_query",
+    "pre_checkout_query",
+    "inline_query",
+    "chosen_inline_result",
+    "my_chat_member",
+    "chat_member",
+    "chat_join_request",
+]
 
 
 def cloud_enabled() -> bool:
@@ -51,14 +62,13 @@ def cloud_enabled() -> bool:
     )
 
 
-def _webhook_should_await(update: Update) -> bool:
-    if update.callback_query:
-        return True
-    text = (update.message.text or "").strip() if update.message else ""
-    if not text:
-        return False
-    first = text.split()[0].split("@")[0].lower()
-    return first.startswith("/")
+def _prune_seen() -> None:
+    if len(_seen_updates) < 5000:
+        return
+    cutoff = time.time() - _SEEN_TTL_SEC
+    for uid, ts in list(_seen_updates.items()):
+        if ts < cutoff:
+            _seen_updates.pop(uid, None)
 
 
 async def start_cloud() -> None:
@@ -81,7 +91,7 @@ async def start_cloud() -> None:
     _dp.include_router(router)
     _dp.include_router(voice_router)
     me = await _bot.get_me()
-    logger.info("Облако: @%s webhook", me.username)
+    logger.info("Облако: @%s webhook (sync feed_update)", me.username)
     print(f"m-Oracul cloud ready: @{me.username}", flush=True)
 
     webapp_url = cloud_webapp_url()
@@ -103,24 +113,13 @@ async def start_cloud() -> None:
     if not webhook_base:
         raise RuntimeError("Задай RENDER_EXTERNAL_URL или ORACLE_WEBHOOK_URL")
     webhook_url = webhook_base.rstrip("/") + "/webhook"
-    allowed = [
-        "message",
-        "edited_message",
-        "callback_query",
-        "pre_checkout_query",
-        "inline_query",
-        "chosen_inline_result",
-        "my_chat_member",
-        "chat_member",
-        "chat_join_request",
-    ]
     await _bot.delete_webhook(drop_pending_updates=False)
     await _bot.set_webhook(
         webhook_url,
-        allowed_updates=allowed,
+        allowed_updates=ALLOWED_UPDATES,
         drop_pending_updates=False,
     )
-    logger.info("Webhook: %s (updates: %s)", webhook_url, len(allowed))
+    logger.info("Webhook: %s", webhook_url)
 
     if ORACLE_PUSH_ENABLED:
         _push_task = asyncio.create_task(push_worker(_bot, ORACLE_PUSH_INTERVAL_SEC))
@@ -136,8 +135,7 @@ async def start_cloud() -> None:
     if ORACLE_CHANNEL_POSTS_ENABLED:
         from oracle_bot.channel_queue import seed_week_queue
 
-        summary = db.count_channel_posts(status="pending")
-        if summary == 0:
+        if db.count_channel_posts(status="pending") == 0:
             seeded = seed_week_queue()
             logger.info("Channel queue auto-seed: %s", seeded)
         _channel_task = asyncio.create_task(
@@ -147,7 +145,7 @@ async def start_cloud() -> None:
 
 
 async def stop_cloud() -> None:
-    global _bot, _push_task, _channel_task
+    global _bot, _dp, _push_task, _channel_task
     if _channel_task:
         _channel_task.cancel()
         try:
@@ -169,23 +167,15 @@ async def stop_cloud() -> None:
             pass
         await _bot.session.close()
         _bot = None
-
-
-async def _run_update(update: Update) -> None:
-    if not _bot or not _dp:
-        logger.error("webhook: bot not ready, drop %s", update.update_id)
-        return
-    try:
-        await _dp.feed_update(_bot, update)
-    except Exception:
-        logger.exception("feed_update %s failed", update.update_id)
+    _dp = None
 
 
 @router_cloud.post("/webhook")
 async def telegram_webhook(request: Request):
+    """Как work_bot: await feed_update — иначе Render теряет фоновые задачи."""
     if not _bot or not _dp:
         logger.warning("webhook before bot ready")
-        return {"ok": False, "error": "bot_not_ready"}
+        return {"ok": False}
     try:
         data = await request.json()
         update = Update.model_validate(data, context={"bot": _bot})
@@ -193,25 +183,23 @@ async def telegram_webhook(request: Request):
         logger.exception("webhook parse error")
         return {"ok": True}
 
+    if update.update_id in _seen_updates:
+        logger.info("webhook duplicate %s skipped", update.update_id)
+        return {"ok": True}
+
     kind = "callback" if update.callback_query else "message" if update.message else "other"
-    text_preview = ""
+    preview = ""
     if update.message and update.message.text:
-        text_preview = update.message.text[:40]
-    logger.info("webhook %s %s %s", update.update_id, kind, text_preview)
-    print(f"WEBHOOK {update.update_id} {kind} {text_preview}", flush=True)
+        preview = update.message.text[:48]
+    logger.info("webhook %s %s %s", update.update_id, kind, preview)
+    print(f"WEBHOOK {update.update_id} {kind} {preview}", flush=True)
 
-    task = asyncio.create_task(_run_update(update))
-    _webhook_tasks.add(task)
-    task.add_done_callback(_webhook_tasks.discard)
-
-    if _webhook_should_await(update):
-        try:
-            await asyncio.wait_for(asyncio.shield(task), timeout=_WEBHOOK_AWAIT_SEC)
-        except asyncio.TimeoutError:
-            logger.warning("webhook %s slow (>%ss), continues in background", update.update_id, _WEBHOOK_AWAIT_SEC)
-    else:
-        await asyncio.sleep(0.05)
-
+    try:
+        await _dp.feed_update(_bot, update)
+        _prune_seen()
+        _seen_updates[update.update_id] = time.time()
+    except Exception:
+        logger.exception("feed_update %s failed", update.update_id)
     return {"ok": True}
 
 
@@ -227,9 +215,9 @@ async def health():
             bot_user = "error"
     return {
         "ok": True,
+        "mode": "webhook_sync",
         "bot_ready": _bot is not None and _dp is not None,
         "bot": bot_user,
-        "webhook_tasks": len(_webhook_tasks),
         "webapp": ORACLE_WEBAPP_URL or cloud_webapp_url(),
         "version": commit or "local",
         "routes": ["/landing", "/oferta", "/admin"],

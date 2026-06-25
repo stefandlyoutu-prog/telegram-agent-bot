@@ -492,6 +492,26 @@ def test_broadcast_list() -> bool:
     return False
 
 
+def test_cloud_webhook_sync() -> bool:
+    print("\n☁️  Cloud webhook (sync feed_update)")
+    import inspect
+    from oracle_bot import cloud
+
+    src = inspect.getsource(cloud.telegram_webhook)
+    ok = True
+    if "await _dp.feed_update" in src:
+        _ok("await feed_update in webhook")
+    else:
+        _fail("webhook", "нет await feed_update")
+        ok = False
+    if "BackgroundTasks" not in src:
+        _ok("no BackgroundTasks")
+    else:
+        _fail("webhook", "BackgroundTasks still used")
+        ok = False
+    return ok
+
+
 def test_import_webapp() -> bool:
     print("\n🚀 Import webapp (как на Render)")
     import asyncio
@@ -514,6 +534,7 @@ async def main() -> int:
     print("=" * 50)
 
     results: list[tuple[str, bool]] = []
+    results.append(("cloud_webhook", test_cloud_webhook_sync()))
     results.append(("import_webapp", test_import_webapp()))
     results.append(("access", test_access()))
     results.append(("formatting", test_formatting()))

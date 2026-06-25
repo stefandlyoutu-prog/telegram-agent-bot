@@ -567,7 +567,11 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
 
 @router.message(Command("ping"))
 async def cmd_ping(message: Message) -> None:
-    await message.answer("🏓 <b>pong</b> — бот на связи, webhook OK")
+    uid = message.from_user.id if message.from_user else 0
+    await message.answer(
+        f"🏓 pong — бот на связи\nuid: {uid}\n"
+        f"https://moracul.onrender.com/health"
+    )
 
 
 @router.message(Command("stats"))
