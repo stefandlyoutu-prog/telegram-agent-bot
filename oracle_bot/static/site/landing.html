@@ -9,21 +9,35 @@
   <style>
     :root { --bg:#0a0a12; --card:#14141f; --accent:#c9a227; --text:#eee; --muted:#999; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; padding-bottom: 88px; }
     .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 48px; }
     h1 { font-size: 2rem; margin: 12px 0; }
     h2 { font-size: 1.2rem; margin: 32px 0 12px; color: var(--accent); }
     p { color: var(--muted); margin-bottom: 12px; }
     .hero { text-align: center; padding: 40px 0 24px; }
     .eyebrow { color: var(--accent); font-size: .85rem; letter-spacing: .12em; text-transform: uppercase; }
-    .btn { display: inline-block; background: linear-gradient(135deg,#c9a227,#8b6914); color: #111; font-weight: 700;
-      padding: 14px 28px; border-radius: 12px; text-decoration: none; margin: 8px 4px; font-size: 1rem; }
-    .btn.ghost { background: transparent; border: 1px solid #444; color: var(--text); }
-  .grid { display: grid; gap: 12px; margin-top: 16px; }
-    .card { background: var(--card); border-radius: 12px; padding: 16px; border: 1px solid #222; }
+    a.btn {
+      display: inline-block; cursor: pointer;
+      background: linear-gradient(135deg,#c9a227,#8b6914); color: #111 !important; font-weight: 700;
+      padding: 14px 28px; border-radius: 12px; text-decoration: none; margin: 8px 4px; font-size: 1rem;
+      border: none; text-align: center; min-width: 160px;
+    }
+    a.btn:hover { filter: brightness(1.08); }
+    a.btn.ghost {
+      background: #1a1a28; border: 2px solid var(--accent); color: var(--accent) !important;
+    }
+    .grid { display: grid; gap: 12px; margin-top: 16px; }
+    .card { background: var(--card); border-radius: 12px; padding: 16px; border: 1px solid #333; }
+    .card .btn { display: block; width: 100%; margin: 12px 0 0; }
     .price { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
     footer { margin-top: 48px; font-size: .85rem; text-align: center; }
     footer a { color: var(--accent); }
+    .sticky {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+      background: rgba(10,10,18,.95); border-top: 1px solid #333;
+      padding: 12px 16px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+    }
+    .sticky .btn { margin: 0; flex: 1; min-width: 140px; max-width: 220px; font-size: .95rem; padding: 12px 16px; }
   </style>
 </head>
 <body>
@@ -32,8 +46,8 @@
       <p class="eyebrow">Telegram · Mini App</p>
       <h1>🔮 m-Oracul</h1>
       <p>Таро, гороскоп, натальная карта, сонник и 25+ практик — персонально, в чате с ботом.</p>
-      <a class="btn" href="https://t.me/MOracul_bot" id="ctaMain">Открыть бота бесплатно</a>
-      <a class="btn ghost" href="/">Открыть приложение</a>
+      <a class="btn bot-link" data-start="" href="https://t.me/MOracul_bot">Открыть бота бесплатно</a>
+      <a class="btn ghost" href="https://moracul.onrender.com/">Открыть приложение</a>
     </section>
 
     <h2>Как это работает</h2>
@@ -48,36 +62,52 @@
       <div class="card">
         <strong>Бесплатно</strong>
         <p>2 чтения в день на каждый раздел</p>
-        <a class="btn" href="https://t.me/MOracul_bot">Начать</a>
+        <a class="btn bot-link" data-start="" href="https://t.me/MOracul_bot">Начать бесплатно</a>
       </div>
       <div class="card">
         <strong>Приведи друга</strong>
         <p>+2 бонусных чтения за каждого друга · 10 друзей = безлимит на год</p>
-        <a class="btn ghost" href="https://t.me/MOracul_bot?start=ref">Получить ссылку в боте</a>
+        <a class="btn ghost bot-link" data-start="ref" href="https://t.me/MOracul_bot?start=ref">Получить реферальную ссылку</a>
       </div>
       <div class="card">
         <strong>Премиум</strong>
         <p class="price">299 ₽/мес</p>
-        <p>Безлимит всех разделов · оплата скоро</p>
+        <p>Безлимит всех разделов</p>
+        <a class="btn bot-link" data-start="premium" href="https://t.me/MOracul_bot?start=premium">Узнать о премиуме</a>
       </div>
     </div>
 
     <h2>Разделы</h2>
     <p>Таро · Гороскоп · Натальная · Нумерология · Сонник · Совместимость · Руны · Хиромантия · Карма · И ещё 20+</p>
+    <p style="margin-top:16px">
+      <a class="btn bot-link" data-start="mod_tarot" href="https://t.me/MOracul_bot?start=mod_tarot">🔮 Таро</a>
+      <a class="btn ghost bot-link" data-start="mod_horo_today" href="https://t.me/MOracul_bot?start=mod_horo_today">🌅 Гороскоп</a>
+    </p>
 
     <footer>
       <p><a href="/oferta">Публичная оферта</a> · <a href="https://t.me/MOracul_bot">@MOracul_bot</a></p>
       <p style="margin-top:8px">Информационно-консультативные услуги. Не замена врачу и юристу.</p>
     </footer>
   </div>
+
+  <div class="sticky">
+    <a class="btn bot-link" data-start="" href="https://t.me/MOracul_bot">Открыть бота</a>
+    <a class="btn ghost" href="https://moracul.onrender.com/">Приложение</a>
+  </div>
+
   <script>
+    const BOT = 'https://t.me/MOracul_bot';
     const p = new URLSearchParams(location.search);
     const src = p.get('src') || p.get('utm_source') || '';
-    const mod = p.get('mod') || '';
-    let link = 'https://t.me/MOracul_bot';
-    if (src) link += '?start=src_' + encodeURIComponent(src);
-    else if (mod) link += '?start=mod_' + encodeURIComponent(mod);
-    document.getElementById('ctaMain').href = link;
+    function botUrl(start) {
+      if (src) return BOT + '?start=src_' + encodeURIComponent(src);
+      if (start) return BOT + '?start=' + encodeURIComponent(start);
+      return BOT;
+    }
+    document.querySelectorAll('.bot-link').forEach(a => {
+      const start = a.getAttribute('data-start') || '';
+      a.href = botUrl(start);
+    });
   </script>
 </body>
 </html>

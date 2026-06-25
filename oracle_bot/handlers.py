@@ -97,9 +97,12 @@ class _ActivityMiddleware(BaseMiddleware):
                 username=user.username,
                 first_name=user.first_name,
             )
-            from oracle_bot.streak import record_visit
+            try:
+                from oracle_bot.streak import record_visit
 
-            record_visit(user.id)
+                record_visit(user.id)
+            except Exception as e:
+                logger.warning("record_visit uid=%s: %s", user.id, e)
         return await handler(event, data)
 
 

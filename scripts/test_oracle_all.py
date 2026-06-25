@@ -289,6 +289,7 @@ def test_referral() -> bool:
     db.init_db()
     referrer = 999_999_010
     friend = 999_999_011
+    streak_uid = 999_999_012
     ok = True
     with db._connect() as conn:
         conn.execute("DELETE FROM referrals WHERE referred_id IN (?, ?)", (referrer, friend))
@@ -336,6 +337,37 @@ def test_referral() -> bool:
         conn.execute("DELETE FROM referrals WHERE referred_id IN (?, ?)", (referrer, friend))
         conn.execute("DELETE FROM users WHERE user_id IN (?, ?)", (referrer, friend))
         conn.execute("DELETE FROM usage WHERE user_id IN (?, ?)", (referrer, friend))
+    return ok
+
+
+def test_streak_bonus() -> bool:
+    print("\n🔥 Streak → add_referral_credits")
+    from datetime import date, timedelta
+
+    from oracle_bot.streak import record_visit
+
+    uid = 999_999_012
+    db.init_db()
+    db.ensure_user(uid)
+    y1 = (date.today() - timedelta(days=1)).isoformat()
+    with db._connect() as conn:
+        conn.execute("DELETE FROM streaks WHERE user_id = ?", (uid,))
+        conn.execute(
+            "INSERT INTO streaks (user_id, streak_count, last_day) VALUES (?, 2, ?)",
+            (uid, y1),
+        )
+    before = db.get_referral_credits(uid)
+    r = record_visit(uid)
+    after = db.get_referral_credits(uid)
+    ok = True
+    if r.get("bonus_granted") == 1 and after == before + 1:
+        _ok("streak day-3 bonus", f"credits {before}->{after}")
+    else:
+        _fail("streak bonus", f"r={r} credits {before}->{after}")
+        ok = False
+    with db._connect() as conn:
+        conn.execute("DELETE FROM streaks WHERE user_id = ?", (uid,))
+        conn.execute("DELETE FROM users WHERE user_id = ?", (uid,))
     return ok
 
 
@@ -544,6 +576,7 @@ async def main() -> int:
     results.append(("dates", test_date_parse()))
     results.append(("storage", test_storage()))
     results.append(("referral", test_referral()))
+    results.append(("streak", test_streak_bonus()))
     results.append(("analytics", test_analytics()))
     results.append(("product_pages", test_product_pages()))
     results.append(("dialogue_storage", test_dialogue_storage()))

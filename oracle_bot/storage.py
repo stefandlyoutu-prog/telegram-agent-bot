@@ -203,6 +203,18 @@ def get_referral_credits(user_id: int) -> int:
     return int(row["referral_credits"] or 0)
 
 
+def add_referral_credits(user_id: int, amount: int) -> None:
+    """Бонусные чтения (streak, акции)."""
+    if amount <= 0:
+        return
+    ensure_user(user_id)
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET referral_credits = referral_credits + ? WHERE user_id = ?",
+            (amount, user_id),
+        )
+
+
 def register_referral(referrer_id: int, referred_id: int) -> bool:
     from oracle_bot.config import ORACLE_REFERRAL_BONUS, ORACLE_REFERRAL_WELCOME
 
