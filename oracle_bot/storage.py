@@ -747,6 +747,7 @@ def set_push_opt_out(user_id: int) -> None:
             "UPDATE push_queue SET sent_at = ? WHERE user_id = ? AND sent_at IS NULL",
             (now, user_id),
         )
+    log_event(user_id, "push_opt_out", "stop_push")
 
 
 def analytics_snapshot() -> dict[str, Any]:
@@ -843,6 +844,19 @@ def analytics_snapshot() -> dict[str, Any]:
         signups_total = conn.execute(
             "SELECT COUNT(*) FROM events WHERE event_type = 'signup'"
         ).fetchone()[0]
+        push_opt_out = conn.execute(
+            "SELECT COUNT(*) FROM user_meta WHERE push_opt_out = 1"
+        ).fetchone()[0]
+        push_active = conn.execute(
+            "SELECT COUNT(*) FROM user_meta WHERE push_opt_out = 0 OR push_opt_out IS NULL"
+        ).fetchone()[0]
+        push_opt_out_today = conn.execute(
+            """
+            SELECT COUNT(*) FROM events
+            WHERE event_type = 'push_opt_out' AND substr(created_at, 1, 10) = ?
+            """,
+            (today,),
+        ).fetchone()[0]
     conv = (paying_users / total_users * 100) if total_users else 0.0
     return {
         "total_users": int(total_users),
@@ -868,6 +882,9 @@ def analytics_snapshot() -> dict[str, Any]:
         "referral_prompts_week": int(referral_prompts_week),
         "referrals_week": int(referrals_week),
         "signups_total": int(signups_total),
+        "push_opt_out": int(push_opt_out),
+        "push_active": int(push_active),
+        "push_opt_out_today": int(push_opt_out_today),
     }
 
 

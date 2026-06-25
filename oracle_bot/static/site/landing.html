@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>m-Oracul — Таро, гороскоп, натальная карта в Telegram</title>
+  <meta name="description" content="Личные эзотерические разборы в Telegram: таро, сонник, натальная карта, совместимость. 2 бесплатных чтения в день. Приведи 10 друзей — безлимит." />
+  <link rel="canonical" href="https://moracul.onrender.com/landing" />
+  <style>
+    :root { --bg:#0a0a12; --card:#14141f; --accent:#c9a227; --text:#eee; --muted:#999; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 48px; }
+    h1 { font-size: 2rem; margin: 12px 0; }
+    h2 { font-size: 1.2rem; margin: 32px 0 12px; color: var(--accent); }
+    p { color: var(--muted); margin-bottom: 12px; }
+    .hero { text-align: center; padding: 40px 0 24px; }
+    .eyebrow { color: var(--accent); font-size: .85rem; letter-spacing: .12em; text-transform: uppercase; }
+    .btn { display: inline-block; background: linear-gradient(135deg,#c9a227,#8b6914); color: #111; font-weight: 700;
+      padding: 14px 28px; border-radius: 12px; text-decoration: none; margin: 8px 4px; font-size: 1rem; }
+    .btn.ghost { background: transparent; border: 1px solid #444; color: var(--text); }
+  .grid { display: grid; gap: 12px; margin-top: 16px; }
+    .card { background: var(--card); border-radius: 12px; padding: 16px; border: 1px solid #222; }
+    .price { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
+    footer { margin-top: 48px; font-size: .85rem; text-align: center; }
+    footer a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <p class="eyebrow">Telegram · Mini App</p>
+      <h1>🔮 m-Oracul</h1>
+      <p>Таро, гороскоп, натальная карта, сонник и 25+ практик — персонально, в чате с ботом.</p>
+      <a class="btn" href="https://t.me/MOracul_bot" id="ctaMain">Открыть бота бесплатно</a>
+      <a class="btn ghost" href="/">Открыть приложение</a>
+    </section>
+
+    <h2>Как это работает</h2>
+    <div class="grid">
+      <div class="card"><strong>1. Выбери раздел</strong><br>Таро, карьера, отношения, карта дня — в боте или приложении.</div>
+      <div class="card"><strong>2. Получи разбор</strong><br>Бесплатная часть сразу с конкретикой. Углубление — по желанию.</div>
+      <div class="card"><strong>3. Расти бесплатно</strong><br>Приглашай друзей — бонусные чтения и безлимит за 10 друзей.</div>
+    </div>
+
+    <h2>Тарифы</h2>
+    <div class="grid">
+      <div class="card">
+        <strong>Бесплатно</strong>
+        <p>2 чтения в день на каждый раздел</p>
+        <a class="btn" href="https://t.me/MOracul_bot">Начать</a>
+      </div>
+      <div class="card">
+        <strong>Приведи друга</strong>
+        <p>+2 бонусных чтения за каждого друга · 10 друзей = безлимит на год</p>
+        <a class="btn ghost" href="https://t.me/MOracul_bot?start=ref">Получить ссылку в боте</a>
+      </div>
+      <div class="card">
+        <strong>Премиум</strong>
+        <p class="price">299 ₽/мес</p>
+        <p>Безлимит всех разделов · оплата скоро</p>
+      </div>
+    </div>
+
+    <h2>Разделы</h2>
+    <p>Таро · Гороскоп · Натальная · Нумерология · Сонник · Совместимость · Руны · Хиромантия · Карма · И ещё 20+</p>
+
+    <footer>
+      <p><a href="/oferta">Публичная оферта</a> · <a href="https://t.me/MOracul_bot">@MOracul_bot</a></p>
+      <p style="margin-top:8px">Информационно-консультативные услуги. Не замена врачу и юристу.</p>
+    </footer>
+  </div>
+  <script>
+    const p = new URLSearchParams(location.search);
+    const src = p.get('src') || p.get('utm_source') || '';
+    const mod = p.get('mod') || '';
+    let link = 'https://t.me/MOracul_bot';
+    if (src) link += '?start=src_' + encodeURIComponent(src);
+    else if (mod) link += '?start=mod_' + encodeURIComponent(mod);
+    document.getElementById('ctaMain').href = link;
+  </script>
+</body>
+</html>

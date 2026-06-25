@@ -270,6 +270,18 @@ def funnel_snapshot() -> dict:
         {"id": "intent", "label": "Открыли счёт (7д)", "count": intents_week, "hint": "Кнопка Premium/🔓"},
         {"id": "checkout", "label": "Подтвердили оплату", "count": checkouts_week, "hint": "Pre-checkout OK"},
         {"id": "pay", "label": "Оплатили (7д)", "count": int(payments_week), "hint": "Stars зачислены"},
+        {
+            "id": "ref_prompt",
+            "label": "Увидели «пригласи» (7д)",
+            "count": event_counts.get("referral_prompt", 0),
+            "hint": "Paywall рефералка",
+        },
+        {
+            "id": "ref_join",
+            "label": "Новых рефералов (7д)",
+            "count": s.get("referrals_week", 0),
+            "hint": "Друзья по ссылке ref",
+        },
     ]
 
     insights: list[str] = []
@@ -309,6 +321,29 @@ def funnel_snapshot() -> dict:
         "recent_events": recent,
         "insights": insights,
     }
+
+
+def format_funnel_report() -> str:
+    """Воронка для /funnel — как CRM."""
+    f = funnel_snapshot()
+    s = f["summary"]
+    lines = ["🎯 <b>Оракул — воронка (CRM)</b>\n"]
+    prev = max(s["total_users"], 1)
+    for st in f["stages"]:
+        cnt = st["count"]
+        pct = int(100 * cnt / prev) if prev else 0
+        bar = "█" * min(12, pct // 8) + "░" * max(0, 12 - pct // 8)
+        lines.append(f"{st['label']}: <b>{cnt}</b> {bar} {pct}%")
+        lines.append(f"  <i>{st['hint']}</i>")
+        if cnt > 0:
+            prev = cnt
+    lines.append("\n🎁 <b>Рефералка</b>")
+    lines.append(f"  Всего приглашений: {s.get('referrals', 0)} (+{s.get('referrals_week', 0)} / 7д)")
+    lines.append(f"  Показов кнопки: {s.get('referral_prompts_week', 0)} / 7д")
+    lines.append("\n💡 <b>Гипотезы</b>")
+    for ins in f["insights"][:4]:
+        lines.append(f"  • {ins}")
+    return "\n".join(lines)
 
 
 def format_stats_report() -> str:

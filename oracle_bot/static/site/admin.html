@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>m-Oracul CRM</title>
+  <style>
+    :root { --bg:#0d0d14; --card:#161622; --accent:#6c5ce7; --ok:#00b894; --warn:#fdcb6e; --text:#eee; }
+    body { font-family: system-ui,sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; }
+    h1 { font-size: 1.3rem; }
+    .meta { color: #888; font-size: .9rem; margin-bottom: 20px; }
+    .funnel { display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+    .stage { background: var(--card); border-radius: 10px; padding: 12px 14px; border-left: 4px solid var(--accent); }
+    .stage .row { display: flex; justify-content: space-between; align-items: center; }
+    .stage .hint { font-size: .8rem; color: #888; margin-top: 4px; }
+    .bar { height: 6px; background: #222; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+    .bar i { display: block; height: 100%; background: var(--accent); }
+    .insights { margin-top: 24px; max-width: 640px; }
+    .insights li { margin: 8px 0; color: #ccc; }
+    .events { margin-top: 24px; font-size: .85rem; max-width: 800px; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #222; }
+    .err { color: #e74c3c; padding: 20px; }
+    .links { margin: 16px 0; }
+    .links a { color: var(--accent); margin-right: 16px; }
+  </style>
+</head>
+<body>
+  <h1>📊 m-Oracul — CRM воронка</h1>
+  <p class="meta" id="meta">Загрузка…</p>
+  <div class="links">
+    <a href="https://t.me/MOracul_bot">Бот</a>
+    <a href="/landing">Лендинг</a>
+    <a href="#" id="refresh">Обновить</a>
+  </div>
+  <div class="funnel" id="funnel"></div>
+  <div class="insights"><h2>💡 Гипотезы</h2><ul id="insights"></ul></div>
+  <div class="events"><h2>Последние события</h2><table><thead><tr><th>Время</th><th>Юзер</th><th>Событие</th><th>Детали</th></tr></thead><tbody id="events"></tbody></table></div>
+  <script>
+    const uid = new URLSearchParams(location.search).get('uid') || '';
+    const meta = document.getElementById('meta');
+    const funnelEl = document.getElementById('funnel');
+    if (!uid) {
+      meta.textContent = 'Добавь ?uid=ТВОЙ_TELEGRAM_ID (админ)';
+      funnelEl.innerHTML = '<p class="err">Нет uid. Открой из бота: /funnel</p>';
+    } else {
+      meta.textContent = 'Admin uid: ' + uid;
+      async function load() {
+        try {
+          const r = await fetch('/api/admin/funnel?user_id=' + uid);
+          if (!r.ok) throw new Error(r.status);
+          const d = await r.json();
+          const stages = d.stages || [];
+          let prev = Math.max((d.summary && d.summary.total_users) || 1, 1);
+          funnelEl.innerHTML = stages.map(st => {
+            const pct = prev > 0 ? Math.round(100 * st.count / prev) : 0;
+            if (st.count > 0) prev = st.count;
+            return `<div class="stage"><div class="row"><strong>${st.label}</strong><span>${st.count} · ${pct}%</span></div>
+              <div class="bar"><i style="width:${Math.min(100,pct)}%"></i></div>
+              <div class="hint">${st.hint || ''}</div></div>`;
+          }).join('');
+          document.getElementById('insights').innerHTML = (d.insights || []).map(i => '<li>' + i + '</li>').join('');
+          const ev = (d.recent_events || []).slice(0, 25);
+          document.getElementById('events').innerHTML = ev.map(e => {
+            const u = e.username ? '@' + e.username : (e.first_name || e.user_id);
+            return `<tr><td>${(e.created_at||'').slice(0,16)}</td><td>${u}</td><td>${e.event_type}</td><td>${(e.payload||'').slice(0,40)}</td></tr>`;
+          }).join('');
+        } catch (e) {
+          funnelEl.innerHTML = '<p class="err">Ошибка: ' + e.message + '</p>';
+        }
+      }
+      load();
+      document.getElementById('refresh').onclick = e => { e.preventDefault(); load(); };
+    }
+  </script>
+</body>
+</html>

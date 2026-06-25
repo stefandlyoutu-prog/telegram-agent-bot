@@ -22,8 +22,12 @@ ORACLE_LLM_MODEL = os.getenv("ORACLE_LLM_MODEL", "gpt-5.4-mini").strip()
 # Рефералка: бонусных чтений за приглашённого / welcome новичку
 ORACLE_REFERRAL_BONUS = int(os.getenv("ORACLE_REFERRAL_BONUS", "2"))
 ORACLE_REFERRAL_WELCOME = int(os.getenv("ORACLE_REFERRAL_WELCOME", "1"))
+ORACLE_REFERRAL_UNLIMITED_AT = int(os.getenv("ORACLE_REFERRAL_UNLIMITED_AT", "10"))
+ORACLE_PREMIUM_PRICE_RUB = int(os.getenv("ORACLE_PREMIUM_PRICE_RUB", "299"))
 ORACLE_PUSH_ENABLED = os.getenv("ORACLE_PUSH_ENABLED", "1") not in {"0", "false", "False"}
 ORACLE_PUSH_INTERVAL_SEC = int(os.getenv("ORACLE_PUSH_INTERVAL_SEC", "120"))
+ORACLE_DAILY_REPORT = os.getenv("ORACLE_DAILY_REPORT", "1") not in {"0", "false", "False"}
+ORACLE_DAILY_REPORT_HOUR_MSK = int(os.getenv("ORACLE_DAILY_REPORT_HOUR_MSK", "9"))
 ORACLE_CHANNEL_POSTS_ENABLED = os.getenv("ORACLE_CHANNEL_POSTS_ENABLED", "1") not in {
     "0",
     "false",
@@ -60,6 +64,14 @@ def cloud_webapp_url() -> str:
         return ORACLE_WEBAPP_URL
     base = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
     return base
+
+
+def oferta_url() -> str:
+    explicit = os.getenv("ORACLE_OFERTA_URL", "").strip()
+    if explicit:
+        return explicit
+    base = cloud_webapp_url()
+    return f"{base}/oferta" if base else "https://moracul.onrender.com/oferta"
 
 
 LOCK_MARKER = "---LOCK---"

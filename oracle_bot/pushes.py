@@ -27,6 +27,7 @@ MODULE_LABELS: dict[str, str] = {
     "karma": "⚖️ Карма",
     "dream": "🌙 Сонник",
     "dating": "💬 Любовь",
+    "psychology": "🧠 Психолог",
     "career": "💼 Карьера",
 }
 
@@ -87,6 +88,17 @@ def schedule_inactive(user_id: int) -> None:
     if has_full_access(user_id):
         return
     db.schedule_push(user_id, "inactive", delay_hours=48, context="{}")
+
+
+def schedule_reengagement(user_id: int) -> None:
+    """При каждом возврате — планируем напоминание через 72ч если снова пропадёт."""
+    if has_full_access(user_id):
+        return
+    meta = db.get_user_meta(user_id)
+    if meta.get("push_opt_out"):
+        return
+    db.cancel_pushes(user_id, ["inactive"])
+    db.schedule_push(user_id, "inactive", delay_hours=72, context='{"reason":"return"}')
 
 
 def _kb_push(

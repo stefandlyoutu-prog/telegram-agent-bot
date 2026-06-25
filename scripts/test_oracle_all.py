@@ -365,6 +365,48 @@ def test_analytics() -> bool:
         conn.execute("DELETE FROM push_queue WHERE user_id = ?", (uid,))
         conn.execute("DELETE FROM user_meta WHERE user_id = ?", (uid,))
         conn.execute("DELETE FROM users WHERE user_id = ?", (uid,))
+
+    from oracle_bot.analytics import format_funnel_report, funnel_snapshot
+
+    f = funnel_snapshot()
+    if "stages" in f and len(f["stages"]) >= 5:
+        _ok("funnel_snapshot", str(len(f["stages"])))
+    else:
+        _fail("funnel_snapshot", str(f.keys()))
+        ok = False
+    txt = format_funnel_report()
+    if "воронка" in txt.lower() or "CRM" in txt:
+        _ok("format_funnel_report")
+    else:
+        _fail("format_funnel_report", txt[:60])
+        ok = False
+    return ok
+
+
+def test_product_pages() -> bool:
+    print("\n🌐 Продукт: лендинг / оферта / CRM")
+    from oracle_bot.config import ORACLE_REFERRAL_UNLIMITED_AT, oferta_url
+
+    ok = True
+    ou = oferta_url()
+    if "/oferta" in ou:
+        _ok("oferta_url", ou)
+    else:
+        _fail("oferta_url", ou)
+        ok = False
+    if ORACLE_REFERRAL_UNLIMITED_AT == 10:
+        _ok("referral unlimited at", "10")
+    else:
+        _fail("ORACLE_REFERRAL_UNLIMITED_AT", str(ORACLE_REFERRAL_UNLIMITED_AT))
+        ok = False
+    site = ROOT / "oracle_bot" / "static" / "site"
+    for name in ("landing.html", "oferta.html", "admin.html"):
+        p = site / name
+        if p.is_file() and p.stat().st_size > 200:
+            _ok(name)
+        else:
+            _fail(name, "missing or empty")
+            ok = False
     return ok
 
 
@@ -465,6 +507,7 @@ async def main() -> int:
     results.append(("storage", test_storage()))
     results.append(("referral", test_referral()))
     results.append(("analytics", test_analytics()))
+    results.append(("product_pages", test_product_pages()))
     results.append(("dialogue_storage", test_dialogue_storage()))
     results.append(("revenue", test_revenue_bridge()))
     results.append(("telegram", await test_telegram_bot_alive()))

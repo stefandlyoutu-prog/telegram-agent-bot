@@ -24,7 +24,15 @@ from oracle_bot.prompts import ORACLE_SYSTEM, PALM_USER, FULL_ONLY, SPLIT_INSTRU
 
 logger = logging.getLogger(__name__)
 
-_LLM_SEM = asyncio.Semaphore(int(os.getenv("ORACLE_LLM_CONCURRENCY", "20")))
+_LLM_SEM: asyncio.Semaphore | None = None
+_LLM_CONCURRENCY = int(os.getenv("ORACLE_LLM_CONCURRENCY", "20"))
+
+
+def _llm_sem() -> asyncio.Semaphore:
+    global _LLM_SEM
+    if _LLM_SEM is None:
+        _LLM_SEM = asyncio.Semaphore(_LLM_CONCURRENCY)
+    return _LLM_SEM
 
 _PALM_VISION_PROMPT = (
     "Опиши ладонь на фото для хироманта: форма ладони, основные линии "
@@ -33,7 +41,7 @@ _PALM_VISION_PROMPT = (
 
 
 async def oracle_chat(user_prompt: str, *, temperature: float = 0.8) -> str:
-    async with _LLM_SEM:
+    async with _llm_sem():
         return await _oracle_chat_inner(user_prompt, temperature=temperature)
 
 

@@ -6,7 +6,9 @@ from urllib.parse import quote
 
 from oracle_bot.config import (
     ORACLE_BOT_USERNAME,
+    ORACLE_PREMIUM_PRICE_RUB,
     ORACLE_REFERRAL_BONUS,
+    ORACLE_REFERRAL_UNLIMITED_AT,
     ORACLE_REFERRAL_WELCOME,
 )
 from oracle_bot import storage as db
@@ -54,15 +56,35 @@ def stats_text(user_id: int) -> str:
     lines.extend(
         [
             "",
-            f"👥 Приглашено: <b>{invited}</b>",
+            f"👥 Приглашено: <b>{invited}</b> / {ORACLE_REFERRAL_UNLIMITED_AT} до безлимита",
             f"🎟 Бонусных раскладов: <b>{credits}</b>",
             "",
+            f"🎯 <b>10 друзей</b> — безлимит на год · Премиум — {ORACLE_PREMIUM_PRICE_RUB} ₽/мес (скоро)",
             "Бонусы тратятся, когда дневной лимит в разделе исчерпан.",
             "",
             f"Твоя ссылка:\n<code>{link}</code>",
         ]
     )
     return "\n".join(lines)
+
+
+def apply_referral_milestone(referrer_id: int) -> str | None:
+    """10+ друзей → безлимит на год. Возвращает текст для уведомления."""
+    st = db.referral_stats(referrer_id)
+    if st["invited"] < ORACLE_REFERRAL_UNLIMITED_AT:
+        return None
+    with db._connect() as conn:
+        if conn.execute(
+            "SELECT 1 FROM events WHERE user_id = ? AND event_type = 'referral_unlimited'",
+            (referrer_id,),
+        ).fetchone():
+            return None
+    db.grant_premium(referrer_id, days=365)
+    db.log_event(referrer_id, "referral_unlimited", str(st["invited"]))
+    return (
+        f"🎉 <b>{st['invited']} друзей!</b> Безлимит на год активирован.\n"
+        "Все разделы без 🔒 — пользуйся на здоровье."
+    )
 
 
 def process_new_user(referred_id: int, payload: str | None) -> tuple[bool, int | None]:

@@ -20,6 +20,7 @@ from oracle_bot.paywall import paywall_mode
 from oracle_bot.streak import get_streak, record_visit
 
 STATIC = Path(__file__).resolve().parent / "static" / "miniapp"
+SITE = Path(__file__).resolve().parent / "static" / "site"
 
 
 @asynccontextmanager
@@ -46,6 +47,44 @@ app.include_router(router_cloud)
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/landing")
+def landing_page():
+    return FileResponse(SITE / "landing.html")
+
+
+@app.get("/admin")
+def admin_crm():
+    return FileResponse(SITE / "admin.html")
+
+
+@app.get("/oferta")
+def oferta_page():
+    return FileResponse(SITE / "oferta.html")
+
+
+@app.get("/robots.txt")
+def robots_txt():
+    from fastapi.responses import PlainTextResponse
+
+    base = cloud_webapp_url() or "https://moracul.onrender.com"
+    return PlainTextResponse(
+        f"User-agent: *\nAllow: /landing\nAllow: /oferta\nSitemap: {base}/sitemap.xml\n"
+    )
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml():
+    from fastapi.responses import Response
+
+    base = cloud_webapp_url() or "https://moracul.onrender.com"
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>{base}/landing</loc><priority>1.0</priority></url>
+  <url><loc>{base}/oferta</loc><priority>0.5</priority></url>
+</urlset>"""
+    return Response(content=xml, media_type="application/xml")
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")

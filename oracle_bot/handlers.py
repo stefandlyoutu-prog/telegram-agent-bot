@@ -63,6 +63,7 @@ from oracle_bot.prompts import (
     MAJOR_ARCANA,
     NUMEROLOGY,
     PORTRAIT,
+    PSYCHOLOGY_USER,
     RUNE,
     TAROT_USER,
     YESNO,
@@ -119,6 +120,7 @@ _WAIT = {
     "compat": "💕 Смотрю связь…",
     "palm": "🖐 Читаю линии…",
     "dating": "💬 Думаю…",
+    "psychology": "🧠 Слушаю…",
     "natal": "🌌 Строю натальную…",
     "past_life": "🕰 Погружаюсь в прошлое…",
     "karma": "⚖️ Смотрю карму…",
@@ -143,6 +145,7 @@ class Flow(StatesGroup):
     compat_dates = State()
     palm_wait = State()
     dating_text = State()
+    psychology_text = State()
     portrait_birth = State()
     numerology_input = State()
     chinese_birth = State()
@@ -228,6 +231,7 @@ async def _prompt_referral(
 
 
 def _start_text(user_id: int) -> str:
+    from oracle_bot.config import ORACLE_PREMIUM_PRICE_RUB, ORACLE_REFERRAL_UNLIMITED_AT, oferta_url
     from oracle_bot.streak import get_streak
 
     p = db.get_profile(user_id)
@@ -237,6 +241,11 @@ def _start_text(user_id: int) -> str:
         "",
         "Личные разборы: таро, карта рождения, отношения, карьера.",
         "Бесплатная часть — уже с конкретикой и советом. Углубление — по желанию.",
+        "",
+        f"📋 <a href=\"{oferta_url()}\">Публичная оферта</a> — условия сервиса",
+        f"💎 Тарифы: {ORACLE_FREE_PER_DAY} бесплатно/день · "
+        f"{ORACLE_REFERRAL_UNLIMITED_AT} друзей = безлимит · "
+        f"Премиум {ORACLE_PREMIUM_PRICE_RUB} ₽/мес",
     ]
     if p.get("zodiac"):
         lines.append(f"Знак: {zodiac_label(p['zodiac'])}")
@@ -464,10 +473,13 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
         except Exception as e:
             logger.warning("admin new user notify: %s", e)
     else:
+        from oracle_bot.pushes import schedule_reengagement
+
+        schedule_reengagement(uid)
         try:
             from oracle_bot.admin_notify import notify_return_visit
 
-            await notify_return_visit(message.bot, uid, message.from_user)
+            await notify_return_visit(message.bot, uid, message.from_user, start_args=command.args)
         except Exception as e:
             logger.warning("admin return notify: %s", e)
 
@@ -511,6 +523,8 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
 
     if notify_referrer:
         try:
+            from oracle_bot.referrals import apply_referral_milestone
+
             st = db.referral_stats(notify_referrer)
             await message.bot.send_message(
                 notify_referrer,
@@ -519,6 +533,9 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
                 f"Всего приглашено: {st['invited']} · бонусов: {st['credits']}\n"
                 f"/ref — твоя ссылка",
             )
+            milestone = apply_referral_milestone(notify_referrer)
+            if milestone:
+                await message.bot.send_message(notify_referrer, milestone)
         except Exception as e:
             logger.warning("referral notify %s: %s", notify_referrer, e)
 
@@ -530,6 +547,31 @@ async def cmd_stats(message: Message) -> None:
         await message.answer("Нет доступа.")
         return
     await message.answer(analytics_mod.format_stats_report())
+
+
+@router.message(Command("daily"))
+async def cmd_daily(message: Message) -> None:
+    uid = message.from_user.id if message.from_user else 0
+    if not _is_admin(uid):
+        await message.answer("Нет доступа.")
+        return
+    await message.answer(analytics_mod.format_daily_report())
+
+
+@router.message(Command("funnel"))
+async def cmd_funnel(message: Message) -> None:
+    uid = message.from_user.id if message.from_user else 0
+    if not _is_admin(uid):
+        await message.answer("Нет доступа.")
+        return
+    await message.answer(analytics_mod.format_funnel_report())
+    from oracle_bot.config import cloud_webapp_url
+
+    base = cloud_webapp_url() or "https://moracul.onrender.com"
+    await message.answer(
+        f"📊 CRM-дашборд:\n<a href=\"{base}/admin?uid={uid}\">открыть воронку</a>",
+        disable_web_page_preview=False,
+    )
 
 
 @router.message(Command("broadcast"))
@@ -745,6 +787,7 @@ async def pick_module(call: CallbackQuery, state: FSMContext) -> None:
     uid = call.from_user.id if call.from_user else 0
     if uid and mod not in ("premium", "referral"):
         analytics_mod.track_click(uid, f"mod:{mod}")
+        analytics_mod.track_push_open(uid, mod)
     if mod in ("premium", "referral") or not call.message:
         return
     await _open_module(call.message, state, call.from_user.id, mod)
@@ -793,6 +836,13 @@ async def _open_module(msg: Message, state: FSMContext, uid: int, mod: str) -> N
     elif mod == "dating":
         await state.set_state(Flow.dating_text)
         await msg.answer("💬 Ситуация: с кем, что случилось, чего хочешь:")
+    elif mod == "psychology":
+        await state.set_state(Flow.psychology_text)
+        await msg.answer(
+            "🧠 <b>Психолог онлайн</b>\n\n"
+            "Опиши, что беспокоит: тревога, выгорание, отношения, самооценка.\n"
+            "<i>Не заменяет очного врача при кризисе.</i>"
+        )
     elif mod == "career":
         await state.set_state(Flow.career_text)
         await msg.answer("💼 Работа/деньги: чем занят, что болит, чего хочешь:")
@@ -1314,6 +1364,28 @@ async def dating_flow(message: Message, state: FSMContext) -> None:
     )
 
 
+@router.message(Flow.psychology_text)
+async def psychology_flow(message: Message, state: FSMContext) -> None:
+    uid = message.from_user.id if message.from_user else 0
+    blocked = await _guard(uid, "psychology")
+    if blocked:
+        await message.answer(blocked, reply_markup=kb_limit_reached(uid))
+        await state.clear()
+        return
+    txt = (message.text or "").strip()
+    if len(txt) < 10:
+        await message.answer("Расскажи подробнее — хотя бы 2–3 предложения.")
+        return
+    await state.clear()
+    await _send_reading(
+        message,
+        uid=uid,
+        module="psychology",
+        prompt=PSYCHOLOGY_USER.format(text=txt),
+        header=reading_header("Психолог"),
+    )
+
+
 @router.message(Flow.career_text)
 async def career_flow(message: Message, state: FSMContext) -> None:
     uid = message.from_user.id if message.from_user else 0
@@ -1517,6 +1589,7 @@ async def dispatch_voice_text(message: Message, state: FSMContext, text: str) ->
         Flow.compat_dates.state: compat_flow,
         Flow.dream_text.state: dream_flow,
         Flow.dating_text.state: dating_flow,
+        Flow.psychology_text.state: psychology_flow,
         Flow.career_text.state: career_flow,
         Flow.yesno_question.state: yesno_flow,
         Flow.iching_question.state: iching_flow,
@@ -1581,6 +1654,7 @@ async def cmd_help(message: Message) -> None:
         text += (
             "\n\n<b>Админ:</b>\n"
             "• /stats — аналитика\n"
+            "• /daily — отчёт за сегодня\n"
             "• /broadcast текст — рассылка всем"
         )
     await message.answer(text, reply_markup=kb_main())
