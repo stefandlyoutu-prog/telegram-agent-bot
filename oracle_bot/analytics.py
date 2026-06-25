@@ -5,6 +5,168 @@ from __future__ import annotations
 from oracle_bot import storage as db
 
 
+def track_return_visit(user_id: int, *, start_args: str | None = None) -> None:
+    payload = (start_args or "")[:120]
+    db.log_event(user_id, "return_visit", payload)
+
+
+def track_push_open(user_id: int, push_type: str) -> None:
+    db.log_event(user_id, "push_open", push_type)
+
+
+def daily_metrics() -> dict:
+    """Метрики за сегодня и вчера для ежедневного отчёта."""
+    from datetime import date, timedelta
+
+    today = date.today().isoformat()
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    week_ago = (date.today() - timedelta(days=7)).isoformat()
+    s = db.analytics_snapshot()
+    with db._connect() as conn:
+        new_yesterday = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE substr(created_at, 1, 10) = ?", (yesterday,)
+        ).fetchone()[0]
+        returning_today = conn.execute(
+            """
+            SELECT COUNT(DISTINCT user_id) FROM events
+            WHERE event_type = 'return_visit' AND substr(created_at, 1, 10) = ?
+            """,
+            (today,),
+        ).fetchone()[0]
+        returning_week = conn.execute(
+            """
+            SELECT COUNT(DISTINCT user_id) FROM events
+            WHERE event_type = 'return_visit' AND substr(created_at, 1, 10) >= ?
+            """,
+            (week_ago,),
+        ).fetchone()[0]
+        push_opens_today = conn.execute(
+            """
+            SELECT COUNT(*) FROM events
+            WHERE event_type = 'push_open' AND substr(created_at, 1, 10) = ?
+            """,
+            (today,),
+        ).fetchone()[0]
+        push_sent_today = conn.execute(
+            """
+            SELECT COUNT(*) FROM push_queue
+            WHERE sent_at IS NOT NULL AND substr(sent_at, 1, 10) = ?
+            """,
+            (today,),
+        ).fetchone()[0]
+        sources = conn.execute(
+            """
+            SELECT COALESCE(NULLIF(signup_source, ''), 'органика') AS src, COUNT(*) AS c
+            FROM user_meta
+            GROUP BY src ORDER BY c DESC LIMIT 8
+            """
+        ).fetchall()
+        ref_total = conn.execute("SELECT COUNT(*) FROM referrals").fetchone()[0]
+        ref_today = conn.execute(
+            "SELECT COUNT(*) FROM referrals WHERE substr(created_at, 1, 10) = ?", (today,)
+        ).fetchone()[0]
+        ref_week = conn.execute(
+            "SELECT COUNT(*) FROM referrals WHERE substr(created_at, 1, 10) >= ?", (week_ago,)
+        ).fetchone()[0]
+        ref_prompts_today = conn.execute(
+            """
+            SELECT COUNT(*) FROM events
+            WHERE event_type = 'referral_prompt' AND substr(created_at, 1, 10) = ?
+            """,
+            (today,),
+        ).fetchone()[0]
+        ref_prompts_week = conn.execute(
+            """
+            SELECT COUNT(*) FROM events
+            WHERE event_type = 'referral_prompt' AND substr(created_at, 1, 10) >= ?
+            """,
+            (week_ago,),
+        ).fetchone()[0]
+        top_referrers = conn.execute(
+            """
+            SELECT r.referrer_id,
+                   COUNT(*) AS cnt,
+                   COALESCE(m.username, '') AS username
+            FROM referrals r
+            LEFT JOIN user_meta m ON m.user_id = r.referrer_id
+            GROUP BY r.referrer_id
+            ORDER BY cnt DESC
+            LIMIT 5
+            """
+        ).fetchall()
+    return {
+        **s,
+        "new_yesterday": int(new_yesterday),
+        "returning_today": int(returning_today),
+        "returning_week": int(returning_week),
+        "push_opens_today": int(push_opens_today),
+        "push_sent_today": int(push_sent_today),
+        "sources": [{"source": r[0], "count": int(r[1])} for r in sources],
+        "referrals_total": int(ref_total),
+        "referrals_today": int(ref_today),
+        "referrals_week": int(ref_week),
+        "referral_prompts_today": int(ref_prompts_today),
+        "referral_prompts_week": int(ref_prompts_week),
+        "top_referrers": [
+            {
+                "id": int(r[0]),
+                "count": int(r[1]),
+                "username": (r[2] or "").strip(),
+            }
+            for r in top_referrers
+        ],
+    }
+
+
+def format_daily_report() -> str:
+    """Ежедневный отчёт для Telegram админу."""
+    from datetime import date
+
+    m = daily_metrics()
+    src_lines = "\n".join(
+        f"  • {r['source']}: {r['count']}" for r in (m.get("sources") or [])[:6]
+    ) or "  • пока нет данных"
+    ref_top = m.get("top_referrers") or []
+    ref_top_lines = "\n".join(
+        (
+            f"  • @{r['username']}: {r['count']} друзей"
+            if r.get("username")
+            else f"  • id{r['id']}: {r['count']} друзей"
+        )
+        for r in ref_top[:5]
+    ) or "  • пока никто не привёл"
+    return (
+        f"📅 <b>Оракул — отчёт за {date.today().strftime('%d.%m.%Y')}</b>\n\n"
+        f"👥 <b>Пользователи</b>\n"
+        f"  Всего: <b>{m['total_users']}</b>\n"
+        f"  🆕 Новых сегодня: <b>{m['new_today']}</b> (вчера: {m['new_yesterday']})\n"
+        f"  ↩️ Вернулось сегодня: <b>{m['returning_today']}</b>\n"
+        f"  🟢 Активных сегодня (DAU): <b>{m['dau']}</b>\n"
+        f"  ↩️ Возвраты за 7д: {m['returning_week']}\n\n"
+        f"🎁 <b>Приведи друга</b>\n"
+        f"  Рефералов всего: <b>{m['referrals_total']}</b>\n"
+        f"  Сегодня: +<b>{m['referrals_today']}</b> · за 7д: +{m.get('referrals_week', 0)}\n"
+        f"  Показали кнопку «пригласи»: {m.get('referral_prompts_today', 0)} сегодня, "
+        f"{m.get('referral_prompts_week', 0)} за 7д\n"
+        f"  <b>Топ приглашающих:</b>\n{ref_top_lines}\n\n"
+        f"📣 <b>Источники (все время)</b>\n{src_lines}\n\n"
+        f"🔮 Чтений сегодня: <b>{m['readings_today']}</b>\n"
+        f"🚫 Лимит сегодня: {m['limit_hits_today']}\n"
+        f"💰 Оплат сегодня: {m['payments_today']} ({m['stars_today']}⭐)\n"
+        f"⭐ Премиум сейчас: {m['premium_now']}\n\n"
+        f"📤 <b>Пуши</b>\n"
+        f"  Отправлено сегодня: {m['push_sent_today']}\n"
+        f"  Открыли (клик): {m['push_opens_today']}\n"
+        f"  В очереди: {m['pushes_pending']}\n"
+        f"  За 7д: {m['pushes_sent_week']}\n\n"
+        f"🔔 <b>Подписка на пуши</b>\n"
+        f"  ✅ Активны: <b>{m['push_active']}</b>\n"
+        f"  🔕 Отключили (/stop_push): <b>{m['push_opt_out']}</b>\n"
+        f"  Сегодня отключили: {m.get('push_opt_out_today', 0)}\n\n"
+        f"📈 Конверсия: {m['conversion_pct']}% · /stats · /funnel"
+    )
+
+
 def track_signup(
     user_id: int,
     *,
@@ -45,10 +207,6 @@ def track_checkout(user_id: int, kind: str) -> None:
 
 def track_miniapp(user_id: int, action: str, detail: str = "") -> None:
     db.log_event(user_id, "miniapp", f"{action}:{detail}"[:500])
-
-
-def track_push_open(user_id: int, push_type: str) -> None:
-    db.log_event(user_id, "push_open", push_type)
 
 
 def track_click(user_id: int, target: str) -> None:
@@ -186,5 +344,7 @@ def format_stats_report() -> str:
         f"(+{s.get('referrals_week', 0)} за 7д)\n"
         f"📣 Показали «пригласи друга»: <b>{s.get('referral_prompts_week', 0)}</b> за 7д\n"
         f"📤 Пушей за 7д: <b>{s['pushes_sent_week']}</b> "
-        f"(в очереди: {s['pushes_pending']})"
+        f"(в очереди: {s['pushes_pending']})\n"
+        f"🔔 Пуши: ✅ <b>{s.get('push_active', 0)}</b> · "
+        f"🔕 отключили: <b>{s.get('push_opt_out', 0)}</b>"
     )
