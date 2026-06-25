@@ -16,6 +16,7 @@ from aiogram.types import (
     Message,
     PreCheckoutQuery,
 )
+from aiogram.enums import ChatAction
 
 from oracle_bot import storage as db
 from oracle_bot.config import (
@@ -265,6 +266,19 @@ async def _guard(user_id: int, module: str) -> Optional[str]:
     return _limit_text()
 
 
+async def _callback_chat(call: CallbackQuery) -> Optional[Message]:
+    """Сообщение для ответа на inline-кнопку (fallback в личку)."""
+    if call.message:
+        return call.message
+    if not call.bot or not call.from_user:
+        return None
+    try:
+        return await call.bot.send_message(call.from_user.id, "🔮…")
+    except Exception:
+        logger.exception("callback_chat fallback")
+        return None
+
+
 async def _send_reading(
     message: Message,
     *,
@@ -279,6 +293,8 @@ async def _send_reading(
     premium = has_full_access(uid)
     wait = wait_msg or await message.answer(_WAIT.get(module, "🔮…"))
     try:
+        if message.bot:
+            await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
         raw = await oracle_reading(prompt, premium=premium, temperature=temperature)
         text, cont_id = funnel.deliver(
             user_id=uid,
@@ -963,56 +979,66 @@ async def _profile_show(msg: Message, uid: int) -> None:
 @router.callback_query(F.data.startswith("htoday:"))
 async def cb_horo_today(call: CallbackQuery) -> None:
     sign = (call.data or "").split(":", 1)[1]
-    await call.answer()
-    uid = call.from_user.id
+    await call.answer("Читаю…")
+    uid = call.from_user.id if call.from_user else 0
+    msg = await _callback_chat(call)
+    if not msg:
+        return
     blocked = await _guard(uid, "horo_today")
-    if blocked and call.message:
-        await call.message.answer(blocked, reply_markup=kb_limit_reached(uid))
+    if blocked:
+        await msg.answer(blocked, reply_markup=kb_limit_reached(uid))
         return
     label, period = ZODIAC_BY_KEY[sign]
     db.save_profile(uid, zodiac=sign)
-    if call.message:
-        await _send_reading(
-            call.message,
-            uid=uid,
-            module="horo_today",
-            prompt=HORO_TODAY.format(sign=label, sign_period=period),
-            header=reading_header("Сегодня", label),
-        )
+    wait = await msg.answer(_WAIT.get("horo_today", "🌅 Смотрю звёзды…"))
+    await _send_reading(
+        msg,
+        uid=uid,
+        module="horo_today",
+        prompt=HORO_TODAY.format(sign=label, sign_period=period),
+        header=reading_header("Сегодня", label),
+        wait_msg=wait,
+    )
 
 
 @router.callback_query(F.data.startswith("hweek:"))
 async def cb_horo_week(call: CallbackQuery) -> None:
     sign = (call.data or "").split(":", 1)[1]
-    await call.answer()
-    uid = call.from_user.id
+    await call.answer("Читаю…")
+    uid = call.from_user.id if call.from_user else 0
+    msg = await _callback_chat(call)
+    if not msg:
+        return
     blocked = await _guard(uid, "horo_week")
-    if blocked and call.message:
-        await call.message.answer(blocked, reply_markup=kb_limit_reached(uid))
+    if blocked:
+        await msg.answer(blocked, reply_markup=kb_limit_reached(uid))
         return
     label, _ = ZODIAC_BY_KEY[sign]
-    if call.message:
-        await _send_reading(
-            call.message,
-            uid=uid,
-            module="horo_week",
-            prompt=HORO_WEEK.format(sign=label),
-            header=reading_header("Неделя", label),
-        )
+    wait = await msg.answer(_WAIT.get("horo_week", "📅 Раскладываю неделю…"))
+    await _send_reading(
+        msg,
+        uid=uid,
+        module="horo_week",
+        prompt=HORO_WEEK.format(sign=label),
+        header=reading_header("Неделя", label),
+        wait_msg=wait,
+    )
 
 
 @router.callback_query(F.data.startswith("dest:"))
 async def cb_destiny(call: CallbackQuery) -> None:
     sign = (call.data or "").split(":", 1)[1]
-    await call.answer()
-    uid = call.from_user.id
+    await call.answer("Читаю…")
+    uid = call.from_user.id if call.from_user else 0
+    msg = await _callback_chat(call)
+    if not msg:
+        return
     blocked = await _guard(uid, "destiny")
-    if blocked and call.message:
-        await call.message.answer(blocked, reply_markup=kb_limit_reached(uid))
+    if blocked:
+        await msg.answer(blocked, reply_markup=kb_limit_reached(uid))
         return
     db.save_profile(uid, zodiac=sign)
-    if call.message:
-        await _destiny_run(call.message, uid, sign)
+    await _destiny_run(msg, uid, sign)
 
 
 @router.callback_query(F.data == "prof:natal_data")

@@ -37,6 +37,7 @@ _bot: Optional[Bot] = None
 _dp: Optional[Dispatcher] = None
 _push_task: Optional[asyncio.Task] = None
 _channel_task: Optional[asyncio.Task] = None
+_update_sem = asyncio.Semaphore(12)
 
 router_cloud = APIRouter()
 
@@ -105,6 +106,13 @@ async def start_cloud() -> None:
         _push_task = asyncio.create_task(push_worker(_bot, ORACLE_PUSH_INTERVAL_SEC))
         logger.info("Push worker: каждые %s сек", ORACLE_PUSH_INTERVAL_SEC)
 
+    from oracle_bot.config import ORACLE_DAILY_REPORT, ORACLE_DAILY_REPORT_HOUR_MSK
+    from oracle_bot.daily_report import daily_report_worker
+
+    if ORACLE_DAILY_REPORT:
+        asyncio.create_task(daily_report_worker(_bot, hour_msk=ORACLE_DAILY_REPORT_HOUR_MSK))
+        logger.info("Daily report: ~%s:00 MSK", ORACLE_DAILY_REPORT_HOUR_MSK)
+
     if ORACLE_CHANNEL_POSTS_ENABLED:
         from oracle_bot.channel_queue import seed_week_queue
 
@@ -143,19 +151,35 @@ async def stop_cloud() -> None:
         _bot = None
 
 
+async def _process_update(update: Update) -> None:
+    if not _bot or not _dp:
+        return
+    async with _update_sem:
+        try:
+            await _dp.feed_update(_bot, update)
+        except Exception:
+            logger.exception("telegram update %s failed", update.update_id)
+
+
 @router_cloud.post("/webhook")
 async def telegram_webhook(request: Request):
     if not _bot or not _dp:
         return {"ok": False}
     data = await request.json()
     update = Update.model_validate(data)
-    asyncio.create_task(_dp.feed_update(_bot, update))
+    asyncio.create_task(_process_update(update))
     return {"ok": True}
 
 
 @router_cloud.get("/health")
 async def health():
-    return {"ok": True, "webapp": ORACLE_WEBAPP_URL or cloud_webapp_url()}
+    commit = os.getenv("RENDER_GIT_COMMIT", "").strip()[:12]
+    return {
+        "ok": True,
+        "webapp": ORACLE_WEBAPP_URL or cloud_webapp_url(),
+        "version": commit or "local",
+        "routes": ["/landing", "/oferta", "/admin"],
+    }
 
 
 def cloud_runtime() -> tuple[Optional[Bot], Optional[Dispatcher]]:
