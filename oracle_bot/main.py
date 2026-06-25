@@ -15,10 +15,13 @@ from oracle_bot.config import (
     ORACLE_BOT_TOKEN,
     ORACLE_CHANNEL_POST_INTERVAL_SEC,
     ORACLE_CHANNEL_POSTS_ENABLED,
+    ORACLE_DAILY_REPORT,
+    ORACLE_DAILY_REPORT_HOUR_MSK,
     ORACLE_PUSH_ENABLED,
     ORACLE_PUSH_INTERVAL_SEC,
     ORACLE_WEBAPP_URL,
 )
+from oracle_bot.daily_report import daily_report_worker
 from oracle_bot.handlers import router
 from oracle_bot.voice import router as voice_router
 from oracle_bot.storage import init_db
@@ -82,6 +85,17 @@ async def main() -> None:
     if ORACLE_PUSH_ENABLED:
         asyncio.create_task(push_worker(bot, ORACLE_PUSH_INTERVAL_SEC))
         logger.info("Push worker: каждые %s сек", ORACLE_PUSH_INTERVAL_SEC)
+    if ORACLE_DAILY_REPORT:
+        asyncio.create_task(daily_report_worker(bot, hour_msk=ORACLE_DAILY_REPORT_HOUR_MSK))
+        logger.info("Daily report: ~%s:00 MSK", ORACLE_DAILY_REPORT_HOUR_MSK)
+    from oracle_bot.config import ORACLE_FREE_DAY_REPORT, ORACLE_FREE_DAY_REPORT_HOUR_MSK
+    from oracle_bot.free_day import free_day_report_worker
+
+    if ORACLE_FREE_DAY_REPORT:
+        asyncio.create_task(
+            free_day_report_worker(bot, hour_msk=ORACLE_FREE_DAY_REPORT_HOUR_MSK)
+        )
+        logger.info("Free day report: ~%s:00 MSK", ORACLE_FREE_DAY_REPORT_HOUR_MSK)
     if ORACLE_CHANNEL_POSTS_ENABLED:
         if db.count_channel_posts(status="pending") == 0:
             seeded = seed_week_queue()

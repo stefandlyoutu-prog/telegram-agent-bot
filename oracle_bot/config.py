@@ -28,6 +28,12 @@ ORACLE_PUSH_ENABLED = os.getenv("ORACLE_PUSH_ENABLED", "1") not in {"0", "false"
 ORACLE_PUSH_INTERVAL_SEC = int(os.getenv("ORACLE_PUSH_INTERVAL_SEC", "120"))
 ORACLE_DAILY_REPORT = os.getenv("ORACLE_DAILY_REPORT", "1") not in {"0", "false", "False"}
 ORACLE_DAILY_REPORT_HOUR_MSK = int(os.getenv("ORACLE_DAILY_REPORT_HOUR_MSK", "9"))
+ORACLE_FREE_DAY_REPORT = os.getenv("ORACLE_FREE_DAY_REPORT", "1") not in {
+    "0",
+    "false",
+    "False",
+}
+ORACLE_FREE_DAY_REPORT_HOUR_MSK = int(os.getenv("ORACLE_FREE_DAY_REPORT_HOUR_MSK", "0"))
 ORACLE_CHANNEL_POSTS_ENABLED = os.getenv("ORACLE_CHANNEL_POSTS_ENABLED", "1") not in {
     "0",
     "false",

@@ -13,5 +13,10 @@ def is_admin_user(user_id: int) -> bool:
 
 def has_full_access(user_id: int) -> bool:
     from oracle_bot import storage as db
+    from oracle_bot.free_day import is_free_day_active
 
-    return db.is_premium(user_id) or is_admin_user(user_id)
+    return (
+        db.is_premium(user_id)
+        or is_admin_user(user_id)
+        or is_free_day_active()
+    )

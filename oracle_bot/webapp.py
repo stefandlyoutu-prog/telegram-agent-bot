@@ -247,6 +247,22 @@ async def api_admin_broadcast(body: AdminBroadcastBody):
     return await broadcast_text(_bot, text)
 
 
+class AdminFreeDayBody(BaseModel):
+    user_id: int
+
+
+@app.post("/api/admin/free-day-start")
+async def api_admin_free_day_start(body: AdminFreeDayBody):
+    if body.user_id <= 0 or not is_admin_user(body.user_id):
+        raise HTTPException(403, "Нет доступа")
+    from oracle_bot.cloud import _bot
+    from oracle_bot.free_day import run_broadcast
+
+    if not _bot:
+        raise HTTPException(503, "Бот не инициализирован")
+    return await run_broadcast(_bot)
+
+
 @app.get("/api/admin/channel-queue")
 def api_admin_channel_queue(user_id: int = Query(...)):
     if user_id <= 0 or not is_admin_user(user_id):

@@ -237,6 +237,7 @@ async def _prompt_referral(
 
 def _start_text(user_id: int) -> str:
     from oracle_bot.config import ORACLE_PREMIUM_PRICE_RUB, ORACLE_REFERRAL_UNLIMITED_AT, oferta_url
+    from oracle_bot.free_day import is_free_day_active
     from oracle_bot.streak import get_streak
 
     p = db.get_profile(user_id)
@@ -244,14 +245,24 @@ def _start_text(user_id: int) -> str:
     lines = [
         "<b>m-Oracul</b>",
         "",
-        "Личные разборы: таро, карта рождения, отношения, карьера.",
-        "Бесплатная часть — уже с конкретикой и советом. Углубление — по желанию.",
-        "",
-        f"📋 <a href=\"{oferta_url()}\">Публичная оферта</a> — условия сервиса",
-        f"💎 Тарифы: {ORACLE_FREE_PER_DAY} бесплатно/день · "
-        f"{ORACLE_REFERRAL_UNLIMITED_AT} друзей = безлимит · "
-        f"Премиум {ORACLE_PREMIUM_PRICE_RUB} ₽/мес",
     ]
+    if is_free_day_active():
+        lines.append("🎁 <b>Сегодня до конца дня — все разделы бесплатно!</b>")
+        lines.append("")
+    lines.extend(
+        [
+            "Личные разборы: таро, карта рождения, отношения, карьера.",
+            "Бесплатная часть — уже с конкретикой и советом. Углубление — по желанию.",
+            "",
+            f"📋 <a href=\"{oferta_url()}\">Публичная оферта</a> — условия сервиса",
+        ]
+    )
+    if not is_free_day_active():
+        lines.append(
+            f"💎 Тарифы: {ORACLE_FREE_PER_DAY} бесплатно/день · "
+            f"{ORACLE_REFERRAL_UNLIMITED_AT} друзей = безлимит · "
+            f"Премиум {ORACLE_PREMIUM_PRICE_RUB} ₽/мес"
+        )
     if p.get("zodiac"):
         lines.append(f"Знак: {zodiac_label(p['zodiac'])}")
     if streak > 1:
@@ -474,6 +485,15 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
     welcome_bonus = False
     notify_referrer: int | None = None
 
+    args = (command.args or "").strip()
+    try:
+        from oracle_bot.free_day import is_free_day_active, track_visit
+
+        if is_free_day_active():
+            track_visit(uid, args)
+    except Exception as e:
+        logger.warning("free_day track: %s", e)
+
     await message.answer(_start_text(uid), reply_markup=kb_main())
 
     if is_new:
@@ -514,6 +534,12 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
             logger.warning("admin return notify: %s", e)
 
     args = (command.args or "").strip()
+    if args == "free_day":
+        await message.answer(
+            "🎁 <b>Бесплатный день активен!</b>\n\n"
+            "Все разделы без лимитов до конца дня. Выбери в /menu что протестировать."
+        )
+        return
     if args == "premium":
         from oracle_bot.paywall import stars_enabled
 
@@ -658,6 +684,30 @@ async def _run_broadcast(message: Message, text: str) -> None:
             fail += 1
         await asyncio.sleep(0.05)
     await status.edit_text(f"✅ Рассылка готова: доставлено {ok}, ошибок {fail}.")
+
+
+@router.message(Command("free_day"))
+async def cmd_free_day(message: Message) -> None:
+    uid = message.from_user.id if message.from_user else 0
+    if not _is_admin(uid):
+        await message.answer("Нет доступа.")
+        return
+    from oracle_bot.free_day import format_campaign_report, msk_today, run_broadcast
+
+    status = await message.answer("🎁 Запускаю бесплатный день и рассылку…")
+    try:
+        result = await run_broadcast(message.bot)
+        day = result.get("day") or msk_today()
+        await status.edit_text(
+            f"✅ <b>Бесплатный день {day}</b>\n\n"
+            f"📤 Рассылка: доставлено <b>{result.get('ok', 0)}</b> из {result.get('total', 0)} "
+            f"(ошибок: {result.get('fail', 0)})\n\n"
+            f"В полночь МСК придёт отчёт по акции.\n\n"
+            f"<i>Превью метрик:</i>\n{format_campaign_report(day)[:400]}…"
+        )
+    except Exception as e:
+        logger.exception("free_day")
+        await status.edit_text(f"❌ Ошибка: {e}")
 
 
 @router.message(Command("ref"))
@@ -1702,7 +1752,8 @@ async def cmd_help(message: Message) -> None:
             "\n\n<b>Админ:</b>\n"
             "• /stats — аналитика\n"
             "• /daily — отчёт за сегодня\n"
-            "• /broadcast текст — рассылка всем"
+            "• /broadcast текст — рассылка всем\n"
+            "• /free_day — бесплатный день + рассылка"
         )
     await message.answer(text, reply_markup=kb_main())
 

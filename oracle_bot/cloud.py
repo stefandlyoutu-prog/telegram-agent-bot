@@ -132,6 +132,15 @@ async def start_cloud() -> None:
         asyncio.create_task(daily_report_worker(_bot, hour_msk=ORACLE_DAILY_REPORT_HOUR_MSK))
         logger.info("Daily report: ~%s:00 MSK", ORACLE_DAILY_REPORT_HOUR_MSK)
 
+    from oracle_bot.config import ORACLE_FREE_DAY_REPORT, ORACLE_FREE_DAY_REPORT_HOUR_MSK
+    from oracle_bot.free_day import free_day_report_worker
+
+    if ORACLE_FREE_DAY_REPORT:
+        asyncio.create_task(
+            free_day_report_worker(_bot, hour_msk=ORACLE_FREE_DAY_REPORT_HOUR_MSK)
+        )
+        logger.info("Free day report: ~%s:00 MSK", ORACLE_FREE_DAY_REPORT_HOUR_MSK)
+
     if ORACLE_CHANNEL_POSTS_ENABLED:
         from oracle_bot.channel_queue import seed_week_queue
 

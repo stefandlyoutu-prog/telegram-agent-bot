@@ -132,6 +132,11 @@ def init_db() -> None:
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_channel_post_due ON channel_post_queue(status, scheduled_at);
+            CREATE TABLE IF NOT EXISTS app_kv (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             """
         )
         for table, col in (("profiles", "birth_time"), ("profiles", "birth_place"), ("client_sessions", "last_context")):
@@ -1006,4 +1011,21 @@ def channel_queue_summary() -> dict[str, Any]:
         "sent": int(sent or 0),
         "promo_variants": {r["variant_id"]: int(r["c"]) for r in promo_sent},
     }
+
+
+def kv_get(key: str) -> Optional[str]:
+    with _connect() as conn:
+        row = conn.execute("SELECT value FROM app_kv WHERE key = ?", (key,)).fetchone()
+    return str(row["value"]) if row else None
+
+
+def kv_set(key: str, value: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO app_kv (key, value, updated_at) VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            (key, value, _now_iso()),
+        )
 

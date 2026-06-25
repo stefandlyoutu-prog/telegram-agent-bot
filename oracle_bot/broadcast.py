@@ -13,17 +13,21 @@ from oracle_bot import storage as db
 logger = logging.getLogger(__name__)
 
 
-async def broadcast_text(bot, text: str) -> dict[str, Any]:
+async def broadcast_text(bot, text: str, *, reply_markup=None) -> dict[str, Any]:
     ids = db.all_user_ids()
     ok = fail = 0
     for user_id in ids:
         try:
-            await bot.send_message(user_id, text, parse_mode="HTML")
+            await bot.send_message(
+                user_id, text, parse_mode="HTML", reply_markup=reply_markup
+            )
             ok += 1
         except TelegramRetryAfter as e:
             await asyncio.sleep(float(e.retry_after) + 0.5)
             try:
-                await bot.send_message(user_id, text, parse_mode="HTML")
+                await bot.send_message(
+                    user_id, text, parse_mode="HTML", reply_markup=reply_markup
+                )
                 ok += 1
             except Exception:
                 fail += 1
