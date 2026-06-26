@@ -439,6 +439,14 @@ def test_product_pages() -> bool:
         else:
             _fail(name, "missing or empty")
             ok = False
+    inn = "615108112390"
+    for name in ("landing.html", "oferta.html"):
+        body = (site / name).read_text(encoding="utf-8")
+        if inn in body and "Морозов Степан Юрьевич" in body:
+            _ok(f"{name} requisites")
+        else:
+            _fail(f"{name} requisites", "ИНН/ФИО не найдены")
+            ok = False
     return ok
 
 

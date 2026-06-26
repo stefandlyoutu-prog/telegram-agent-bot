@@ -211,6 +211,14 @@ body {
 }
 
 .cta { display: grid; gap: 10px; }
+.legal {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+  text-align: center;
+}
+.legal a { color: var(--accent); }
 
 .btn {
   border: none;

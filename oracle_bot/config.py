@@ -63,6 +63,26 @@ ORACLE_PROMO_CHANNELS: tuple[str, ...] = tuple(
     if x.strip()
 )
 
+# Реквизиты исполнителя (самозанятый) — на сайте и в боте
+ORACLE_SELFEMPLOYED_NAME = os.getenv(
+    "ORACLE_SELFEMPLOYED_NAME", "Морозов Степан Юрьевич"
+).strip()
+ORACLE_SELFEMPLOYED_INN = os.getenv("ORACLE_SELFEMPLOYED_INN", "615108112390").strip()
+
+
+def self_employed_requisites_plain() -> str:
+    return (
+        f"Самозанятый: {ORACLE_SELFEMPLOYED_NAME}\n"
+        f"ИНН: {ORACLE_SELFEMPLOYED_INN}"
+    )
+
+
+def self_employed_requisites_html() -> str:
+    return (
+        f"Самозанятый: <b>{ORACLE_SELFEMPLOYED_NAME}</b>\n"
+        f"ИНН: <b>{ORACLE_SELFEMPLOYED_INN}</b>"
+    )
+
 
 def cloud_webapp_url() -> str:
     """HTTPS URL Mini App: явный ORACLE_WEBAPP_URL или Render."""

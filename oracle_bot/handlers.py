@@ -236,7 +236,12 @@ async def _prompt_referral(
 
 
 def _start_text(user_id: int) -> str:
-    from oracle_bot.config import ORACLE_PREMIUM_PRICE_RUB, ORACLE_REFERRAL_UNLIMITED_AT, oferta_url
+    from oracle_bot.config import (
+        ORACLE_PREMIUM_PRICE_RUB,
+        ORACLE_REFERRAL_UNLIMITED_AT,
+        oferta_url,
+        self_employed_requisites_html,
+    )
     from oracle_bot.free_day import is_free_day_active
     from oracle_bot.streak import get_streak
 
@@ -255,6 +260,8 @@ def _start_text(user_id: int) -> str:
             "Бесплатная часть — уже с конкретикой и советом. Углубление — по желанию.",
             "",
             f"📋 <a href=\"{oferta_url()}\">Публичная оферта</a> — условия сервиса",
+            "",
+            self_employed_requisites_html(),
         ]
     )
     if not is_free_day_active():
@@ -1737,6 +1744,8 @@ async def on_webapp_data(message: Message, state: FSMContext) -> None:
 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
+    from oracle_bot.config import oferta_url, self_employed_requisites_html
+
     uid = message.from_user.id if message.from_user else 0
     text = (
         "🔮 <b>m-Oracul — помощь</b>\n\n"
@@ -1745,7 +1754,9 @@ async def cmd_help(message: Message) -> None:
         "• 🔓 Продолжить — скрытая часть (Stars)\n"
         "• ⭐ Премиум — безлимит\n"
         "• /ref — пригласи друга\n"
-        "• /stop_push — отключить напоминания"
+        "• /stop_push — отключить напоминания\n\n"
+        f"📋 <a href=\"{oferta_url()}\">Публичная оферта</a>\n"
+        f"{self_employed_requisites_html()}"
     )
     if _is_admin(uid):
         text += (
