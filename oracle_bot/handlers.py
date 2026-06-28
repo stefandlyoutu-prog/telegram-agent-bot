@@ -13,6 +13,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     LabeledPrice,
     Message,
     PreCheckoutQuery,
@@ -21,11 +23,14 @@ from aiogram.enums import ChatAction
 
 from oracle_bot import storage as db
 from oracle_bot.config import (
+    ORACLE_DEEP_PRICE_RUB,
     ORACLE_DEEP_STARS,
     ORACLE_FREE_PER_DAY,
+    ORACLE_PREMIUM_PRICE_RUB,
     ORACLE_PREMIUM_STARS,
     ORACLE_REFERRAL_BONUS,
     ORACLE_REFERRAL_WELCOME,
+    robokassa_configured,
 )
 from oracle_bot.access import has_full_access, is_admin_user
 from oracle_bot.formatting import reading_header
@@ -475,6 +480,80 @@ async def _send_deep_invoice(message: Message, cont_id: int) -> None:
     )
 
 
+def _robokassa_url(uid: int, kind: str, cont_id: int | None = None) -> str | None:
+    """Создаёт инвойс и возвращает ссылку Робокассы (или None если не настроена)."""
+    if not robokassa_configured() or uid <= 0:
+        return None
+    from oracle_bot.robokassa import build_payment_url
+
+    amount = ORACLE_PREMIUM_PRICE_RUB if kind == "premium_30d" else ORACLE_DEEP_PRICE_RUB
+    desc = "Оракул — Премиум 30 дней" if kind == "premium_30d" else "Оракул — продолжение чтения"
+    inv_id = db.create_invoice(uid, kind, amount, cont_id=cont_id)
+    return build_payment_url(
+        inv_id=inv_id,
+        out_sum=amount,
+        description=desc,
+        shp={"Shp_uid": str(uid), "Shp_kind": kind},
+    )
+
+
+async def _offer_premium(message: Message, uid: int) -> None:
+    """Премиум: оплата картой/СБП (Робокасса) + Telegram Stars (если включены)."""
+    from oracle_bot.paywall import stars_enabled
+
+    url = _robokassa_url(uid, "premium_30d")
+    if not url:
+        await _send_premium_invoice(message)
+        return
+    if uid:
+        analytics_mod.track_payment_intent(uid, "premium_30d")
+    rows = [[InlineKeyboardButton(text=f"💳 Картой/СБП — {ORACLE_PREMIUM_PRICE_RUB}₽", url=url)]]
+    if stars_enabled():
+        rows.append(
+            [InlineKeyboardButton(text=f"⭐ Telegram Stars — {ORACLE_PREMIUM_STARS}", callback_data="stars:premium")]
+        )
+    rows.append([InlineKeyboardButton(text="📄 Оферта", url=_oferta_link())])
+    await message.answer(
+        "⭐ <b>Премиум на 30 дней</b>\n"
+        "Безлимит всех разделов · все продолжения без 🔒\n\n"
+        "Выбери способ оплаты:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+async def _offer_deep(message: Message, uid: int, cont_id: int) -> None:
+    from oracle_bot.paywall import stars_enabled
+
+    cont = db.get_continuation(cont_id)
+    if not cont:
+        await message.answer("Чтение устарело — запроси новое из меню.", reply_markup=kb_main())
+        return
+    url = _robokassa_url(uid, "deep_unlock", cont_id=cont_id)
+    if not url:
+        await _send_deep_invoice(message, cont_id)
+        return
+    if uid:
+        analytics_mod.track_payment_intent(uid, f"deep:{cont_id}")
+    rows = [[InlineKeyboardButton(text=f"💳 Картой/СБП — {ORACLE_DEEP_PRICE_RUB}₽", url=url)]]
+    if stars_enabled():
+        rows.append(
+            [InlineKeyboardButton(text=f"⭐ Telegram Stars — {ORACLE_DEEP_STARS}", callback_data=f"stars:deep:{cont_id}")]
+        )
+    rows.append([InlineKeyboardButton(text="📄 Оферта", url=_oferta_link())])
+    await message.answer(
+        "🔓 <b>Продолжение чтения</b>\n"
+        "Скрытая часть: детали, прогноз, личный совет\n\n"
+        "Выбери способ оплаты:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+def _oferta_link() -> str:
+    from oracle_bot.config import oferta_url
+
+    return oferta_url()
+
+
 def _profile_ctx(uid: int) -> dict:
     p = db.get_profile(uid)
     name = p.get("name") or "не указано"
@@ -735,7 +814,8 @@ async def cmd_menu(message: Message, state: FSMContext) -> None:
 
 @router.message(Command("premium"))
 async def cmd_premium(message: Message) -> None:
-    await _send_premium_invoice(message)
+    uid = message.from_user.id if message.from_user else 0
+    await _offer_premium(message, uid)
 
 
 @router.callback_query(F.data == "nav:menu")
@@ -764,7 +844,25 @@ async def cb_premium(call: CallbackQuery) -> None:
     if uid:
         analytics_mod.track_click(uid, "mod:premium")
     if call.message:
+        await _offer_premium(call.message, uid)
+
+
+@router.callback_query(F.data == "stars:premium")
+async def cb_stars_premium(call: CallbackQuery) -> None:
+    await call.answer()
+    if call.message:
         await _send_premium_invoice(call.message)
+
+
+@router.callback_query(F.data.startswith("stars:deep:"))
+async def cb_stars_deep(call: CallbackQuery) -> None:
+    await call.answer()
+    try:
+        cont_id = int((call.data or "").split(":")[2])
+    except (IndexError, ValueError):
+        return
+    if call.message:
+        await _send_deep_invoice(call.message, cont_id)
 
 
 @router.callback_query(F.data == "mod:referral")
@@ -793,7 +891,7 @@ async def cb_deep(call: CallbackQuery) -> None:
             )
         return
     if call.message:
-        await _send_deep_invoice(call.message, cont_id)
+        await _offer_deep(call.message, uid, cont_id)
 
 
 @router.pre_checkout_query()
@@ -831,6 +929,9 @@ async def paid(message: Message) -> None:
         db.grant_premium(uid, days=30)
         analytics_mod.track_payment(uid, "premium_30d", ORACLE_PREMIUM_STARS, payload)
         db.cancel_pushes(uid, ["unlock_tease", "limit_hit", "welcome_day1", "welcome_day2", "inactive", "referral_nudge"])
+        from oracle_bot.pushes import schedule_premium_renewal
+
+        schedule_premium_renewal(uid, days=30)
         try:
             from oracle_bot.revenue_bridge import notify_admins
 
@@ -1724,7 +1825,7 @@ async def on_webapp_data(message: Message, state: FSMContext) -> None:
     action = data.get("action")
     analytics_mod.track_miniapp(uid, action or "unknown", data.get("module", ""))
     if action == "premium":
-        await _send_premium_invoice(message)
+        await _offer_premium(message, uid)
         return
     if action == "ref":
         await cmd_ref(message)

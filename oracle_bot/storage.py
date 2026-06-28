@@ -91,6 +91,17 @@ def init_db() -> None:
                 payload TEXT,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS invoices (
+                inv_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                cont_id INTEGER,
+                amount_rub INTEGER NOT NULL,
+                provider TEXT NOT NULL DEFAULT 'robokassa',
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                paid_at TEXT
+            );
             CREATE TABLE IF NOT EXISTS push_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -160,6 +171,17 @@ def init_db() -> None:
             conn.execute("ALTER TABLE user_meta ADD COLUMN signup_source TEXT")
         except sqlite3.OperationalError:
             pass
+        for col, sql in (
+            ("currency", "ALTER TABLE payments ADD COLUMN currency TEXT NOT NULL DEFAULT 'XTR'"),
+            ("amount", "ALTER TABLE payments ADD COLUMN amount INTEGER NOT NULL DEFAULT 0"),
+        ):
+            try:
+                conn.execute(sql)
+            except sqlite3.OperationalError:
+                pass
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status, created_at)"
+        )
 
 
 def _today() -> str:
@@ -594,17 +616,71 @@ def log_event(user_id: int | None, event_type: str, payload: str = "") -> None:
         )
 
 
-def record_payment(user_id: int, kind: str, stars: int, payload: str = "") -> None:
+def record_payment(
+    user_id: int,
+    kind: str,
+    stars: int,
+    payload: str = "",
+    *,
+    currency: str = "XTR",
+    amount: int = 0,
+) -> None:
     now = _now_iso()
     with _connect() as conn:
         conn.execute(
             """
-            INSERT INTO payments (user_id, kind, stars, payload, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO payments (user_id, kind, stars, payload, currency, amount, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (user_id, kind, stars, payload[:200], now),
+            (user_id, kind, stars, payload[:200], currency, amount, now),
         )
-    log_event(user_id, "payment", f"{kind}:{stars}")
+    log_event(user_id, "payment", f"{kind}:{currency}:{amount or stars}")
+
+
+def create_invoice(
+    user_id: int,
+    kind: str,
+    amount_rub: int,
+    *,
+    cont_id: int | None = None,
+    provider: str = "robokassa",
+) -> int:
+    """Создаёт инвойс (pending) и возвращает InvId для платёжной ссылки."""
+    now = _now_iso()
+    ensure_user(user_id)
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO invoices (user_id, kind, cont_id, amount_rub, provider, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?)
+            """,
+            (user_id, kind, cont_id, amount_rub, provider, now),
+        )
+        return int(cur.lastrowid)
+
+
+def get_invoice(inv_id: int) -> Optional[dict[str, Any]]:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM invoices WHERE inv_id = ?", (inv_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def mark_invoice_paid(inv_id: int) -> Optional[dict[str, Any]]:
+    """Идемпотентно помечает инвойс оплаченным.
+
+    Возвращает данные инвойса ТОЛЬКО при первом переходе pending→paid
+    (чтобы не выдать доступ дважды). Если уже paid — None.
+    """
+    now = _now_iso()
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE invoices SET status = 'paid', paid_at = ? WHERE inv_id = ? AND status = 'pending'",
+            (now, inv_id),
+        )
+        if cur.rowcount == 0:
+            return None
+        row = conn.execute("SELECT * FROM invoices WHERE inv_id = ?", (inv_id,)).fetchone()
+    return dict(row) if row else None
 
 
 def touch_user(
@@ -788,6 +864,19 @@ def analytics_snapshot() -> dict[str, Any]:
         payments_total = conn.execute("SELECT COUNT(*), COALESCE(SUM(stars), 0) FROM payments").fetchone()
         pay_count = int(payments_total[0] or 0)
         stars_total = int(payments_total[1] or 0)
+        rub_total = int(
+            conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE currency = 'RUB'"
+            ).fetchone()[0]
+            or 0
+        )
+        rub_today = int(
+            conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE currency = 'RUB' AND substr(created_at, 1, 10) = ?",
+                (today,),
+            ).fetchone()[0]
+            or 0
+        )
         pay_today = conn.execute(
             """
             SELECT COUNT(*), COALESCE(SUM(stars), 0) FROM payments
@@ -882,6 +971,8 @@ def analytics_snapshot() -> dict[str, Any]:
         "premium_now": int(premium_now),
         "payments_count": pay_count,
         "stars_total": stars_total,
+        "rub_total": rub_total,
+        "rub_today": rub_today,
         "payments_today": int(pay_today[0] or 0),
         "stars_today": int(pay_today[1] or 0),
         "premium_pays": int(premium_pays),

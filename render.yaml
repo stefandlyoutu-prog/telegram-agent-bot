@@ -43,6 +43,19 @@ services:
         value: "M_Topgoroskop,signsvishe,auragirlss"
       - key: ORACLE_DB_PATH
         value: /var/data/oracle_bot.db
+      # ── Робокасса (оплата картой/СБП в рублях) ──
+      - key: ROBOKASSA_LOGIN
+        sync: false
+      - key: ROBOKASSA_PASSWORD1
+        sync: false
+      - key: ROBOKASSA_PASSWORD2
+        sync: false
+      - key: ROBOKASSA_TEST
+        value: "1"        # 1 = тест без списаний; поставь 0 для боевого приёма
+      - key: ORACLE_PREMIUM_PRICE_RUB
+        value: "299"
+      - key: ORACLE_DEEP_PRICE_RUB
+        value: "99"
     disk:
       name: oracle-data
       mountPath: /var/data

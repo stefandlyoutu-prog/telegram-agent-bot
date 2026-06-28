@@ -90,6 +90,13 @@ def schedule_inactive(user_id: int) -> None:
     db.schedule_push(user_id, "inactive", delay_hours=48, context="{}")
 
 
+def schedule_premium_renewal(user_id: int, days: int = 30) -> None:
+    """Напоминание о продлении за 3 дня до конца премиума (рекуррентный доход)."""
+    db.cancel_pushes(user_id, ["premium_expiring"])
+    delay = max(1.0, (days - 3) * 24.0)
+    db.schedule_push(user_id, "premium_expiring", delay_hours=delay, context="{}")
+
+
 def schedule_reengagement(user_id: int) -> None:
     """При каждом возврате — планируем напоминание через 72ч если снова пропадёт."""
     if has_full_access(user_id):
@@ -120,6 +127,11 @@ def _kb_push(
         rows.append([InlineKeyboardButton(text="Гороскоп на сегодня", callback_data="mod:horo_today")])
     elif push_type == "welcome_day2":
         rows.append([InlineKeyboardButton(text="Бесплатный расклад", callback_data="mod:tarot")])
+    elif push_type == "premium_expiring":
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⭐ Продлить Премиум", callback_data="mod:premium")],
+            [InlineKeyboardButton(text="🏠 Меню", callback_data="nav:menu")],
+        ])
     elif push_type == "inactive":
         rows.append([InlineKeyboardButton(text="Судьба дня", callback_data="mod:destiny")])
     elif push_type.startswith("morning_"):
@@ -204,6 +216,12 @@ def build_push_message(user_id: int, push_type: str, ctx: dict[str, Any]) -> str
             "Попробуй <b>Таро</b>: три карты, конкретный ответ. "
             "Первая часть бесплатно — продолжение по желанию."
         )
+    if push_type == "premium_expiring":
+        return (
+            "⭐ <b>Твой Премиум скоро закончится</b> (через ~3 дня).\n\n"
+            "Чтобы не потерять безлимит всех разделов и продолжения без 🔒 — "
+            "продли заранее. Один тап 👇"
+        )
     if push_type == "inactive":
         extra = f" ({sign})" if sign else ""
         return (
@@ -228,14 +246,15 @@ async def process_due_pushes(bot: Bot) -> int:
     sent = 0
     for row in db.fetch_due_pushes():
         uid = int(row["user_id"])
-        if has_full_access(uid):
+        push_type = row["push_type"]
+        # premium_expiring адресован именно действующим премиум-юзерам
+        if push_type != "premium_expiring" and has_full_access(uid):
             db.mark_push_sent(int(row["id"]))
             continue
         meta = db.get_user_meta(uid)
         if meta.get("push_opt_out"):
             db.mark_push_sent(int(row["id"]))
             continue
-        push_type = row["push_type"]
         ctx = _ctx(row.get("context"))
         text = build_push_message(uid, push_type, ctx)
         kb = _kb_push(push_type, ctx)

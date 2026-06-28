@@ -233,5 +233,83 @@ async def health():
     }
 
 
+async def _robokassa_payload(request: Request) -> dict[str, str]:
+    data = {k: str(v) for k, v in request.query_params.items()}
+    if request.method == "POST":
+        try:
+            form = await request.form()
+            data.update({k: str(v) for k, v in form.items()})
+        except Exception:
+            pass
+    return data
+
+
+@router_cloud.api_route("/robokassa/result", methods=["GET", "POST"])
+async def robokassa_result(request: Request):
+    """Сервер-сервер колбэк Робокассы. Ответ строго 'OK{InvId}'."""
+    from fastapi.responses import PlainTextResponse
+
+    from oracle_bot.robokassa import check_result_signature
+
+    data = await _robokassa_payload(request)
+    if not check_result_signature(data):
+        logger.warning("robokassa result: bad signature inv=%s", data.get("InvId"))
+        return PlainTextResponse("bad sign", status_code=400)
+    try:
+        inv_id = int(data["InvId"])
+    except (KeyError, ValueError):
+        return PlainTextResponse("bad inv", status_code=400)
+
+    from oracle_bot.payments import fulfill_invoice, notify_paid
+
+    inv = fulfill_invoice(inv_id)
+    if inv and _bot:
+        asyncio.create_task(notify_paid(_bot, inv))
+    return PlainTextResponse(f"OK{inv_id}")
+
+
+def _back_to_bot_html(title: str, message: str) -> str:
+    from oracle_bot.config import ORACLE_BOT_USERNAME
+
+    link = f"https://t.me/{ORACLE_BOT_USERNAME}"
+    return (
+        "<!doctype html><html lang='ru'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"<title>{title}</title>"
+        "<style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#11101a;"
+        "color:#eee;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}"
+        ".card{max-width:420px;padding:32px;text-align:center}"
+        "a.btn{display:inline-block;margin-top:24px;padding:14px 28px;border-radius:12px;"
+        "background:#6c5ce7;color:#fff;text-decoration:none;font-weight:600}</style></head>"
+        f"<body><div class='card'><h1>{title}</h1><p>{message}</p>"
+        f"<a class='btn' href='{link}'>Вернуться в бот</a></div></body></html>"
+    )
+
+
+@router_cloud.api_route("/robokassa/success", methods=["GET", "POST"])
+async def robokassa_success(request: Request):
+    from fastapi.responses import HTMLResponse
+
+    from oracle_bot.robokassa import check_success_signature
+
+    data = await _robokassa_payload(request)
+    if check_success_signature(data):
+        return HTMLResponse(
+            _back_to_bot_html("✅ Оплата получена", "Доступ активирован. Возвращайтесь в бот.")
+        )
+    return HTMLResponse(
+        _back_to_bot_html("Оплата обрабатывается", "Если доступ не появился — напишите в бот.")
+    )
+
+
+@router_cloud.api_route("/robokassa/fail", methods=["GET", "POST"])
+async def robokassa_fail(request: Request):
+    from fastapi.responses import HTMLResponse
+
+    return HTMLResponse(
+        _back_to_bot_html("Оплата не завершена", "Платёж отменён. Можно попробовать снова в боте.")
+    )
+
+
 def cloud_runtime() -> tuple[Optional[Bot], Optional[Dispatcher]]:
     return _bot, _dp

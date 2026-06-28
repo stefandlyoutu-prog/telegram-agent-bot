@@ -371,6 +371,8 @@ def format_stats_report() -> str:
         f"💰 <b>Оплатили (всего):</b> {s['payments_count']} "
         f"(премиум {s['premium_pays']} · 🔓 {s['deep_pays']}) · "
         f"<b>{s['stars_total']}⭐</b>\n"
+        f"💵 <b>Рубли (Робокасса):</b> {s.get('rub_total', 0)}₽ всего · "
+        f"{s.get('rub_today', 0)}₽ сегодня\n"
         f"🧾 <b>Хотели оплатить:</b> открыли счёт {s.get('payment_intents_total', 0)} раз "
         f"({s.get('payment_intents_week', 0)} за 7д)\n"
         f"📈 Конверсия в оплату: <b>{s['conversion_pct']}%</b> "

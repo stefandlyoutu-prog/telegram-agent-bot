@@ -84,6 +84,32 @@ def self_employed_requisites_html() -> str:
     )
 
 
+# ───────────────────────── Робокасса (оплата картой/СБП в рублях) ─────────────
+ROBOKASSA_LOGIN = os.getenv("ROBOKASSA_LOGIN", "").strip()
+ROBOKASSA_PASSWORD1 = os.getenv("ROBOKASSA_PASSWORD1", "").strip()
+ROBOKASSA_PASSWORD2 = os.getenv("ROBOKASSA_PASSWORD2", "").strip()
+# 1 = тестовый режим Робокассы (без реальных списаний)
+ROBOKASSA_TEST = os.getenv("ROBOKASSA_TEST", "0").strip() in {"1", "true", "True"}
+# Алгоритм подписи: md5 (по умолчанию), sha256, sha512 — как в настройках магазина
+ROBOKASSA_HASH = os.getenv("ROBOKASSA_HASH", "md5").strip().lower()
+# Тариф продолжения в рублях (премиум — ORACLE_PREMIUM_PRICE_RUB выше)
+ORACLE_DEEP_PRICE_RUB = int(os.getenv("ORACLE_DEEP_PRICE_RUB", "99"))
+
+
+def robokassa_configured() -> bool:
+    return bool(ROBOKASSA_LOGIN and ROBOKASSA_PASSWORD1 and ROBOKASSA_PASSWORD2)
+
+
+def public_base_url() -> str:
+    """Публичный HTTPS-адрес сервиса (для Robokassa Result/Success URL)."""
+    base = (
+        os.getenv("ORACLE_WEBHOOK_URL", "").strip()
+        or os.getenv("RENDER_EXTERNAL_URL", "").strip()
+        or ORACLE_WEBAPP_URL
+    )
+    return base.rstrip("/")
+
+
 def cloud_webapp_url() -> str:
     """HTTPS URL Mini App: явный ORACLE_WEBAPP_URL или Render."""
     if ORACLE_WEBAPP_URL:
