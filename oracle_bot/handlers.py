@@ -723,6 +723,31 @@ async def cmd_funnel(message: Message) -> None:
     )
 
 
+@router.message(Command("sources"))
+async def cmd_sources(message: Message, command: CommandObject) -> None:
+    """Атрибуция трафика: какой канал/ролик качает подписчиков и оплаты (метки src_*)."""
+    uid = message.from_user.id if message.from_user else 0
+    if not _is_admin(uid):
+        await message.answer("Нет доступа.")
+        return
+    arg = (command.args or "").strip()
+    days = int(arg) if arg.isdigit() else 30
+    rows = db.signups_by_source(days)
+    if not rows:
+        await message.answer("Пока нет данных по источникам.")
+        return
+    lines = [f"📡 <b>Откуда трафик</b> (за {days} дн.)\n"]
+    for r in rows[:25]:
+        rub = int(r.get("rub") or 0)
+        rub_part = f" · <b>{rub}₽</b>" if rub else ""
+        lines.append(
+            f"• <code>{r['source']}</code> — {r['users']} чел., "
+            f"оплат {r['payers']}{rub_part}"
+        )
+    lines.append("\nМетки задаются в ссылке: <code>?start=src_КОД</code>")
+    await message.answer("\n".join(lines))
+
+
 @router.message(Command("broadcast"))
 async def cmd_broadcast(message: Message, command: CommandObject) -> None:
     uid = message.from_user.id if message.from_user else 0

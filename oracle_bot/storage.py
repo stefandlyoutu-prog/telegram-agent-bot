@@ -724,6 +724,39 @@ def get_user_meta(user_id: int) -> dict[str, Any]:
     return dict(row) if row else {}
 
 
+def signups_by_source(days: int = 30) -> list[dict[str, Any]]:
+    """Сколько пользователей и оплат пришло по каждому источнику (src_*).
+
+    Источник = user_meta.signup_source (из deeplink ?start=src_<код>).
+    Для атрибуции: какой канал качает трафик и кто из них платит.
+    """
+    since = (date.today() - timedelta(days=days)).isoformat()
+    with _connect() as conn:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(payments)").fetchall()}
+        has_rub = "currency" in cols and "amount" in cols
+        rub_expr = (
+            "COALESCE(SUM(CASE WHEN pay.currency = 'RUB' THEN pay.amount ELSE 0 END), 0)"
+            if has_rub
+            else "0"
+        )
+        rows = conn.execute(
+            f"""
+            SELECT
+                COALESCE(NULLIF(m.signup_source, ''), '(прямой/без метки)') AS source,
+                COUNT(DISTINCT m.user_id) AS users,
+                COUNT(DISTINCT pay.user_id) AS payers,
+                {rub_expr} AS rub
+            FROM user_meta m
+            LEFT JOIN payments pay ON pay.user_id = m.user_id
+            WHERE COALESCE(m.signup_at, '') >= ? OR m.signup_at IS NULL
+            GROUP BY source
+            ORDER BY users DESC
+            """,
+            (since,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def set_signup_source(user_id: int, source: str) -> None:
     src = (source or "").strip().lower()[:64]
     if not src:
