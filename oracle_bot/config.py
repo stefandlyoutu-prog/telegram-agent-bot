@@ -91,6 +91,10 @@ def self_employed_requisites_html() -> str:
 ROBOKASSA_LOGIN = os.getenv("ROBOKASSA_LOGIN", "").strip()
 ROBOKASSA_PASSWORD1 = os.getenv("ROBOKASSA_PASSWORD1", "").strip()
 ROBOKASSA_PASSWORD2 = os.getenv("ROBOKASSA_PASSWORD2", "").strip()
+# Тестовые пароли (отдельный блок в кабинете Робокассы). Держим оба набора сразу:
+# при ROBOKASSA_TEST=1 подпись считается тестовыми паролями, при 0 — боевыми.
+ROBOKASSA_TEST_PASSWORD1 = os.getenv("ROBOKASSA_TEST_PASSWORD1", "").strip()
+ROBOKASSA_TEST_PASSWORD2 = os.getenv("ROBOKASSA_TEST_PASSWORD2", "").strip()
 # 1 = тестовый режим Робокассы (без реальных списаний)
 ROBOKASSA_TEST = os.getenv("ROBOKASSA_TEST", "0").strip() in {"1", "true", "True"}
 # Алгоритм подписи: md5 (по умолчанию), sha256, sha512 — как в настройках магазина

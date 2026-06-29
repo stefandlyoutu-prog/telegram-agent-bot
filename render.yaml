@@ -50,6 +50,12 @@ services:
         sync: false
       - key: ROBOKASSA_PASSWORD2
         sync: false
+      # Тестовые пароли (блок «тестовые платежи» в кабинете). При ROBOKASSA_TEST=1
+      # подпись считается ими; боевые ROBOKASSA_PASSWORD1/2 при этом не трогаем.
+      - key: ROBOKASSA_TEST_PASSWORD1
+        sync: false
+      - key: ROBOKASSA_TEST_PASSWORD2
+        sync: false
       - key: ROBOKASSA_TEST
         value: "1"        # 1 = тест без списаний; поставь 0 для боевого приёма
       - key: ORACLE_PREMIUM_PRICE_RUB

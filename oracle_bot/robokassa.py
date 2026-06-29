@@ -23,9 +23,25 @@ from oracle_bot.config import (
     ROBOKASSA_PASSWORD1,
     ROBOKASSA_PASSWORD2,
     ROBOKASSA_TEST,
+    ROBOKASSA_TEST_PASSWORD1,
+    ROBOKASSA_TEST_PASSWORD2,
 )
 
 PAYMENT_HOST = "https://auth.robokassa.ru/Merchant/Index.aspx"
+
+
+def _pw1() -> str:
+    """Пароль #1 под текущий режим (тест/боевой)."""
+    if ROBOKASSA_TEST and ROBOKASSA_TEST_PASSWORD1:
+        return ROBOKASSA_TEST_PASSWORD1
+    return ROBOKASSA_PASSWORD1
+
+
+def _pw2() -> str:
+    """Пароль #2 под текущий режим (тест/боевой)."""
+    if ROBOKASSA_TEST and ROBOKASSA_TEST_PASSWORD2:
+        return ROBOKASSA_TEST_PASSWORD2
+    return ROBOKASSA_PASSWORD2
 
 
 def _hasher(algo: str):
@@ -66,7 +82,7 @@ def build_payment_url(
 ) -> str:
     """Ссылка на страницу оплаты Робокассы."""
     out = format_sum(out_sum)
-    signature = _signature([ROBOKASSA_LOGIN, out, str(inv_id), ROBOKASSA_PASSWORD1], shp)
+    signature = _signature([ROBOKASSA_LOGIN, out, str(inv_id), _pw1()], shp)
     params: dict[str, str] = {
         "MerchantLogin": ROBOKASSA_LOGIN,
         "OutSum": out,
@@ -97,7 +113,7 @@ def check_result_signature(data: Mapping[str, str]) -> bool:
     got = (data.get("SignatureValue") or "").lower()
     if not (out_sum and inv_id and got):
         return False
-    expected = _signature([out_sum, str(inv_id), ROBOKASSA_PASSWORD2], _extract_shp(data))
+    expected = _signature([out_sum, str(inv_id), _pw2()], _extract_shp(data))
     return got == expected.lower()
 
 
@@ -108,5 +124,5 @@ def check_success_signature(data: Mapping[str, str]) -> bool:
     got = (data.get("SignatureValue") or "").lower()
     if not (out_sum and inv_id and got):
         return False
-    expected = _signature([out_sum, str(inv_id), ROBOKASSA_PASSWORD1], _extract_shp(data))
+    expected = _signature([out_sum, str(inv_id), _pw1()], _extract_shp(data))
     return got == expected.lower()
