@@ -244,6 +244,15 @@ async def _robokassa_payload(request: Request) -> dict[str, str]:
     return data
 
 
+async def _robokassa_fulfill(inv_id: int) -> None:
+    """Выдать доступ по инвойсу + уведомить (идемпотентно)."""
+    from oracle_bot.payments import fulfill_invoice, notify_paid
+
+    inv = fulfill_invoice(inv_id)
+    if inv and _bot:
+        asyncio.create_task(notify_paid(_bot, inv))
+
+
 @router_cloud.api_route("/robokassa/result", methods=["GET", "POST"])
 async def robokassa_result(request: Request):
     """Сервер-сервер колбэк Робокассы. Ответ строго 'OK{InvId}'."""
@@ -260,11 +269,7 @@ async def robokassa_result(request: Request):
     except (KeyError, ValueError):
         return PlainTextResponse("bad inv", status_code=400)
 
-    from oracle_bot.payments import fulfill_invoice, notify_paid
-
-    inv = fulfill_invoice(inv_id)
-    if inv and _bot:
-        asyncio.create_task(notify_paid(_bot, inv))
+    await _robokassa_fulfill(inv_id)
     return PlainTextResponse(f"OK{inv_id}")
 
 
@@ -294,6 +299,11 @@ async def robokassa_success(request: Request):
 
     data = await _robokassa_payload(request)
     if check_success_signature(data):
+        try:
+            inv_id = int(data["InvId"])
+            await _robokassa_fulfill(inv_id)
+        except (KeyError, ValueError, TypeError):
+            pass
         return HTMLResponse(
             _back_to_bot_html("✅ Оплата получена", "Доступ активирован. Возвращайтесь в бот.")
         )
