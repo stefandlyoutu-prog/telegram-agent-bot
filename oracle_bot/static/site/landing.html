@@ -73,7 +73,7 @@
         <strong>Премиум</strong>
         <p class="price">299 ₽/мес</p>
         <p>Безлимит всех разделов</p>
-        <a class="btn bot-link" data-start="premium" href="https://t.me/MOracul_bot?start=premium">Узнать о премиуме</a>
+        <a class="btn bot-link" data-start="premium" href="https://t.me/MOracul_bot?start=pay">Оформить за 299 ₽</a>
       </div>
     </div>
 
@@ -101,6 +101,11 @@
     const p = new URLSearchParams(location.search);
     const src = p.get('src') || p.get('utm_source') || '';
     function botUrl(start) {
+      // Кнопка оплаты всегда ведёт на оплату в боте (касса открыта под бота),
+      // при этом сохраняем источник для атрибуции (/sources).
+      if (start === 'premium') {
+        return BOT + '?start=' + (src ? 'pay_' + encodeURIComponent(src) : 'pay');
+      }
       if (src) return BOT + '?start=src_' + encodeURIComponent(src);
       if (start) return BOT + '?start=' + encodeURIComponent(start);
       return BOT;

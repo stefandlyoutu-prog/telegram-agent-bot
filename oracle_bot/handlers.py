@@ -626,13 +626,11 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
             "Все разделы без лимитов до конца дня. Выбери в /menu что протестировать."
         )
         return
-    if args == "premium":
-        from oracle_bot.paywall import stars_enabled
-
-        if stars_enabled():
-            await _send_premium_invoice(message)
-        else:
-            await _prompt_referral(message, uid, "start:premium")
+    if args in {"premium", "buy", "pay"} or args.startswith("pay_"):
+        # переход с сайта/лендинга на оплату премиума (касса открыта под бота)
+        if args.startswith("pay_"):
+            db.set_signup_source(uid, args[4:] or "site")
+        await _offer_premium(message, uid)
         return
     if args == "ref":
         await cmd_ref(message)
