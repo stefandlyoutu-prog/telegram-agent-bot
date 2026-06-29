@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
-from oracle_bot.config import ORACLE_DEEP_STARS, ORACLE_PREMIUM_STARS, ORACLE_REFERRAL_BONUS, ORACLE_WEBAPP_URL
+from oracle_bot.config import ORACLE_DEEP_STARS, ORACLE_EXCLUSIVE_HVD_PRICE_RUB, ORACLE_PREMIUM_STARS, ORACLE_REFERRAL_BONUS, ORACLE_ULTRA_PLUS_PRICE_RUB, ORACLE_WEBAPP_URL
 from oracle_bot.mystic_data import ZODIAC_SIGNS
 from oracle_bot.paywall import referral_primary, stars_enabled
 from oracle_bot.prompts import CROSS_SELL
@@ -37,6 +37,18 @@ def kb_main() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="Ещё разделы", callback_data="nav:mystic"),
             InlineKeyboardButton(text="Профиль", callback_data="mod:profile"),
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"🔮 ХВД курс — {ORACLE_EXCLUSIVE_HVD_PRICE_RUB}₽",
+                callback_data="mod:exclusive_hvd",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"📖 Ultra Plus — {ORACLE_ULTRA_PLUS_PRICE_RUB}₽",
+                callback_data="mod:ultra_plus",
+            ),
         ],
     ])
     if referral_primary():

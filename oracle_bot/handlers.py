@@ -25,8 +25,10 @@ from oracle_bot import storage as db
 from oracle_bot.config import (
     ORACLE_DEEP_PRICE_RUB,
     ORACLE_DEEP_STARS,
+    ORACLE_EXCLUSIVE_HVD_PRICE_RUB,
     ORACLE_FREE_PER_DAY,
     ORACLE_PREMIUM_PRICE_RUB,
+    ORACLE_ULTRA_PLUS_PRICE_RUB,
     ORACLE_PREMIUM_STARS,
     ORACLE_REFERRAL_BONUS,
     ORACLE_REFERRAL_WELCOME,
@@ -171,6 +173,8 @@ class Flow(StatesGroup):
     twin_flame_text = State()
     family_karma_text = State()
     iching_question = State()
+    hvd_input = State()
+    ultra_plus_input = State()
 
 
 def _premium_line(user_id: int) -> str:
@@ -486,8 +490,18 @@ def _robokassa_url(uid: int, kind: str, cont_id: int | None = None) -> str | Non
         return None
     from oracle_bot.robokassa import build_payment_url
 
-    amount = ORACLE_PREMIUM_PRICE_RUB if kind == "premium_30d" else ORACLE_DEEP_PRICE_RUB
-    desc = "Оракул — Премиум 30 дней" if kind == "premium_30d" else "Оракул — продолжение чтения"
+    if kind == "premium_30d":
+        amount = ORACLE_PREMIUM_PRICE_RUB
+        desc = "Оракул — Премиум 30 дней"
+    elif kind == "exclusive_hvd":
+        amount = ORACLE_EXCLUSIVE_HVD_PRICE_RUB
+        desc = "Оракул — Эксклюзив HVD"
+    elif kind == "ultra_plus":
+        amount = ORACLE_ULTRA_PLUS_PRICE_RUB
+        desc = "Оракул — Ultra Plus, Книга о тебе"
+    else:
+        amount = ORACLE_DEEP_PRICE_RUB
+        desc = "Оракул — продолжение чтения"
     inv_id = db.create_invoice(uid, kind, amount, cont_id=cont_id)
     return build_payment_url(
         inv_id=inv_id,
@@ -516,6 +530,53 @@ async def _offer_premium(message: Message, uid: int) -> None:
     await message.answer(
         "⭐ <b>Премиум на 30 дней</b>\n"
         "Безлимит всех разделов · все продолжения без 🔒\n\n"
+        "Выбери способ оплаты:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+async def _offer_exclusive_hvd(message: Message, uid: int) -> None:
+    url = _robokassa_url(uid, "exclusive_hvd")
+    if not url:
+        await message.answer(
+            "Оплата картой временно недоступна. Напиши администратору.",
+            reply_markup=kb_main(),
+        )
+        return
+    if uid:
+        analytics_mod.track_payment_intent(uid, "exclusive_hvd")
+    rows = [
+        [InlineKeyboardButton(text=f"💳 Картой/СБП — {ORACLE_EXCLUSIVE_HVD_PRICE_RUB}₽", url=url)],
+        [InlineKeyboardButton(text="📄 Оферта", url=_oferta_link())],
+    ]
+    await message.answer(
+        "🔮 <b>Эксклюзив: Хронально-Векторная Диагностика</b>\n\n"
+        "Полный персональный разбор по методике ХВД:\n"
+        "чакры, контуры, инь/ян, задачи жизни, код негатива, реабилитация.\n\n"
+        "Выбери способ оплаты:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+async def _offer_ultra_plus(message: Message, uid: int) -> None:
+    url = _robokassa_url(uid, "ultra_plus")
+    if not url:
+        await message.answer(
+            "Оплата картой временно недоступна. Напиши администратору.",
+            reply_markup=kb_main(),
+        )
+        return
+    if uid:
+        analytics_mod.track_payment_intent(uid, "ultra_plus")
+    rows = [
+        [InlineKeyboardButton(text=f"💳 Картой/СБП — {ORACLE_ULTRA_PLUS_PRICE_RUB}₽", url=url)],
+        [InlineKeyboardButton(text="📄 Оферта", url=_oferta_link())],
+    ]
+    await message.answer(
+        "📖 <b>Ultra Plus — Книга о тебе</b>\n\n"
+        "Персональный PDF по Матрице Судьбы:\n"
+        "качества, таланты, предназначение, деньги, программы, "
+        "отношения, здоровье, прогноз + дополнение ХВД.\n\n"
         "Выбери способ оплаты:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
@@ -631,6 +692,12 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
         if args.startswith("pay_"):
             db.set_signup_source(uid, args[4:] or "site")
         await _offer_premium(message, uid)
+        return
+    if args in {"hvd", "exclusive", "exclusive_hvd"}:
+        await _open_module(message, state, uid, "exclusive_hvd")
+        return
+    if args in {"ultra", "ultra_plus", "book"}:
+        await _open_module(message, state, uid, "ultra_plus")
         return
     if args == "ref":
         await cmd_ref(message)
@@ -1118,6 +1185,28 @@ async def _open_module(msg: Message, state: FSMContext, uid: int, mod: str) -> N
     elif mod == "family_karma":
         await state.set_state(Flow.family_karma_text)
         await msg.answer("🧬 Что повторяется в роду / семье? Страхи, сценарии, отношения:")
+    elif mod == "exclusive_hvd":
+        await state.set_state(Flow.hvd_input)
+        await msg.answer(
+            "🔮 <b>Эксклюзив: полный курс ХВД</b>\n\n"
+            "Хронально-Векторная Диагностика — весь обучающий курс в одном отчёте:\n"
+            "типология, чакры, контуры, инь/ян, периоды жизни, код негатива/позитива, "
+            "задачи, эгоизм/альтруизм, реабилитация.\n\n"
+            f"💳 <b>{ORACLE_EXCLUSIVE_HVD_PRICE_RUB}₽</b> — отдельно от Премиум\n\n"
+            "Введи имя и дату рождения:\n"
+            "<i>Анна 15.03.1990</i>"
+        )
+    elif mod == "ultra_plus":
+        await state.set_state(Flow.ultra_plus_input)
+        await msg.answer(
+            "📖 <b>Ultra Plus — Книга о тебе</b>\n\n"
+            "Персональная книга в PDF по Матрице Судьбы (22 аркана):\n"
+            "личные качества, таланты, предназначение, деньги, кармические программы, "
+            "отношения, здоровье, прогноз на год.\n\n"
+            f"💳 <b>{ORACLE_ULTRA_PLUS_PRICE_RUB}₽</b> — отдельно от Премиум\n\n"
+            "Введи имя и дату рождения:\n"
+            "<i>Степан 21.06.1994</i>"
+        )
 
 
 async def _destiny_pick(msg: Message, uid: int, state: FSMContext) -> None:
@@ -1394,6 +1483,71 @@ async def numerology_flow(message: Message, state: FSMContext) -> None:
         ),
         header=reading_header("Числа судьбы", f"путь {lp}"),
     )
+
+
+@router.message(Flow.hvd_input)
+async def exclusive_hvd_flow(message: Message, state: FSMContext) -> None:
+    uid = message.from_user.id if message.from_user else 0
+    text = message.text or ""
+    bd = parse_birth_date(text)
+    if not bd:
+        await message.answer("Формат: <i>Анна 15.03.1990</i> или <i>15.03.1990</i>")
+        return
+    name = re.sub(_DATE_RE, "", text).strip() or "Гость"
+    await state.clear()
+
+    from oracle_bot.exclusive_hvd import build_teaser, calculate
+    from oracle_bot.exclusive_hvd.delivery import deliver_hvd_report
+
+    try:
+        profile = calculate(name, bd)
+    except ValueError as e:
+        await message.answer(f"⚠️ {e}")
+        return
+
+    db.save_hvd_pending(uid, name, bd.isoformat())
+    analytics_mod.track_reading(uid, "exclusive_hvd", has_lock=True)
+
+    await message.answer(build_teaser(profile))
+
+    if is_admin_user(uid):
+        await deliver_hvd_report(message.bot, uid)
+        return
+
+    await _offer_exclusive_hvd(message, uid)
+
+
+@router.message(Flow.ultra_plus_input)
+async def ultra_plus_flow(message: Message, state: FSMContext) -> None:
+    uid = message.from_user.id if message.from_user else 0
+    text = message.text or ""
+    bd = parse_birth_date(text)
+    if not bd:
+        await message.answer("Формат: <i>Степан 21.06.1994</i> или <i>21.06.1994</i>")
+        return
+    name = re.sub(_DATE_RE, "", text).strip() or "Гость"
+    await state.clear()
+
+    from oracle_bot.ultra_plus import build_teaser, calculate
+    from oracle_bot.ultra_plus.delivery import deliver_ultra_plus_book
+
+    try:
+        profile = calculate(name, bd)
+    except ValueError as e:
+        await message.answer(f"⚠️ {e}")
+        return
+
+    db.save_ultra_plus_pending(uid, name, bd.isoformat())
+    analytics_mod.track_reading(uid, "ultra_plus", has_lock=True)
+
+    await message.answer(build_teaser(profile))
+
+    if is_admin_user(uid):
+        await message.answer("👑 Админ — отправляю PDF без оплаты…")
+        await deliver_ultra_plus_book(message.bot, uid)
+        return
+
+    await _offer_ultra_plus(message, uid)
 
 
 @router.message(Flow.chinese_birth)
@@ -1812,6 +1966,8 @@ async def dispatch_voice_text(message: Message, state: FSMContext, text: str) ->
         Flow.natal_input.state: natal_flow,
         Flow.past_life_focus.state: past_life_flow,
         Flow.numerology_input.state: numerology_flow,
+        Flow.hvd_input.state: exclusive_hvd_flow,
+        Flow.ultra_plus_input.state: ultra_plus_flow,
         Flow.chinese_birth.state: chinese_flow,
         Flow.tarot_question.state: tarot_flow,
         Flow.compat_dates.state: compat_flow,

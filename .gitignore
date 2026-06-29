@@ -5,6 +5,9 @@
 .venv-py313/
 __pycache__/
 *.pyc
+oracle_bot/exclusive_hvd/_source_*.txt
+oracle_bot/exclusive_hvd/transcripts/
+oracle_bot/ultra_plus/_source_*.txt
 data/*.db
 # Тяжёлые локальные данные (на диске остаются, в git — нет)
 data/reference_models/

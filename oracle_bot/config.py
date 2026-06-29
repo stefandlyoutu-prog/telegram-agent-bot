@@ -101,6 +101,8 @@ ROBOKASSA_TEST = os.getenv("ROBOKASSA_TEST", "0").strip() in {"1", "true", "True
 ROBOKASSA_HASH = os.getenv("ROBOKASSA_HASH", "md5").strip().lower()
 # Тариф продолжения в рублях (премиум — ORACLE_PREMIUM_PRICE_RUB выше)
 ORACLE_DEEP_PRICE_RUB = int(os.getenv("ORACLE_DEEP_PRICE_RUB", "99"))
+ORACLE_EXCLUSIVE_HVD_PRICE_RUB = int(os.getenv("ORACLE_EXCLUSIVE_HVD_PRICE_RUB", "599"))
+ORACLE_ULTRA_PLUS_PRICE_RUB = int(os.getenv("ORACLE_ULTRA_PLUS_PRICE_RUB", "1499"))
 
 
 def robokassa_configured() -> bool:

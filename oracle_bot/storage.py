@@ -148,6 +148,18 @@ def init_db() -> None:
                 value TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS hvd_pending (
+                user_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                birth_date TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS ultra_plus_pending (
+                user_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                birth_date TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             """
         )
         for table, col in (("profiles", "birth_time"), ("profiles", "birth_place"), ("client_sessions", "last_context")):
@@ -1152,4 +1164,62 @@ def kv_set(key: str, value: str) -> None:
             """,
             (key, value, _now_iso()),
         )
+
+
+def save_hvd_pending(user_id: int, name: str, birth_date: str) -> None:
+    ensure_user(user_id)
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO hvd_pending (user_id, name, birth_date, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                name = excluded.name,
+                birth_date = excluded.birth_date,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, name[:120], birth_date[:16], _now_iso()),
+        )
+
+
+def get_hvd_pending(user_id: int) -> Optional[dict[str, Any]]:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT name, birth_date FROM hvd_pending WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def clear_hvd_pending(user_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM hvd_pending WHERE user_id = ?", (user_id,))
+
+
+def save_ultra_plus_pending(user_id: int, name: str, birth_date: str) -> None:
+    ensure_user(user_id)
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO ultra_plus_pending (user_id, name, birth_date, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                name = excluded.name,
+                birth_date = excluded.birth_date,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, name[:120], birth_date[:16], _now_iso()),
+        )
+
+
+def get_ultra_plus_pending(user_id: int) -> Optional[dict[str, Any]]:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT name, birth_date FROM ultra_plus_pending WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def clear_ultra_plus_pending(user_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM ultra_plus_pending WHERE user_id = ?", (user_id,))
 
