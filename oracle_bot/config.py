@@ -11,6 +11,9 @@ ORACLE_BOT_TOKEN = os.getenv("ORACLE_BOT_TOKEN", "").strip()
 ORACLE_BOT_USERNAME = os.getenv("ORACLE_BOT_USERNAME", "MOracul_bot").strip()
 ORACLE_PREMIUM_STARS = int(os.getenv("ORACLE_PREMIUM_STARS", "99"))
 ORACLE_DEEP_STARS = int(os.getenv("ORACLE_DEEP_STARS", "29"))
+# Оплата звёздами выключена по умолчанию — приём только в рублях (Робокасса).
+# Чтобы вернуть Stars, выстави ORACLE_STARS_ENABLED=1
+ORACLE_STARS_ENABLED = os.getenv("ORACLE_STARS_ENABLED", "0").strip() in {"1", "true", "True"}
 ORACLE_FREE_PER_DAY = int(os.getenv("ORACLE_FREE_PER_DAY", "2"))
 # paywall: stars (по умолчанию после эксперимента) | referral
 ORACLE_PAYWALL_MODE = os.getenv("ORACLE_PAYWALL_MODE", "stars").strip().lower()

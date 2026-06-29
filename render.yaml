@@ -56,6 +56,10 @@ services:
         value: "299"
       - key: ORACLE_DEEP_PRICE_RUB
         value: "99"
+      - key: ROBOKASSA_HASH
+        value: "md5"       # как в кабинете Робокассы (Технические настройки)
+      - key: ORACLE_STARS_ENABLED
+        value: "0"         # 0 = приём только в рублях (без Telegram Stars)
     disk:
       name: oracle-data
       mountPath: /var/data

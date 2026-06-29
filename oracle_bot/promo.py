@@ -157,16 +157,31 @@ def promo_variant(variant_id: str, source: str = "") -> str:
     return post_tarot_hook(source)
 
 
-def pick_promo_variant(day_index: int, channel: str) -> tuple[str, str]:
-    """Детерминированная ротация A/B по дню и каналу."""
+def _channel_rank(channel: str) -> int:
+    """Стабильный номер канала (0,1,2…) — для гарантии разного контента по каналам."""
     u = channel.lstrip("@").lower()
-    order = [v[0] for v in PROMO_VARIANTS]
-    if u == "auragirlss":
-        order = ["chakra", "dream", "voice", "compat", "moon", "tarot", "palm", "natal"]
-    elif u == "signsvishe":
-        order = ["horo", "tarot", "dream", "yesno", "compat", "natal", "voice", "moon"]
-    idx = (day_index * 3 + hash(u) % 3) % len(order)
-    vid = order[idx]
+    try:
+        from oracle_bot.config import ORACLE_PROMO_CHANNELS
+
+        order = [c.strip().lstrip("@").lower() for c in ORACLE_PROMO_CHANNELS if c.strip()]
+        if u in order:
+            return order.index(u)
+    except Exception:
+        pass
+    return abs(hash(u)) % 7
+
+
+def pick_promo_variant(day_index: int, channel: str) -> tuple[str, str]:
+    """Реклама: гарантированно РАЗНЫЙ вариант на каждый канал в один и тот же день.
+
+    Берём общий список вариантов и сдвигаем по (день, номер канала) — соседние
+    каналы получают соседние варианты, поэтому в один день повторов между каналами нет.
+    """
+    u = channel.lstrip("@").lower()
+    master = [v[0] for v in PROMO_VARIANTS]
+    rank = _channel_rank(u)
+    idx = (day_index + rank) % len(master)
+    vid = master[idx]
     return vid, promo_variant(vid, u)
 
 
@@ -178,7 +193,7 @@ def post_launch_broadcast() -> str:
         "• Совместимость по датам · ладонь по фото\n"
         "• 25+ разделов — Карма, И-Цзин, чакры…\n\n"
         "Нажми /start — меню уже ждёт.\n"
-        "⭐ Premium — без лимитов через Telegram Stars."
+        "⭐ Premium — без лимитов, оплата картой/СБП."
     )
 
 
@@ -225,6 +240,7 @@ def _content_slot(channel: str, day_index: int, slot_index: int) -> tuple[str, s
     """Контент без рекламы: kind, variant_id, text."""
     u = channel.lstrip("@").lower()
     d = day_index + 1
+    rank = _channel_rank(u)
     if slot_index == 0:
         # Утро — сонник / гороскоп
         if u == "auragirlss":
@@ -238,7 +254,7 @@ def _content_slot(channel: str, day_index: int, slot_index: int) -> tuple[str, s
             ("tip_money", "💰 <b>Деньги</b>\n\nНе принимай крупных решений до обеда — утро для ясности, не для импульса."),
             ("tip_self", "🪞 <b>К себе</b>\n\nЕсли раздражает чужая мелочь — часто это зеркало своего напряжения."),
         ]
-        vid, text = tips[(d + slot_index) % len(tips)]
+        vid, text = tips[(d + rank) % len(tips)]
         return "content", vid, text
     if slot_index == 2:
         pool = [
@@ -246,9 +262,9 @@ def _content_slot(channel: str, day_index: int, slot_index: int) -> tuple[str, s
             ("tip_palm", "🖐 <b>Ладонь</b>\n\nЛиния сердца не про «сколько браков». Про то, как ты любишь и отпускаешь."),
             ("tip_dream", "🌙 <b>Сны</b>\n\nВода во сне — эмоции. Пресная — покой, бурная — то, что давно не проговорили."),
         ]
-        if u == "auragirlss":
-            pool.append(("tip_chakra", "🔴 <b>Сердечная чакра</b>\n\nБоль в груди без причины? Спроси: кому я сейчас не сказала правду?"))
-        vid, text = pool[(d + hash(u)) % len(pool)]
+        # единый пул одной длины для всех каналов → 3 канала получают 3 разных поста в один день
+        pool.append(("tip_chakra", "🔴 <b>Сердечная чакра</b>\n\nБоль в груди без причины? Спроси: кому я сейчас не сказала правду?"))
+        vid, text = pool[(d + rank) % len(pool)]
         return "content", vid, text
     # slot 4 — вечер
     evening = [
@@ -256,7 +272,7 @@ def _content_slot(channel: str, day_index: int, slot_index: int) -> tuple[str, s
         ("eve_love", "💫 <b>Отношения</b>\n\nНе выясняй важное перед сном. Утро — для честного разговора."),
         ("eve_rune", "🪬 <b>Знак</b>\n\nТретье совпадение за день — не паранойя. Вселенная любит троекратность."),
     ]
-    vid, text = evening[(d + slot_index) % len(evening)]
+    vid, text = evening[(d + rank) % len(evening)]
     return "content", vid, text
 
 

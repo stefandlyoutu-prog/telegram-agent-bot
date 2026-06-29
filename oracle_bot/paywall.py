@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from oracle_bot.config import ORACLE_PAYWALL_EXPERIMENT_UNTIL, ORACLE_PAYWALL_MODE
+from oracle_bot.config import (
+    ORACLE_PAYWALL_EXPERIMENT_UNTIL,
+    ORACLE_PAYWALL_MODE,
+    ORACLE_STARS_ENABLED,
+)
 
 
 def paywall_mode() -> str:
@@ -22,7 +26,8 @@ def paywall_mode() -> str:
 
 
 def stars_enabled() -> bool:
-    return paywall_mode() == "stars"
+    # Глобальный выключатель: по умолчанию оплата только в рублях (Робокасса)
+    return ORACLE_STARS_ENABLED and paywall_mode() == "stars"
 
 
 def referral_primary() -> bool:

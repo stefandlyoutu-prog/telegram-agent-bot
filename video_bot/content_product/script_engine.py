@@ -215,79 +215,114 @@ def _is_oracle_topic(topic: str) -> bool:
     return any(h in t for h in _ORACLE_HINTS)
 
 
-def _fallback_oracle(cta: str = "t.me/MOracul_bot") -> VideoScript:
-    """Оракул @MOracul_bot — продающая воронка без LLM (таро/гороскоп → переход в бот)."""
+def _oracle_v_tarot(cta: str) -> VideoScript:
     return VideoScript(
-        topic="Оракул: таро и гороскоп в Telegram",
+        topic="Оракул: один расклад таро",
         cta=cta,
         meta={"client": "oracle", "topic_key": "tarot"},
         scenes=[
-            Scene(
-                "hook",
-                ["ОДНА КАРТА", "ВСЁ ОБЪЯСНИТ"],
-                "КАРТА",
-                "Стоп. Загадай вопрос — и одна карта скажет то, что ты боишься признать.",
-                "tarot cards candle mystical dark",
-                cut_sec=2.2,
-            ),
-            Scene(
-                "problem",
-                ["МЫСЛИ ПО КРУГУ", "НЕТ ОТВЕТА"],
-                "ОТВЕТА",
-                "Когда внутри тревога и мысли ходят по кругу, так хочется простого честного ответа.",
-                "woman thinking window rain night",
-                cut_sec=2.4,
-            ),
-            Scene(
-                "agitate",
-                ["СОМНЕНИЯ", "КРАДУТ ВРЕМЯ"],
-                "ВРЕМЯ",
-                "Чем дольше тянешь с решением, тем больше сил забирают сомнения.",
-                "clock time lapse dark moody",
-                cut_sec=2.3,
-            ),
-            Scene(
-                "solution",
-                ["ОРАКУЛ", "В ТЕЛЕГРАМЕ"],
-                "ОРАКУЛ",
-                "Твой личный оракул в Телеграме. Таро, гороскоп и совместимость — ответ за секунды.",
-                "smartphone glowing magic interface",
-                cut_sec=2.6,
-            ),
-            Scene(
-                "proof",
-                ["ТАРО · ГОРОСКОП", "ЧИСЛО СУДЬБЫ"],
-                "ТАРО",
-                "Расклад на любовь и деньги, гороскоп на сегодня, число судьбы по дате рождения.",
-                "astrology zodiac stars cosmos",
-                cut_sec=2.8,
-            ),
-            Scene(
-                "offer",
-                ["ПЕРВЫЙ РАСКЛАД", "БЕСПЛАТНО"],
-                "БЕСПЛАТНО",
-                "Первый расклад бесплатно. Просто открой бота и задай свой вопрос.",
-                "hands holding phone cozy candle",
-                cut_sec=2.5,
-            ),
-            Scene(
-                "urgency",
-                ["КАРТЫ ГОТОВЫ", "ОТВЕТИТЬ СЕЙЧАС"],
-                "СЕЙЧАС",
-                "Карты уже готовы ответить. Не откладывай то, что можно узнать прямо сейчас.",
-                "tarot spread table candlelight",
-                cut_sec=2.3,
-            ),
-            Scene(
-                "cta",
-                ["ЖМИ ССЫЛКУ", "В ОПИСАНИИ"],
-                "ЖМИ",
-                "Жми ссылку в описании и получи свой первый расклад бесплатно.",
-                "finger tapping phone screen glow",
-                cut_sec=2.5,
-            ),
+            Scene("hook", ["ОДНА КАРТА", "ВСЁ ОБЪЯСНИТ"], "КАРТА",
+                  "Стоп. Загадай вопрос — и одна карта скажет то, что ты боишься признать.",
+                  "tarot cards candle mystical dark", cut_sec=2.2),
+            Scene("problem", ["МЫСЛИ ПО КРУГУ", "НЕТ ОТВЕТА"], "ОТВЕТА",
+                  "Когда внутри тревога и мысли ходят по кругу, так хочется простого честного ответа.",
+                  "woman thinking window rain night", cut_sec=2.4),
+            Scene("agitate", ["СОМНЕНИЯ", "КРАДУТ ВРЕМЯ"], "ВРЕМЯ",
+                  "Чем дольше тянешь с решением, тем больше сил забирают сомнения.",
+                  "clock time lapse dark moody", cut_sec=2.3),
+            Scene("solution", ["ОРАКУЛ", "В ТЕЛЕГРАМЕ"], "ОРАКУЛ",
+                  "Твой личный оракул в Телеграме. Таро, гороскоп и совместимость — ответ за секунды.",
+                  "smartphone glowing magic interface", cut_sec=2.6),
+            Scene("proof", ["ТАРО · ГОРОСКОП", "ЧИСЛО СУДЬБЫ"], "ТАРО",
+                  "Расклад на любовь и деньги, гороскоп на сегодня, число судьбы по дате рождения.",
+                  "astrology zodiac stars cosmos", cut_sec=2.8),
+            Scene("offer", ["ПЕРВЫЙ РАСКЛАД", "БЕСПЛАТНО"], "БЕСПЛАТНО",
+                  "Первый расклад бесплатно. Просто открой бота и задай свой вопрос.",
+                  "hands holding phone cozy candle", cut_sec=2.5),
+            Scene("urgency", ["КАРТЫ ГОТОВЫ", "ОТВЕТИТЬ СЕЙЧАС"], "СЕЙЧАС",
+                  "Карты уже готовы ответить. Не откладывай то, что можно узнать прямо сейчас.",
+                  "tarot spread table candlelight", cut_sec=2.3),
+            Scene("cta", ["ЖМИ ССЫЛКУ", "В ОПИСАНИИ"], "ЖМИ",
+                  "Жми ссылку в описании и получи свой первый расклад бесплатно.",
+                  "finger tapping phone screen glow", cut_sec=2.5),
         ],
     )
+
+
+def _oracle_v_love(cta: str) -> VideoScript:
+    return VideoScript(
+        topic="Оракул: расклад на любовь",
+        cta=cta,
+        meta={"client": "oracle", "topic_key": "love"},
+        scenes=[
+            Scene("hook", ["ОН ДУМАЕТ", "О ТЕБЕ?"], "О ТЕБЕ",
+                  "Хочешь знать, думает ли он о тебе прямо сейчас? Карты не умеют врать.",
+                  "couple silhouette sunset romantic", cut_sec=2.2),
+            Scene("problem", ["МОЛЧАНИЕ", "СВОДИТ С УМА"], "МОЛЧАНИЕ",
+                  "Когда он молчит, голова придумывает худшее, а сердце ждёт хоть какого-то знака.",
+                  "woman looking at phone waiting", cut_sec=2.4),
+            Scene("agitate", ["ДОГАДКИ", "РАНЯТ СИЛЬНЕЕ"], "ДОГАДКИ",
+                  "Бесконечные догадки ранят больнее правды. Пора получить ясность.",
+                  "rainy window sad mood evening", cut_sec=2.3),
+            Scene("solution", ["СПРОСИ", "У ОРАКУЛА"], "ОРАКУЛ",
+                  "Спроси у оракула в Телеграме: что он чувствует, чего хочет, и есть ли будущее.",
+                  "tarot reading love spread candle", cut_sec=2.6),
+            Scene("proof", ["ЕГО ЧУВСТВА", "ВАШЕ БУДУЩЕЕ"], "ЧУВСТВА",
+                  "Расклад на отношения, совместимость по датам и честный прогноз для пары.",
+                  "two hands together heart light", cut_sec=2.8),
+            Scene("offer", ["ПЕРВЫЙ ОТВЕТ", "БЕСПЛАТНО"], "БЕСПЛАТНО",
+                  "Первый ответ бесплатно. Задай свой вопрос о нём прямо сейчас.",
+                  "woman smiling phone cozy home", cut_sec=2.5),
+            Scene("urgency", ["НЕ ГАДАЙ", "УЗНАЙ"], "УЗНАЙ",
+                  "Хватит гадать на ромашке. Узнай, что между вами на самом деле.",
+                  "rose petals candle soft focus", cut_sec=2.3),
+            Scene("cta", ["ССЫЛКА", "В ОПИСАНИИ"], "ССЫЛКА",
+                  "Жми ссылку в описании и получи расклад на любовь бесплатно.",
+                  "finger tapping phone screen glow", cut_sec=2.5),
+        ],
+    )
+
+
+def _oracle_v_horo(cta: str) -> VideoScript:
+    return VideoScript(
+        topic="Оракул: гороскоп и судьба знака",
+        cta=cta,
+        meta={"client": "oracle", "topic_key": "horoscope"},
+        scenes=[
+            Scene("hook", ["ТВОЙ ЗНАК", "НА ПОРОГЕ ПЕРЕМЕН"], "ПЕРЕМЕН",
+                  "Если ты родилась под этим знаком, ближайшие дни изменят многое.",
+                  "starry night sky zodiac cosmos", cut_sec=2.2),
+            Scene("problem", ["ОБЩИЙ ГОРОСКОП", "НЕ ПРО ТЕБЯ"], "ОБЩИЙ",
+                  "Гороскопы из ленты слишком общие и никогда не попадают в твою ситуацию.",
+                  "newspaper horoscope blurry pages", cut_sec=2.4),
+            Scene("agitate", ["ВАЖНЫЙ ДЕНЬ", "МОЖНО УПУСТИТЬ"], "УПУСТИТЬ",
+                  "А ведь один правильный день можно упустить, если не знать, чего ждать.",
+                  "sand hourglass time flowing", cut_sec=2.3),
+            Scene("solution", ["ЛИЧНЫЙ", "ПРОГНОЗ"], "ЛИЧНЫЙ",
+                  "Оракул в Телеграме составит личный прогноз: энергия, деньги, отношения на сегодня.",
+                  "astrology chart wheel glowing", cut_sec=2.6),
+            Scene("proof", ["ЛЮБОВЬ · ДЕНЬГИ", "СОВЕТ ДНЯ"], "СОВЕТ",
+                  "Что усилить, чего избегать и один точный совет именно для твоего знака.",
+                  "planets space stars motion", cut_sec=2.8),
+            Scene("offer", ["ПРОГНОЗ", "БЕСПЛАТНО"], "БЕСПЛАТНО",
+                  "Первый персональный прогноз бесплатно. Узнай свой день за минуту.",
+                  "phone calendar morning sunrise", cut_sec=2.5),
+            Scene("urgency", ["УЗНАЙ", "ПОКА ДЕНЬ НЕ НАЧАЛСЯ"], "СЕЙЧАС",
+                  "Загляни до того, как начнётся день — так совет действительно сработает.",
+                  "sunrise horizon golden hour", cut_sec=2.3),
+            Scene("cta", ["ССЫЛКА", "В ОПИСАНИИ"], "ССЫЛКА",
+                  "Жми ссылку в описании и забери свой гороскоп на сегодня бесплатно.",
+                  "finger tapping phone screen glow", cut_sec=2.5),
+        ],
+    )
+
+
+_ORACLE_VARIANTS = (_oracle_v_tarot, _oracle_v_love, _oracle_v_horo)
+
+
+def _fallback_oracle(cta: str = "t.me/MOracul_bot", seed: int = 0) -> VideoScript:
+    """Оракул @MOracul_bot — продающая воронка без LLM. seed выбирает один из вариантов."""
+    return _ORACLE_VARIANTS[seed % len(_ORACLE_VARIANTS)](cta)
 
 
 async def generate_script(
@@ -297,6 +332,7 @@ async def generate_script(
     cta: str = "t.me/M_onetest_bot",
     use_llm: bool = True,
     script_id: str | None = None,
+    seed: int = 0,
 ) -> VideoScript:
     if script_id == "nova_potolki" or "nova" in topic.lower() or "натяжн" in topic.lower() or "потолк" in topic.lower():
         return _fallback_nova_potolki()
@@ -306,7 +342,7 @@ async def generate_script(
         except Exception as e:
             logger.warning("LLM script failed, fallback: %s", e)
     if script_id == "oracle" or _is_oracle_topic(topic):
-        return _fallback_oracle(cta)
+        return _fallback_oracle(cta, seed=seed)
     if "зарабат" in topic.lower() or "2026" in topic:
         return _fallback_earn_2026()
     return _fallback_earn_2026()
