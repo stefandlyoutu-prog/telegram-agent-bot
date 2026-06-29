@@ -172,6 +172,84 @@ def cmd_post_tg(args: argparse.Namespace) -> None:
         op.save_plan(plan)
 
 
+# ───────────────────────── run (ежедневный конвейер) ─────────────────────────
+def _admin_notify(text: str) -> None:
+    token = os.getenv("ORACLE_BOT_TOKEN", "").strip() or os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    admin = os.getenv("MONEY_ADMIN_IDS", "").split(",")[0].strip()
+    if not token or not admin.isdigit():
+        return
+    try:
+        _tg_api(token, "sendMessage", {"chat_id": int(admin), "text": text, "parse_mode": "HTML"})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def cmd_run(args: argparse.Namespace) -> None:
+    """Полный день: рендер запланированных + загрузка на площадки + отчёт админу."""
+    plan = op.load_plan()
+    if not plan:
+        # авто-план, чтобы cron работал «из коробки»
+        plan = op.build_month_plan(date.today(), {"youtube": 4, "tiktok": 4, "vk": 4}, days=30)
+        op.save_plan(plan)
+        print("План отсутствовал — создан автоматически (4/день yt/tt/vk).")
+    on = date.fromisoformat(args.date) if args.date else date.today()
+    due = [i for i in op.due_items(plan, on)]
+    if args.limit:
+        due = due[: args.limit]
+    if not due:
+        print("На сегодня ничего не запланировано.")
+        return
+    out = _out_dir(on)
+    from video_bot.promo.distribute import distribute
+
+    posted, manual, failed = [], [], []
+
+    async def _render_all() -> None:
+        for i in due:
+            if i.status == "planned":
+                try:
+                    path = await op.render_item(i, out, use_llm=not args.no_llm)
+                    i.status = "rendered"
+                    i.file = str(path)
+                    print(f"  render OK  {i.source}")
+                except Exception as e:  # noqa: BLE001
+                    i.status = "failed"
+                    i.note = str(e)[:200]
+                    failed.append(i)
+                    print(f"  render FAIL {i.source}: {e}")
+                op.save_plan(plan)
+
+    if not args.no_render:
+        asyncio.run(_render_all())
+
+    for i in due:
+        if i.status != "rendered" or not i.file or not Path(i.file).exists():
+            continue
+        res = distribute(i, channel=args.channel or "")
+        i.status = res.status
+        i.note = (res.url or res.error)[:200]
+        if res.status == "posted":
+            posted.append((i, res))
+        elif res.status == "manual":
+            manual.append(i)
+        else:
+            failed.append(i)
+        print(f"  {res.platform}: {res.status} {res.url or res.error}")
+        op.save_plan(plan)
+
+    lines = [f"🎬 <b>Промо Оракул — {on.isoformat()}</b>"]
+    lines.append(f"✅ Выложено: {len(posted)} · 🗂 вручную: {len(manual)} · ⚠️ ошибок: {len(failed)}")
+    for i, res in posted[:15]:
+        lines.append(f"• {res.platform} <a href=\"{res.url}\">ссылка</a> · {i.source}")
+    if manual:
+        lines.append("\n🗂 Для ручной загрузки (файлы в папке):")
+        for i in manual[:15]:
+            lines.append(f"• {i.platform}: {Path(i.file).name} · метка {i.source}")
+    summary = "\n".join(lines)
+    print("\n" + summary.replace("<b>", "").replace("</b>", ""))
+    _admin_notify(summary)
+
+
 # ───────────────────────── report ─────────────────────────
 def cmd_report(args: argparse.Namespace) -> None:
     try:
@@ -215,6 +293,14 @@ def main() -> None:
     spt.add_argument("--channel")
     spt.add_argument("--limit", type=int, default=0)
     spt.set_defaults(func=cmd_post_tg)
+
+    srun = sub.add_parser("run", help="ежедневный конвейер: рендер + загрузка + отчёт")
+    srun.add_argument("--date")
+    srun.add_argument("--limit", type=int, default=0)
+    srun.add_argument("--channel")
+    srun.add_argument("--no-render", action="store_true", help="только загрузка готовых")
+    srun.add_argument("--no-llm", action="store_true")
+    srun.set_defaults(func=cmd_run)
 
     srep = sub.add_parser("report", help="атрибуция трафика")
     srep.add_argument("--days", type=int, default=30)

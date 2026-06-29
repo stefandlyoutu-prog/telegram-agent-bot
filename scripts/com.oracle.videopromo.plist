@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ежедневный автопостинг рекламы Оракула (macOS launchd).
+  Установка:
+    cp scripts/com.oracle.videopromo.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.oracle.videopromo.plist
+  Снять:
+    launchctl unload ~/Library/LaunchAgents/com.oracle.videopromo.plist
+  Запустить разово сейчас:
+    launchctl start com.oracle.videopromo
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.oracle.videopromo</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/polzovatel/Projects/telegram-agent-bot/scripts/oracle_promo_daily.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/polzovatel/Projects/telegram-agent-bot/data/video_bot/promo/logs/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/polzovatel/Projects/telegram-agent-bot/data/video_bot/promo/logs/launchd.err.log</string>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
