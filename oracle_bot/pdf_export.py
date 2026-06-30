@@ -9,13 +9,9 @@ from io import BytesIO
 
 from aiogram.types import BufferedInputFile
 
-logger = logging.getLogger(__name__)
+from oracle_bot.fonts import register_pdf_font
 
-_FONT_REGULAR = "/System/Library/Fonts/Supplemental/Arial.ttf"
-_FONT_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
-# Render (Linux) — DejaVu обычно есть; иначе fpdf core-шрифт (латиница)
-_FONT_LINUX = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-_FONT_LINUX_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+logger = logging.getLogger(__name__)
 
 
 def _strip_html(text: str) -> str:
@@ -34,24 +30,7 @@ def build_pdf(title: str, body: str, *, footer_note: str = "") -> bytes:
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_page()
 
-    use_unicode = False
-    body_font = bold_font = "Helvetica"
-    import os
-
-    pairs = [
-        (_FONT_REGULAR, _FONT_BOLD),
-        (_FONT_LINUX, _FONT_LINUX_BOLD),
-    ]
-    for reg, bold in pairs:
-        if os.path.exists(reg):
-            try:
-                pdf.add_font("Body", "", reg)
-                pdf.add_font("BodyB", "", bold if os.path.exists(bold) else reg)
-                body_font, bold_font = "Body", "BodyB"
-                use_unicode = True
-                break
-            except Exception as e:  # noqa: BLE001
-                logger.warning("pdf font %s: %s", reg, e)
+    body_font, bold_font, use_unicode = register_pdf_font(pdf)
 
     w = pdf.w - pdf.l_margin - pdf.r_margin
 
@@ -73,8 +52,10 @@ def build_pdf(title: str, body: str, *, footer_note: str = "") -> bytes:
         block = block.strip()
         if not block:
             continue
-        # короткая строка-заголовок → жирным
-        if len(block) <= 60 and not block.endswith((".", "!", "?", "…")):
+        if block.startswith("## "):
+            write(block[3:].strip(), 13, bold=True)
+            pdf.ln(1)
+        elif len(block) <= 60 and not block.endswith((".", "!", "?", "…", ":")):
             write(block, 13, bold=True)
             pdf.ln(1)
         else:

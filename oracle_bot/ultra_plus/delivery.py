@@ -10,8 +10,8 @@ from aiogram.types import BufferedInputFile
 
 from oracle_bot import storage as db
 from oracle_bot.keyboards import kb_main
-from oracle_bot.ultra_plus.assembler import build_book_sections
 from oracle_bot.ultra_plus.calculator import calculate
+from oracle_bot.ultra_plus.narrative import build_book_sections_async
 from oracle_bot.ultra_plus.pdf_builder import build_book_pdf
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ async def deliver_ultra_plus_book(bot, user_id: int) -> bool:
         return False
 
     try:
-        sections = build_book_sections(profile)
+        sections = await build_book_sections_async(profile)
         pdf_bytes = build_book_pdf(profile.name, sections)
         safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in profile.name)[:40]
         fname = f"Kniga_{safe_name}_{profile.birth.strftime('%d%m%Y')}.pdf"
