@@ -4,7 +4,7 @@ import asyncio
 import logging
 import random
 import re
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Awaitable, Callable, Optional
 
 from aiogram import BaseMiddleware, F, Router
@@ -898,6 +898,23 @@ async def cmd_promo_books(message: Message, command: CommandObject) -> None:
         await status.edit_text(f"⚠️ Ошибка рассылки: {e}")
 
 
+@router.message(Command("creatives"))
+async def cmd_creatives(message: Message) -> None:
+    """Готовые рекламные креативы для внешних каналов (копируй и постируй)."""
+    uid = message.from_user.id if message.from_user else 0
+    if not _is_admin(uid):
+        await message.answer("Нет доступа.")
+        return
+    from oracle_bot.ads import EXTERNAL_CREATIVES
+
+    await message.answer("📣 <b>Рекламные креативы для внешних каналов</b>\nНиже — по одному сообщению, можно пересылать/копировать:")
+    for key, fn in EXTERNAL_CREATIVES.items():
+        try:
+            await message.answer(fn("ext"), disable_web_page_preview=True)
+        except Exception as e:  # noqa: BLE001
+            await message.answer(f"⚠️ {key}: {e}")
+
+
 @router.message(Command("seed_week"))
 async def cmd_seed_week(message: Message, command: CommandObject) -> None:
     """Пересобрать недельную очередь постов по каналам (ХВД/Ultra включены)."""
@@ -1329,26 +1346,24 @@ async def _open_module(msg: Message, state: FSMContext, uid: int, mod: str) -> N
         await state.set_state(Flow.family_karma_text)
         await msg.answer("🧬 Что повторяется в роду / семье? Страхи, сценарии, отношения:")
     elif mod == "exclusive_hvd":
-        await state.set_state(Flow.hvd_input)
-        await msg.answer(
+        await _prompt_book_input(
+            msg, uid, state, "hvd",
             "🔮 <b>Эксклюзив: полный курс ХВД</b>\n\n"
             "Хронально-Векторная Диагностика — весь обучающий курс в одном отчёте:\n"
             "типология, чакры, контуры, инь/ян, периоды жизни, код негатива/позитива, "
             "задачи, эгоизм/альтруизм, реабилитация.\n\n"
-            f"💳 <b>{ORACLE_EXCLUSIVE_HVD_PRICE_RUB}₽</b> — отдельно от Премиум\n\n"
-            "Введи имя и дату рождения:\n"
-            "<i>Анна 15.03.1990</i>"
+            f"💳 <b>{ORACLE_EXCLUSIVE_HVD_PRICE_RUB}₽</b> — отдельно от Премиум",
+            "<i>Анна 15.03.1990</i>",
         )
     elif mod == "ultra_plus":
-        await state.set_state(Flow.ultra_plus_input)
-        await msg.answer(
+        await _prompt_book_input(
+            msg, uid, state, "ultra",
             "📖 <b>Ultra Plus — Книга о тебе</b>\n\n"
             "Персональная книга в PDF по Матрице Судьбы (22 аркана):\n"
             "личные качества, таланты, предназначение, деньги, кармические программы, "
             "отношения, здоровье, прогноз на год.\n\n"
-            f"💳 <b>{ORACLE_ULTRA_PLUS_PRICE_RUB}₽</b> — отдельно от Премиум\n\n"
-            "Введи имя и дату рождения:\n"
-            "<i>Степан 21.06.1994</i>"
+            f"💳 <b>{ORACLE_ULTRA_PLUS_PRICE_RUB}₽</b> — отдельно от Премиум",
+            "<i>Степан 21.06.1994</i>",
         )
 
 
@@ -1628,6 +1643,119 @@ async def numerology_flow(message: Message, state: FSMContext) -> None:
     )
 
 
+def _saved_profile_for_book(uid: int) -> tuple[str, "date"] | None:
+    """Если в профиле уже есть имя и дата рождения — вернуть (имя, дата)."""
+    p = db.get_profile(uid)
+    name = (p.get("name") or "").strip()
+    bd_iso = (p.get("birth_date") or "").strip()
+    if not name or name.lower() in ("гость", "guest", "не указано") or not bd_iso:
+        return None
+    try:
+        bd = datetime.strptime(bd_iso, "%Y-%m-%d").date()
+    except ValueError:
+        bd = parse_birth_date(bd_iso)
+    if not bd:
+        return None
+    return name, bd
+
+
+async def _prompt_book_input(
+    msg: Message, uid: int, state: FSMContext, kind: str, intro: str, example: str
+) -> None:
+    """Показывает оффер. Если имя+дата уже есть — кнопка автоподстановки вместо повторного ввода."""
+    saved = _saved_profile_for_book(uid)
+    if saved:
+        name, bd = saved
+        bd_h = bd.strftime("%d.%m.%Y")
+        rows = [
+            [InlineKeyboardButton(
+                text=f"✅ {name}, {bd_h}", callback_data=f"bookuse:{kind}"
+            )],
+            [InlineKeyboardButton(
+                text="✏️ Другие имя и дата", callback_data=f"booknew:{kind}"
+            )],
+        ]
+        await state.clear()
+        await msg.answer(
+            f"{intro}\n\nИспользовать твои данные — <b>{name}, {bd_h}</b>?",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+        return
+    await state.set_state(Flow.hvd_input if kind == "hvd" else Flow.ultra_plus_input)
+    await msg.answer(f"{intro}\n\nВведи имя и дату рождения:\n{example}")
+
+
+async def _start_hvd(msg: Message, uid: int, name: str, bd: "date") -> None:
+    from oracle_bot.exclusive_hvd import build_teaser, calculate
+    from oracle_bot.exclusive_hvd.delivery import deliver_hvd_report
+
+    try:
+        profile = calculate(name, bd)
+    except ValueError as e:
+        await msg.answer(f"⚠️ {e}")
+        return
+    db.save_hvd_pending(uid, name, bd.isoformat())
+    analytics_mod.track_reading(uid, "exclusive_hvd", has_lock=True)
+    await msg.answer(build_teaser(profile))
+    if is_admin_user(uid):
+        await msg.answer("👑 Админ — полный разбор ХВД без оплаты…")
+        await deliver_hvd_report(msg.bot, uid)
+        return
+    await _offer_exclusive_hvd(msg, uid)
+
+
+async def _start_ultra(msg: Message, uid: int, name: str, bd: "date") -> None:
+    from oracle_bot.ultra_plus import build_teaser, calculate
+    from oracle_bot.ultra_plus.delivery import deliver_ultra_plus_book
+
+    try:
+        profile = calculate(name, bd)
+    except ValueError as e:
+        await msg.answer(f"⚠️ {e}")
+        return
+    db.save_ultra_plus_pending(uid, name, bd.isoformat())
+    analytics_mod.track_reading(uid, "ultra_plus", has_lock=True)
+    await msg.answer(build_teaser(profile))
+    if is_admin_user(uid):
+        await msg.answer("👑 Админ — отправляю PDF без оплаты…")
+        await deliver_ultra_plus_book(msg.bot, uid)
+        return
+    await _offer_ultra_plus(msg, uid)
+
+
+@router.callback_query(F.data.startswith("bookuse:"))
+async def cb_book_use_saved(call: CallbackQuery, state: FSMContext) -> None:
+    kind = (call.data or "").split(":", 1)[1]
+    uid = call.from_user.id if call.from_user else 0
+    await call.answer()
+    await state.clear()
+    msg = await _callback_chat(call)
+    if not msg:
+        return
+    saved = _saved_profile_for_book(uid)
+    if not saved:
+        await state.set_state(Flow.hvd_input if kind == "hvd" else Flow.ultra_plus_input)
+        await msg.answer("Введи имя и дату рождения:\n<i>Имя 15.03.1990</i>")
+        return
+    name, bd = saved
+    if kind == "hvd":
+        await _start_hvd(msg, uid, name, bd)
+    else:
+        await _start_ultra(msg, uid, name, bd)
+
+
+@router.callback_query(F.data.startswith("booknew:"))
+async def cb_book_new_data(call: CallbackQuery, state: FSMContext) -> None:
+    kind = (call.data or "").split(":", 1)[1]
+    await call.answer()
+    msg = await _callback_chat(call)
+    if not msg:
+        return
+    await state.set_state(Flow.hvd_input if kind == "hvd" else Flow.ultra_plus_input)
+    example = "<i>Анна 15.03.1990</i>" if kind == "hvd" else "<i>Степан 21.06.1994</i>"
+    await msg.answer(f"Введи имя и дату рождения:\n{example}")
+
+
 @router.message(Flow.hvd_input)
 async def exclusive_hvd_flow(message: Message, state: FSMContext) -> None:
     uid = message.from_user.id if message.from_user else 0
@@ -1638,27 +1766,7 @@ async def exclusive_hvd_flow(message: Message, state: FSMContext) -> None:
         return
     name = re.sub(_DATE_RE, "", text).strip() or "Гость"
     await state.clear()
-
-    from oracle_bot.exclusive_hvd import build_teaser, calculate
-    from oracle_bot.exclusive_hvd.delivery import deliver_hvd_report
-
-    try:
-        profile = calculate(name, bd)
-    except ValueError as e:
-        await message.answer(f"⚠️ {e}")
-        return
-
-    db.save_hvd_pending(uid, name, bd.isoformat())
-    analytics_mod.track_reading(uid, "exclusive_hvd", has_lock=True)
-
-    await message.answer(build_teaser(profile))
-
-    if is_admin_user(uid):
-        await message.answer("👑 Админ — полный разбор ХВД без оплаты…")
-        await deliver_hvd_report(message.bot, uid)
-        return
-
-    await _offer_exclusive_hvd(message, uid)
+    await _start_hvd(message, uid, name, bd)
 
 
 @router.message(Flow.ultra_plus_input)
@@ -1671,27 +1779,7 @@ async def ultra_plus_flow(message: Message, state: FSMContext) -> None:
         return
     name = re.sub(_DATE_RE, "", text).strip() or "Гость"
     await state.clear()
-
-    from oracle_bot.ultra_plus import build_teaser, calculate
-    from oracle_bot.ultra_plus.delivery import deliver_ultra_plus_book
-
-    try:
-        profile = calculate(name, bd)
-    except ValueError as e:
-        await message.answer(f"⚠️ {e}")
-        return
-
-    db.save_ultra_plus_pending(uid, name, bd.isoformat())
-    analytics_mod.track_reading(uid, "ultra_plus", has_lock=True)
-
-    await message.answer(build_teaser(profile))
-
-    if is_admin_user(uid):
-        await message.answer("👑 Админ — отправляю PDF без оплаты…")
-        await deliver_ultra_plus_book(message.bot, uid)
-        return
-
-    await _offer_ultra_plus(message, uid)
+    await _start_ultra(message, uid, name, bd)
 
 
 @router.message(Flow.chinese_birth)

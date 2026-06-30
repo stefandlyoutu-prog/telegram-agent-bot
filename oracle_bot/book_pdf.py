@@ -54,15 +54,21 @@ def _new_pdf():
     return _BookPDF(orientation="P", unit="mm", format="A4")
 
 
-def render_book_pdf(
+def _build_book(
     *,
     title: str,
     subtitle: str,
     author_line: str,
-    chapters: list[tuple[str, str]],
-    accent: tuple[int, int, int] = ACCENT,
-    footer_note: str = "",
-) -> bytes:
+    chapters: list[tuple[str, str, str]],
+    accent: tuple[int, int, int],
+    footer_note: str,
+    toc_entries: list[tuple[str, int]] | None,
+):
+    """Собирает документ. Возвращает (pdf, chapter_start_pages).
+
+    Если toc_entries=None — страница содержания не вставляется (проход 1, замер
+    номеров страниц). Иначе вставляется готовое оглавление (проход 2).
+    """
     pdf = _new_pdf()
     pdf.accent = accent
     pdf.set_margins(24, 24, 24)
@@ -75,7 +81,7 @@ def render_book_pdf(
         s = _strip_emoji((s or "").replace("\r", ""))
         return s if pdf.uni else s.encode("latin-1", "replace").decode("latin-1")
 
-    def para(s: str, size: int, *, bold: bool = False, color=INK, align: str = "J", lh: float = 1.6) -> None:
+    def para(s: str, size: float, *, bold: bool = False, color=INK, align: str = "J", lh: float = 1.6) -> None:
         pdf.set_font(pdf.bold if bold else pdf.body, size=size)
         pdf.set_text_color(*color)
         pdf.multi_cell(w, size * lh * 0.35, txt(s.strip() or " "), align=align)
@@ -111,10 +117,42 @@ def render_book_pdf(
     pdf.set_text_color(*GREY)
     pdf.multi_cell(w, 5, txt("m-Oracul · персональная книга-разбор"), align="C")
 
+    # --- Содержание (проход 2) ---
+    if toc_entries is not None:
+        pdf.add_page()
+        pdf.set_xy(pdf.l_margin, pdf.t_margin)
+        pdf.set_font(pdf.bold, size=10)
+        pdf.set_text_color(*GOLD)
+        pdf.cell(0, 6, txt("СОДЕРЖАНИЕ"))
+        pdf.ln(11)
+        pdf.set_font(pdf.bold, size=22)
+        pdf.set_text_color(*accent)
+        pdf.set_x(pdf.l_margin)
+        pdf.multi_cell(w, 10, txt("Оглавление"), align="L")
+        pdf.ln(1)
+        pdf.set_draw_color(*accent)
+        pdf.set_line_width(0.5)
+        pdf.line(pdf.l_margin, pdf.get_y(), pdf.l_margin + w, pdf.get_y())
+        pdf.ln(8)
+        for i, (ename, epage) in enumerate(toc_entries, start=1):
+            pdf.set_x(pdf.l_margin)
+            y = pdf.get_y()
+            pdf.set_font(pdf.bold, size=12)
+            pdf.set_text_color(*GOLD)
+            pdf.cell(10, 8, txt(f"{i}"))
+            pdf.set_font(pdf.body, size=12)
+            pdf.set_text_color(*INK)
+            pdf.cell(w - 10 - 12, 8, txt(ename))
+            pdf.set_text_color(*GREY)
+            pdf.cell(12, 8, str(epage), align="R")
+            pdf.set_xy(pdf.l_margin, y + 9)
+
     # --- Главы ---
     total = len(chapters)
-    for i, (ctitle, body) in enumerate(chapters, start=1):
+    chapter_pages: list[int] = []
+    for i, (ctitle, body, epigraph) in enumerate(chapters, start=1):
         pdf.add_page()
+        chapter_pages.append(pdf.page_no())
         pdf.set_font(pdf.bold, size=10)
         pdf.set_text_color(*GOLD)
         pdf.cell(0, 6, txt(f"ГЛАВА {i} ИЗ {total}"))
@@ -126,6 +164,20 @@ def render_book_pdf(
         rule(w, color=accent, thick=0.5)
         pdf.set_x(pdf.l_margin)
         pdf.ln(6)
+
+        if epigraph:
+            inset = 14
+            pdf.set_left_margin(pdf.l_margin + inset)
+            pdf.set_x(pdf.l_margin + inset)
+            pdf.set_font(pdf.body, size=11.5)
+            pdf.set_text_color(*GOLD)
+            pdf.multi_cell(w - inset * 2, 6.2, txt("« " + epigraph.strip(" «»\"") + " »"), align="C")
+            pdf.set_left_margin(pdf.l_margin)
+            pdf.set_x(pdf.l_margin)
+            pdf.ln(4)
+            rule(20, color=GOLD, thick=0.4)
+            pdf.set_x(pdf.l_margin)
+            pdf.ln(6)
 
         for block in (body or "").split("\n\n"):
             block = block.strip()
@@ -144,6 +196,41 @@ def render_book_pdf(
         pdf.ln(4)
         para(footer_note, 9, color=GREY, align="L")
 
+    return pdf, chapter_pages
+
+
+def render_book_pdf(
+    *,
+    title: str,
+    subtitle: str,
+    author_line: str,
+    chapters,  # list[tuple[str, str]] | list[tuple[str, str, str]] (title, body[, epigraph])
+    accent: tuple[int, int, int] = ACCENT,
+    footer_note: str = "",
+) -> bytes:
+    # нормализуем главы к (title, body, epigraph)
+    norm: list[tuple[str, str, str]] = []
+    for ch in chapters:
+        if len(ch) >= 3:
+            norm.append((ch[0], ch[1], ch[2] or ""))
+        else:
+            norm.append((ch[0], ch[1], ""))
+    chapters = norm
+
+    common = dict(
+        title=title, subtitle=subtitle, author_line=author_line,
+        chapters=chapters, accent=accent, footer_note=footer_note,
+    )
+
+    # Проход 1 — без оглавления, чтобы узнать страницы глав.
+    _, pages1 = _build_book(**common, toc_entries=None)
+    # В проходе 2 добавляется страница содержания после обложки → все главы +1.
+    # Видимый номер в подвале = page_no() - 1, поэтому видимая страница главы = pages1[i].
+    toc_entries = [(ctitle, pages1[i]) for i, (ctitle, _b, _e) in enumerate(chapters)]
+
+    # Проход 2 — финальный документ с оглавлением.
+    pdf, _ = _build_book(**common, toc_entries=toc_entries)
+
     raw = pdf.output()
     if isinstance(raw, (bytes, bytearray)):
         return bytes(raw)
@@ -152,13 +239,18 @@ def render_book_pdf(
 
 # --- Кодирование/разбор глав для хранения в pdf_source ---
 
-_T, _S, _A, _C = "@@TITLE@@", "@@SUB@@", "@@AUTHOR@@", "@@CH@@"
+_T, _S, _A, _C, _E = "@@TITLE@@", "@@SUB@@", "@@AUTHOR@@", "@@CH@@", "@@EP@@"
 
 
-def encode_book(title: str, subtitle: str, author_line: str, chapters: list[tuple[str, str]]) -> str:
+def encode_book(title: str, subtitle: str, author_line: str, chapters) -> str:
+    """chapters: list[(title, body)] или list[(title, body, epigraph)]."""
     out = [f"{_T}{title}", f"{_S}{subtitle}", f"{_A}{author_line}"]
-    for ctitle, body in chapters:
+    for ch in chapters:
+        ctitle, body = ch[0], ch[1]
+        epigraph = ch[2] if len(ch) >= 3 else ""
         out.append(f"{_C}{ctitle}")
+        if epigraph:
+            out.append(f"{_E}{epigraph.strip()}")
         out.append(body.strip())
     return "\n".join(out)
 
@@ -169,13 +261,14 @@ def is_encoded_book(content: str) -> bool:
 
 def decode_book(content: str) -> dict:
     title = subtitle = author = ""
-    chapters: list[tuple[str, str]] = []
+    chapters: list[tuple[str, str, str]] = []
     cur_title: str | None = None
+    cur_ep = ""
     cur_body: list[str] = []
 
     def flush() -> None:
         if cur_title is not None:
-            chapters.append((cur_title, "\n".join(cur_body).strip()))
+            chapters.append((cur_title, "\n".join(cur_body).strip(), cur_ep))
 
     for line in (content or "").splitlines():
         if line.startswith(_T):
@@ -187,7 +280,10 @@ def decode_book(content: str) -> dict:
         elif line.startswith(_C):
             flush()
             cur_title = line[len(_C):].strip()
+            cur_ep = ""
             cur_body = []
+        elif line.startswith(_E):
+            cur_ep = line[len(_E):].strip()
         else:
             if cur_title is not None:
                 cur_body.append(line)

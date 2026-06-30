@@ -52,7 +52,12 @@ async def oracle_chat_with_system(
     temperature: float = 0.85,
     max_tokens: int = 1400,
 ) -> str:
-    """Чат с произвольным system-промптом (для книг-разборов). groq → kupi → gemini."""
+    """Чат с произвольным system-промптом (для книг-разборов).
+
+    Порядок: Groq → Gemini → Kupi. Gemini Flash раньше прокси Kupi, потому что у
+    Groq низкий дневной лимит токенов (free tier), а Gemini free tier щедрый и
+    стабильный — так книга не упирается в лимит и не ждёт таймаут прокси.
+    """
     async with _llm_sem():
         errors: list[str] = []
         if groq_configured():
@@ -63,6 +68,17 @@ async def oracle_chat_with_system(
             except Exception as e:  # noqa: BLE001
                 errors.append(f"Groq: {e}")
                 logger.warning("book groq: %s", e)
+        if gemini_llm_configured():
+            try:
+                return await gemini_chat_completion(
+                    [{"role": "user", "content": user_prompt}],
+                    system=system,
+                    temperature=temperature,
+                    timeout_sec=120,
+                )
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"Gemini: {e}")
+                logger.warning("book gemini: %s", e)
         try:
             return await kupi_chat(
                 user_prompt,
@@ -81,16 +97,6 @@ async def oracle_chat_with_system(
         except Exception as e:  # noqa: BLE001
             errors.append(f"Kupi: {e}")
             logger.warning("book kupi: %s", e)
-        if gemini_llm_configured():
-            try:
-                return await gemini_chat_completion(
-                    [{"role": "user", "content": user_prompt}],
-                    system=system,
-                    temperature=temperature,
-                    timeout_sec=120,
-                )
-            except Exception as e:  # noqa: BLE001
-                errors.append(f"Gemini: {e}")
         hint = errors[-1] if errors else "нет провайдеров"
         raise LLMError(f"Книга временно недоступна. {hint}")
 
