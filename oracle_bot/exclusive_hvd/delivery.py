@@ -71,12 +71,14 @@ async def deliver_hvd_report(bot, user_id: int) -> bool:
 def _save_followup_and_pdf(user_id: int, profile, sections) -> None:
     import re
 
-    from oracle_bot.exclusive_hvd.narrative import book_plain_text
+    from oracle_bot.exclusive_hvd.narrative import book_for_pdf, book_plain_text
 
     if sections:
         full = book_plain_text(profile, sections).strip()
+        pdf_content = book_for_pdf(profile, sections)
     else:
         full = re.sub(r"<[^>]+>", "", "\n\n".join(render_template(profile))).strip()
+        pdf_content = full
     try:
         db.save_session(
             user_id,
@@ -84,7 +86,7 @@ def _save_followup_and_pdf(user_id: int, profile, sections) -> None:
             snippet=full[:500],
             last_context=full[:3500],
         )
-        db.save_pdf_source(user_id, "pdf_hvd", f"ХВД — {profile.name}", full)
+        db.save_pdf_source(user_id, "pdf_hvd", f"ХВД — {profile.name}", pdf_content)
     except Exception as e:
         logger.warning("hvd followup/pdf save %s: %s", user_id, e)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 from dataclasses import dataclass
 
 from oracle_bot.book_writer import SectionSpec, write_sections
@@ -11,9 +12,38 @@ from oracle_bot.exclusive_hvd.calculator import HVDProfile
 from oracle_bot.exclusive_hvd.interpreter import CHAKRA_MEANING
 from oracle_bot.exclusive_hvd.report import build_report_parts  # шаблонный фолбэк
 
+try:
+    from oracle_bot.exclusive_hvd.knowledge import (
+        chakras_course_text,
+        contour_course_text,
+        intro_course_text,
+        period_digit_course_text,
+        reactivity_course_text,
+        task_course_text,
+        typology_course_text,
+        yinyang_course_text,
+    )
+except Exception:  # noqa: BLE001
+    def _empty(*a, **k):  # type: ignore
+        return ""
+
+    chakras_course_text = contour_course_text = intro_course_text = _empty  # type: ignore
+    period_digit_course_text = reactivity_course_text = task_course_text = _empty  # type: ignore
+    typology_course_text = yinyang_course_text = _empty  # type: ignore
+
 logger = logging.getLogger(__name__)
 
 _TG_LIMIT = 3900
+
+
+def _course(text: str, limit: int = 1100) -> str:
+    """Очищает и обрезает материал курса для подачи в LLM как опору."""
+    text = " ".join((text or "").split())
+    if not text:
+        return ""
+    if len(text) > limit:
+        text = text[:limit].rsplit(".", 1)[0] + "."
+    return f"\n\nМатериал курса (перескажи смысл своими словами, не цитируй дословно):\n{text}"
 
 
 @dataclass
@@ -53,15 +83,113 @@ def _chakra_facts(profile: HVDProfile, names: tuple[str, ...]) -> str:
     return "\n".join(out)
 
 
-def _specs(profile: HVDProfile) -> list[SectionSpec]:
-    fb = {}
-    try:
-        parts = build_report_parts(profile)
-        # сопоставление фолбэков по индексам частей шаблона
-        fb = {i: p for i, p in enumerate(parts)}
-    except Exception as e:  # noqa: BLE001
-        logger.warning("hvd fallback parts: %s", e)
+def _clean_lvl(pct: int) -> str:
+    """Короткая чистая формулировка уровня (без оговорок) — для фолбэков."""
+    if pct >= 75:
+        return "очень сильно выражена"
+    if pct >= 60:
+        return "хорошо развита"
+    if pct >= 40:
+        return "в балансе"
+    if pct >= 25:
+        return "приглушена"
+    return "почти спит"
 
+
+def _clean_fallbacks(profile: HVDProfile, leadership: str) -> dict[str, str]:
+    """Чистые человеческие фолбэки по главам (без сырых транскриптов курса).
+
+    Используются, только если LLM полностью недоступен.
+    """
+    nm = profile.name
+    ch = _ch(profile)
+
+    def lv(name: str) -> str:
+        return _clean_lvl(ch.get(name, 0))
+
+    periods = " ".join(
+        f"В возрасте {p.age_range} на первый план выходит тема «{p.theme}»: {p.description}"
+        for p in profile.life_periods
+    )
+    return {
+        "С чего начинается эта книга": (
+            f"{nm}, эта книга — про тебя. ХВД (хронально-векторная диагностика) — это не "
+            "гадание, а карта личности, собранная по дате рождения. Она показывает твой "
+            "темперамент, характер и мышление, энергию внутренних центров, баланс инь и ян, "
+            "путь по возрастам и задачи души. Читай не спеша: в каждой главе ты будешь "
+            "узнавать свои черты и точнее понимать, почему ты именно такой."
+        ),
+        "Твоя кармическая типология": (
+            f"Твоя кармическая типология — основа характера, заложенная датой рождения. "
+            f"Её суть для тебя: {profile.typology_hint} Это твой главный жизненный сюжет: "
+            "здесь и сила, на которую можно опираться, и ловушка, через которую важно "
+            "вырасти. Узнавая свой тип, ты перестаёшь бороться с собой и начинаешь "
+            "действовать из своей природы."
+        ),
+        "Твоё тело и темперамент": (
+            f"Твой темперамент — {profile.physical.label}. Это про природную энергию, "
+            "выносливость и чувственность, про то, как тело откликается на нагрузку и "
+            f"какой ритм жизни тебе подходит. Опора и устойчивость («могу») у тебя "
+            f"{_clean_lvl(profile.can_pct)}. Энергия тела (Муладхара) {lv('Муладхара')}, "
+            f"чувственность и удовольствие (Свадхистана) {lv('Свадхистана')}. Заботясь о "
+            "теле и ритме, ты возвращаешь себе силу."
+        ),
+        "Твой характер и сердце": (
+            f"Твой характер — {profile.emotional.label}. Это про волю и самооценку, "
+            "отношение к деньгам и власти, про способность любить и принимать. "
+            f"Воля и самоутверждение (Манипура) {lv('Манипура')}, сердечность и любовь "
+            f"(Анахата) {lv('Анахата')}. {profile.egoism_note} Твоя позиция в отношениях — "
+            f"{leadership}. Тень здесь — не враг, а зона роста."
+        ),
+        "Как ты думаешь": (
+            f"Твоё мышление — {profile.intellectual.label}. Это про то, как ты "
+            "воспринимаешь мир, говоришь и принимаешь решения. Речь и самовыражение "
+            f"(Вишудха) {lv('Вишудха')}, интуиция и видение (Аджна) {lv('Аджна')}. "
+            "Когда ты доверяешь и логике, и внутреннему чутью, решения становятся точными."
+        ),
+        "Карта твоей энергии: семь центров": (
+            "Энергетические центры — это про то, где у тебя силы в избытке, а где их "
+            "стоит бережно пробуждать. Вот твоя карта: "
+            + "; ".join(f"{n} — {lv(n)}" for n in ch)
+            + ". Там, где энергии много, — твоя природная мощь (и риск перегруза); там, "
+            "где мало, — зона роста и заботы о себе."
+        ),
+        "Чего ты хочешь и что можешь": (
+            f"В тебе сочетаются инь (восприятие, накопление) и ян (действие, отдача): "
+            f"{'больше энергии действия' if profile.yang_pct>=profile.yin_pct else 'больше энергии восприятия'}. "
+            f"Разрыв между «хочу» и «могу» у тебя "
+            f"{'заметный — желания крупнее текущего ресурса, важно наполнять себя энергией' if profile.want>20 else 'небольшой — желания и возможности идут рядом'}. "
+            f"Твоя позиция — {leadership}. Когда ты бережно наполняешь себя, желания "
+            "доходят до результата."
+        ),
+        "Твой путь по возрастам": (
+            "Жизнь раскрывается по периодам, и у каждого своя тема и урок. " + periods
+            + " Это единая линия твоей судьбы — важно прожить каждый этап, не пропуская."
+        ),
+        "Задачи твоей души: прошлое, настоящее, род": (
+            f"У твоей души есть несколько задач. Из прошлого опыта: {profile.task_past_hint} "
+            f"Главный урок этой жизни: {profile.task_present_hint} По линии рода: "
+            f"{profile.task_lineage_hint} От родителей: {profile.task_parents_hint} "
+            "Вместе они складываются в твоё предназначение — направление, в котором "
+            "жизнь раскрывает тебя полнее всего."
+        ),
+        "Как жить в своём плюсе": (
+            "Жить в своём плюсе — значит наполнять энергией то, что приглушено, и не "
+            "перегорать там, где силы через край. Твоя карта центров: "
+            + "; ".join(f"{n} — {lv(n)}" for n in ch)
+            + ". Маленькие ежедневные опоры — режим, забота о теле, честность с собой — "
+            "возвращают тебя к ресурсу надёжнее любых рывков."
+        ),
+        "Напутствие лично тебе": (
+            f"{nm}, эта книга — про тебя настоящего. В ней собрано то, что обычно "
+            "прячется за повседневностью: твоя природа, твоя сила и твои задачи. У тебя "
+            "есть всё, чтобы прожить свою жизнь глубоко и честно. Возвращайся к этим "
+            "страницам, когда нужно вспомнить, кто ты и куда идёшь."
+        ),
+    }
+
+
+def _specs(profile: HVDProfile) -> list[SectionSpec]:
     ya, my = profile.reactivity_ya, profile.reactivity_my
     leadership = (
         "ярко выраженное «Я», лидер, который вовлекает других в свои задачи"
@@ -70,58 +198,95 @@ def _specs(profile: HVDProfile) -> list[SectionSpec]:
         if ya >= 55
         else "мягкое «Я», человек команды, которому важно «мы»"
     )
+    fbk = _clean_fallbacks(profile, leadership)
 
-    return [
+    periods_facts = "\n".join(
+        f"- {p.age_range}: тема «{p.theme}» — {p.description}" for p in profile.life_periods
+    )
+    periods_course = "".join(
+        _course(period_digit_course_text(d), 500)
+        for d in dict.fromkeys(p.digit for p in profile.life_periods)
+    )
+
+    specs = [
         SectionSpec(
-            title="Кто ты на самом деле",
+            title="С чего начинается эта книга",
             brief=(
-                "Вступление-портрет. Тёплое узнавание: какой это человек по сути, "
-                "его главный внутренний стержень и противоречие, как он выглядит со "
-                "стороны и какой он внутри. Задай тон всей книге."
+                "Вступление к книге. Объясни простыми, тёплыми словами, что такое ХВД "
+                "(хронально-векторная диагностика): это не гадание, а карта личности, "
+                "собранная по дате рождения — темперамент, характер, мышление, энергия, "
+                "задачи. Объясни, как читать эту книгу и почему она именно про него. "
+                "Создай ощущение, что человек открывает книгу про самого себя."
             ),
             facts=(
-                f"Кармическая типология: {profile.typology_hint}\n"
-                f"Темперамент: {profile.physical.label}\n"
-                f"Характер: {profile.emotional.label}\n"
-                f"Мышление: {profile.intellectual.label}\n"
-                f"Позиция «Я/Мы»: {leadership}"
+                f"Это личная книга для: {profile.name}.\n"
+                "Метод ХВД раскрывает: кармическую типологию, три контура "
+                "(тело/характер/мышление), энергию семи центров, баланс инь/ян, "
+                "путь по возрастам и задачи души." + _course(intro_course_text(), 900)
             ),
-            words="240–320",
-            fallback=fb.get(0, ""),
+            words="220–300",
+            fallback="",
+        ),
+        SectionSpec(
+            title="Твоя кармическая типология",
+            brief=(
+                "Сначала объясни, ЧТО такое кармическая типология в методе ХВД, ЗАЧЕМ "
+                "она и КАК определяется (по сумме цифр даты рождения, сводится к одному "
+                "числу-архетипу). Потом — подробно и лично: что эта типология значит "
+                "именно для него, его главный жизненный урок, сила и ловушка типа."
+            ),
+            facts=(
+                f"Его кармическая типология — число {profile.typology}.\n"
+                f"Суть типологии: {profile.typology_hint}"
+                + _course(typology_course_text(profile.typology), 1200)
+            ),
+            words="260–340",
+            fallback="",
         ),
         SectionSpec(
             title="Твоё тело и темперамент",
             brief=(
-                "Физический контур: природная энергия, выносливость, чувственность, "
-                "как тело реагирует на стресс, какой ритм жизни ему подходит."
+                "Объясни, что такое физический контур и темперамент в ХВД и за что "
+                "отвечают центры Муладхара (опора, тело, безопасность) и Свадхистана "
+                "(эмоции, удовольствие, чувственность). Потом — лично про него: его "
+                "природная энергия, выносливость, чувственность, реакция на стресс, "
+                "какой ритм жизни ему подходит."
             ),
             facts=(
                 f"Тип темперамента: {profile.physical.label}\n"
                 + _chakra_facts(profile, ("Муладхара", "Свадхистана"))
                 + f"\nВнутренняя устойчивость («могу»): {_lvl(profile.can_pct)}"
+                + _course(contour_course_text(profile.physical.label), 700)
             ),
-            fallback=fb.get(1, ""),
+            words="260–340",
+            fallback="",
         ),
         SectionSpec(
             title="Твой характер и сердце",
             brief=(
-                "Эмоциональный контур: воля и самооценка, отношение к деньгам и власти, "
-                "способность любить и принимать, как ведёт себя в близких отношениях и "
-                "в конфликте. Бережно про теневую сторону."
+                "Объясни, что такое эмоциональный контур и за что отвечают Манипура "
+                "(воля, самооценка, деньги, власть) и Анахата (любовь, принятие, "
+                "сострадание). Потом — лично: его воля и самооценка, отношение к деньгам "
+                "и власти, способность любить и принимать, как ведёт себя в близких "
+                "отношениях и в конфликте. Теневую сторону подавай бережно."
             ),
             facts=(
                 f"Тип характера: {profile.emotional.label}\n"
                 + _chakra_facts(profile, ("Манипура", "Анахата"))
                 + f"\nЭгоизм/альтруизм: {profile.reactivity}. {profile.egoism_note}\n"
                 f"Позиция: {leadership}"
+                + _course(contour_course_text(profile.emotional.label), 700)
             ),
-            fallback=fb.get(2, ""),
+            words="260–340",
+            fallback="",
         ),
         SectionSpec(
             title="Как ты думаешь",
             brief=(
-                "Интеллектуальный контур: стиль мышления, речь и самовыражение, "
-                "интуиция и анализ, как принимает решения, где сила ума, где ловушки."
+                "Объясни, что такое интеллектуальный контур и за что отвечают Вишудха "
+                "(речь, самовыражение, правда) и Аджна (интуиция, видение, анализ). "
+                "Потом — лично: его стиль мышления, речь, как принимает решения, баланс "
+                "логики и интуиции, где сила ума, где ловушки."
             ),
             facts=(
                 f"Тип мышления: {profile.intellectual.label}\n"
@@ -129,69 +294,117 @@ def _specs(profile: HVDProfile) -> list[SectionSpec]:
                 + f"\n{profile.sahasrara_hint}\n"
                 f"Вербальный интеллект {_lvl(int(profile.verbal_intellect))}; "
                 f"невербальный {_lvl(int(profile.nonverbal_intellect))}."
+                + _course(contour_course_text(profile.intellectual.label), 600)
             ),
-            fallback=fb.get(2, ""),
+            words="240–320",
+            fallback="",
+        ),
+        SectionSpec(
+            title="Карта твоей энергии: семь центров",
+            brief=(
+                "Объясни простыми словами, что такое чакры (энергоцентры) в методе ХВД и "
+                "почему важен их баланс: где-то энергии много (сила и риск перегруза), "
+                "где-то мало (зона роста). Пройди по всем центрам человека: что у него "
+                "сильно, что приглушено, и что это значит в реальной жизни."
+            ),
+            facts=(
+                "Энергия его центров:\n"
+                + "\n".join(f"- {n} ({CHAKRA_MEANING.get(n,'')}): {_lvl(p)}" for n, p in _ch(profile).items())
+                + _course(chakras_course_text(), 900)
+            ),
+            words="280–360",
+            fallback="",
         ),
         SectionSpec(
             title="Чего ты хочешь и что можешь",
             brief=(
-                "Энергия желаний и воплощения: баланс «инь/ян» (восприятие и действие), "
-                "разрыв между «хочу» и «могу», как наполнять себя энергией, чтобы "
-                "желания доходили до результата. Про чувственность — тактично, по-взрослому."
+                "Объясни баланс инь/ян в ХВД (инь — восприятие, накопление; ян — "
+                "действие, отдача) и что такое разрыв между «хочу» и «могу», а также "
+                "позиция «Я/Мы». Потом — лично: как ему наполнять энергию, чтобы желания "
+                "доходили до результата. Про чувственность — тактично, по-взрослому."
             ),
             facts=(
-                f"Инь (восприятие, накопление): {'преобладает' if profile.yin_pct>profile.yang_pct else 'в меру'}; "
-                f"Ян (действие, отдача): {'преобладает' if profile.yang_pct>=profile.yin_pct else 'в меру'}.\n"
-                f"Разрыв «хочу/могу»: {'заметный — желания крупнее, чем текущий ресурс' if profile.want>20 else 'небольшой — желания и возможности близки'}.\n"
-                f"Опора на действие («могу»): {_lvl(profile.can_pct)}."
+                f"Инь (восприятие): {'преобладает' if profile.yin_pct>profile.yang_pct else 'в меру'}; "
+                f"Ян (действие): {'преобладает' if profile.yang_pct>=profile.yin_pct else 'в меру'}.\n"
+                f"Разрыв «хочу/могу»: {'заметный — желания крупнее текущего ресурса' if profile.want>20 else 'небольшой — желания и возможности близки'}.\n"
+                f"Опора на действие («могу»): {_lvl(profile.can_pct)}.\n"
+                f"Позиция «Я/Мы»: {leadership}."
+                + _course(yinyang_course_text(), 700)
             ),
-            fallback=fb.get(3, ""),
+            words="240–320",
+            fallback="",
         ),
         SectionSpec(
             title="Твой путь по возрастам",
             brief=(
-                "Периоды жизни как глава-история: какие уроки и темы человек проходит "
-                "в каждом возрастном отрезке, что важно прожить и не пропустить. "
-                "Свяжи периоды в единую линию судьбы."
+                "Объясни, что в ХВД жизнь раскрывается по периодам-возрастам, и у каждого "
+                "своя тема и урок. Потом проведи человека по его периодам как по главам "
+                "истории: что важно прожить в каждом и не пропустить. Свяжи в единую "
+                "линию судьбы — прошлое, настоящее, будущее."
             ),
-            facts="\n".join(
-                f"- {p.age_range}: тема «{p.theme}» — {p.description}"
-                for p in profile.life_periods
-            ),
-            words="260–360",
-            fallback=fb.get(4, ""),
+            facts=periods_facts + periods_course,
+            words="300–380",
+            fallback="",
         ),
         SectionSpec(
-            title="Твои задачи и предназначение",
+            title="Задачи твоей души: прошлое, настоящее, род",
             brief=(
-                "Главные задачи души: что важно освоить (из прошлого опыта, в настоящем, "
-                "по линии рода и от родителей). Сведи в понятное предназначение — куда "
-                "ведёт эта жизнь и в чём её смысл именно для него."
+                "Объясни понятие задач души в ХВД: задача из прошлого (что уже наработано "
+                "и что осталось доделать), задача настоящего (главный урок этой жизни), "
+                "родовая задача и задача от родителей. По каждой — что это значит и как "
+                "проявляется у него. Сведи в понятное предназначение: куда ведёт эта жизнь."
             ),
             facts=(
                 f"Задача из прошлого: {profile.task_past_hint}\n"
                 f"Задача настоящего: {profile.task_present_hint}\n"
                 f"Родовая задача: {profile.task_lineage_hint}\n"
                 f"Задача от родителей: {profile.task_parents_hint}"
+                + _course(task_course_text(profile.task_present), 700)
             ),
-            fallback=fb.get(4, ""),
+            words="280–360",
+            fallback="",
         ),
         SectionSpec(
             title="Как жить в своём плюсе",
             brief=(
-                "Практичная тёплая глава-напутствие: как этому человеку наполнять "
-                "энергию там, где она проседает, и не перегорать там, где её через край. "
-                "Конкретные, выполнимые привычки и опоры на каждый день. Заверши книгу "
-                "поддерживающим, вдохновляющим абзацем лично к нему."
+                "Практичная тёплая глава. По данным об энергии центров дай конкретные, "
+                "выполнимые опоры на каждый день: что развивать там, где энергии мало, и "
+                "как не перегорать там, где её через край. Привычки, ритм, забота о себе."
             ),
             facts=(
                 "Энергия по центрам (что развивать, что разгружать):\n"
                 + "\n".join(f"- {n}: {_lvl(p)}" for n, p in _ch(profile).items())
+                + _course(chakras_course_text(), 600)
             ),
-            words="260–340",
-            fallback=fb.get(5, ""),
+            words="280–360",
+            fallback="",
+        ),
+        SectionSpec(
+            title="Напутствие лично тебе",
+            brief=(
+                "Тёплое личное обращение-послесловие к человеку: собери воедино, какой он "
+                "уникальный, в чём его сила и предназначение, и поддержи на пути. "
+                "Вдохновляюще, искренне, как письмо близкого человека. 1–2 абзаца."
+            ),
+            facts=(
+                f"Типология: {profile.typology_hint}. Темперамент: {profile.physical.label}. "
+                f"Характер: {profile.emotional.label}. Главный урок жизни: {profile.task_present_hint}."
+            ),
+            words="160–220",
+            fallback=(
+                f"{profile.name}, эта книга — про тебя настоящего. В ней собрано то, что "
+                "обычно прячется за повседневностью: твоя природа, твоя сила и твои "
+                "задачи. Ты человек, у которого есть всё, чтобы прожить свою жизнь "
+                "глубоко и честно. Возвращайся к этим страницам, когда нужно вспомнить, "
+                "кто ты и куда идёшь. Пусть знание о себе станет твоей опорой и теплом."
+            ),
         ),
     ]
+    for s in specs:
+        clean = fbk.get(s.title)
+        if clean:
+            s.fallback = clean
+    return specs
 
 
 def _passport(profile: HVDProfile) -> str:
@@ -212,14 +425,17 @@ def _passport(profile: HVDProfile) -> str:
 
 
 _TITLE_EMOJI = {
-    "Кто ты на самом деле": "✨",
+    "С чего начинается эта книга": "📖",
+    "Твоя кармическая типология": "🔑",
     "Твоё тело и темперамент": "⚡",
     "Твой характер и сердце": "💗",
     "Как ты думаешь": "🧠",
+    "Карта твоей энергии: семь центров": "🌈",
     "Чего ты хочешь и что можешь": "⚖️",
     "Твой путь по возрастам": "📅",
-    "Твои задачи и предназначение": "🎯",
+    "Задачи твоей души: прошлое, настоящее, род": "🎯",
     "Как жить в своём плюсе": "🌿",
+    "Напутствие лично тебе": "💌",
 }
 
 
@@ -234,12 +450,25 @@ def _to_html(body: str) -> str:
     return "\n".join(out)
 
 
+def _clean_fallback(text: str) -> str:
+    """Шаблонный фолбэк — это HTML с эмодзи. Чистим для книги/PDF."""
+    from oracle_bot.book_writer import _clean
+
+    text = re.sub(r"<br\s*/?>", "\n", text or "")
+    text = re.sub(r"</p>|</div>", "\n", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html.unescape(text)
+    return _clean(text).strip()
+
+
 async def build_hvd_book(profile: HVDProfile) -> list[Section]:
     specs = _specs(profile)
     bodies = await write_sections(profile.name, specs, concurrency=2)
     sections: list[Section] = []
     for spec, body in zip(specs, bodies):
-        body = (body or spec.fallback or "").strip()
+        body = (body or "").strip()
+        if not body:
+            body = _clean_fallback(spec.fallback)
         if not body:
             continue
         sections.append(Section(title=spec.title, body=body))
@@ -286,16 +515,40 @@ async def build_report_parts_async(profile: HVDProfile) -> list[str]:
     return render_tg_parts(profile, sections)
 
 
-def book_plain_text(profile: HVDProfile, sections: list[Section]) -> str:
-    """Полный текст книги для PDF/follow-up (с маркерами ## для подзаголовков)."""
-    out = [f"ХВД — твоя личная книга\n{profile.name} · {profile.birth.strftime('%d.%m.%Y')}"]
-    for sec in sections:
-        out.append(f"## {sec.title}\n\n{sec.body}")
+def _passport_plain(profile: HVDProfile) -> str:
     ch = _ch(profile)
-    out.append(
-        "## Паспорт ХВД\n\n"
-        f"Типология {profile.typology}. Темперамент: {profile.physical.label}. "
-        f"Характер: {profile.emotional.label}. Мышление: {profile.intellectual.label}.\n"
-        + ", ".join(f"{n} {p}%" for n, p in ch.items())
+    return (
+        "Эта страница — для тех, кто любит точные данные метода.\n\n"
+        f"Кармическая типология: {profile.typology}.\n"
+        f"Темперамент: {profile.physical.label}.\n"
+        f"Характер: {profile.emotional.label}.\n"
+        f"Мышление: {profile.intellectual.label}.\n"
+        "Энергия центров: " + ", ".join(f"{n} {p}%" for n, p in ch.items()) + ".\n"
+        f"Инь {profile.yin_pct}% · Ян {profile.yang_pct}% · "
+        f"Я/Мы {profile.reactivity_ya}%/{profile.reactivity_my}%.\n\n"
+        "ХВД по методике Жажкова–Солодкова. Продукт отдельный от Премиум. "
+        "Не заменяет медицинскую консультацию."
     )
+
+
+def book_for_pdf(profile: HVDProfile, sections: list[Section]) -> str:
+    """Богатая книга для PDF: кодированные главы (обложка + главы + паспорт)."""
+    from oracle_bot.book_pdf import encode_book
+
+    chapters: list[tuple[str, str]] = [(s.title, s.body) for s in sections]
+    chapters.append(("Паспорт ХВД", _passport_plain(profile)))
+    return encode_book(
+        title="ХВД",
+        subtitle="Личная книга-разбор по дате рождения",
+        author_line=f"{profile.name} · {profile.birth.strftime('%d.%m.%Y')}",
+        chapters=chapters,
+    )
+
+
+def book_plain_text(profile: HVDProfile, sections: list[Section]) -> str:
+    """Чистый текст книги для follow-up-контекста (без маркеров кодировки)."""
+    out = [f"ХВД — личная книга. {profile.name} · {profile.birth.strftime('%d.%m.%Y')}"]
+    for sec in sections:
+        out.append(f"{sec.title}\n{sec.body}")
+    out.append("Паспорт ХВД\n" + _passport_plain(profile))
     return "\n\n".join(out)

@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 # Иероглифы CJK, хангыль, тайский, арабский, иврит — недопустимы в русской книге
 _FOREIGN = re.compile(r"[\u0590-\u05ff\u0600-\u06ff\u0e00-\u0e7f\u3000-\u9fff\uac00-\ud7af]")
+# Латиница (английские слова) — тоже брак для русской книги
+_LATIN = re.compile(r"[A-Za-z]{2,}")
 # Эмодзи/пиктограммы — убираем из тела книги (нет в шрифте PDF, лишние в премиум-тексте)
 _EMOJI = re.compile(
     "[\U0001f000-\U0001faff\U00002600-\U000027bf\U0001f1e6-\U0001f1ff\u2190-\u21ff\u2b00-\u2bff\ufe0f]"
@@ -34,8 +36,9 @@ BOOK_SYSTEM = (
     "• Показывай и сильные стороны, и теневые — но тень подавай бережно, как зону роста.\n"
     "• Не задавай вопросов читателю. Не выдумывай факты биографии (имена, события).\n"
     "• Пиши абзацами. Без буллет-списков, без Markdown-звёздочек, без эмодзи.\n"
-    "• Пиши ИСКЛЮЧИТЕЛЬНО на русском языке. Никаких иероглифов, китайских, корейских, "
-    "арабских символов и иностранных слов — только грамотный живой русский.\n"
+    "• Пиши ИСКЛЮЧИТЕЛЬНО на русском языке. Ни одного английского или иностранного "
+    "слова, ни одного иероглифа или латинской буквы — только грамотный живой русский. "
+    "Если просится иностранное слово — подбери русское.\n"
     "• Если нужен подзаголовок внутри раздела — начинай строку с «## » (двойная решётка и пробел)."
 )
 
@@ -76,12 +79,19 @@ def _clean(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def _has_foreign(text: str) -> bool:
+    return bool(_FOREIGN.search(text) or _LATIN.search(text))
+
+
 def _sanitize_foreign(text: str) -> str:
-    """Убирает залётные иероглифы/иностранные символы и схлопывает пробелы."""
+    """Убирает залётные иероглифы/латиницу и приводит пробелы/пунктуацию в порядок."""
     text = _FOREIGN.sub("", text)
+    text = _LATIN.sub("", text)
     text = re.sub(r"[ \t]{2,}", " ", text)
-    text = re.sub(r" +([,.;:!?])", r"\1", text)
-    return text
+    text = re.sub(r"\s+([,.;:!?»)])", r"\1", text)
+    text = re.sub(r"([«(])\s+", r"\1", text)
+    text = re.sub(r"\bа\s+,", "а,", text)
+    return text.strip()
 
 
 async def write_section(person: str, spec: SectionSpec, *, timeout: float = 75.0) -> str:
@@ -91,8 +101,8 @@ async def write_section(person: str, spec: SectionSpec, *, timeout: float = 75.0
             timeout=timeout,
         )
         body = _clean(raw)
-        # премиум-качество: при залётных иероглифах — один аккуратный ретрай
-        if _FOREIGN.search(body):
+        # премиум-качество: при залётных иероглифах/латинице — один аккуратный ретрай
+        if _has_foreign(body):
             try:
                 raw2 = await asyncio.wait_for(
                     oracle_chat_with_system(
@@ -104,7 +114,7 @@ async def write_section(person: str, spec: SectionSpec, *, timeout: float = 75.0
                     timeout=timeout,
                 )
                 body2 = _clean(raw2)
-                if body2 and not _FOREIGN.search(body2):
+                if body2 and not _has_foreign(body2):
                     body = body2
                 else:
                     body = _sanitize_foreign(body2 or body)

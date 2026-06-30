@@ -14,10 +14,17 @@ from oracle_bot.fonts import register_pdf_font
 logger = logging.getLogger(__name__)
 
 
+_EMOJI = re.compile(
+    "[\U0001f000-\U0001faff\U00002600-\U000027bf\U0001f1e6-\U0001f1ff"
+    "\u2190-\u21ff\u2b00-\u2bff\u2300-\u23ff\u2700-\u27bf\ufe0f\u20e3]"
+)
+
+
 def _strip_html(text: str) -> str:
     text = re.sub(r"<br\s*/?>", "\n", text)
     text = re.sub(r"</p>|</div>", "\n", text)
     text = re.sub(r"<[^>]+>", "", text)
+    text = _EMOJI.sub("", text)
     return text
 
 
@@ -96,8 +103,21 @@ async def deliver_pdf(bot, user_id: int, kind: str) -> bool:
         "Документ сформирован персонально по вашему запросу в m-Oracul. "
         "Не является медицинской или юридической консультацией."
     )
+    content = src["content"]
     try:
-        pdf_bytes = build_pdf(title, src["content"], footer_note=footer)
+        from oracle_bot.book_pdf import decode_book, is_encoded_book, render_book_pdf
+
+        if is_encoded_book(content):
+            meta = decode_book(content)
+            pdf_bytes = render_book_pdf(
+                title=meta["title"] or title,
+                subtitle=meta["subtitle"],
+                author_line=meta["author"],
+                chapters=meta["chapters"],
+                footer_note=footer,
+            )
+        else:
+            pdf_bytes = build_pdf(title, content, footer_note=footer)
         safe = re.sub(r"[^0-9A-Za-zА-Яа-яЁё _-]", "_", title)[:40].strip() or "razbor"
         fname = f"{safe}_{date.today().strftime('%d%m%Y')}.pdf"
         doc = BufferedInputFile(pdf_bytes, filename=fname)
