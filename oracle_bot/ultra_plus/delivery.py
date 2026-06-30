@@ -57,7 +57,15 @@ async def deliver_ultra_plus_book(bot, user_id: int) -> bool:
                 f"Персональный PDF по Матрице Судьбы ({len(sections)} разделов)."
             ),
         )
-        await bot.send_message(user_id, "✅ Книга готова. Храни файл — повтор бесплатно только через поддержку.", reply_markup=kb_main())
+        _save_followup(user_id, profile.name, sections)
+        from oracle_bot.keyboards import kb_book_done
+
+        await bot.send_message(
+            user_id,
+            "✅ Книга готова. Храни файл — повтор бесплатно только через поддержку.\n\n"
+            "💬 Что-то непонятно в книге? Напиши вопрос — отвечу по твоему разбору.",
+            reply_markup=kb_book_done(),
+        )
     except Exception as e:
         logger.exception("ultra_plus deliver %s: %s", user_id, e)
         await bot.send_message(user_id, "⚠️ Не удалось собрать PDF. Напиши администратору.", reply_markup=kb_main())
@@ -65,3 +73,19 @@ async def deliver_ultra_plus_book(bot, user_id: int) -> bool:
 
     db.clear_ultra_plus_pending(user_id)
     return True
+
+
+def _save_followup(user_id: int, name: str, sections) -> None:
+    parts = []
+    for s in sections:
+        parts.append(f"{getattr(s, 'title', '')}\n{getattr(s, 'body', '')}")
+    full = "\n\n".join(parts).strip()
+    try:
+        db.save_session(
+            user_id,
+            module="ultra_plus",
+            snippet=full[:500],
+            last_context=full[:3500],
+        )
+    except Exception as e:
+        logger.warning("ultra followup save %s: %s", user_id, e)

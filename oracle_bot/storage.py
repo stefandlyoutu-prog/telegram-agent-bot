@@ -160,6 +160,14 @@ def init_db() -> None:
                 birth_date TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS pdf_source (
+                user_id INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, kind)
+            );
             """
         )
         for table, col in (("profiles", "birth_time"), ("profiles", "birth_place"), ("client_sessions", "last_context")):
@@ -1222,4 +1230,30 @@ def get_ultra_plus_pending(user_id: int) -> Optional[dict[str, Any]]:
 def clear_ultra_plus_pending(user_id: int) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM ultra_plus_pending WHERE user_id = ?", (user_id,))
+
+
+def save_pdf_source(user_id: int, kind: str, title: str, content: str) -> None:
+    """Сохраняет исходный текст разбора для последующей выгрузки в PDF."""
+    ensure_user(user_id)
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO pdf_source (user_id, kind, title, content, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, kind) DO UPDATE SET
+                title = excluded.title,
+                content = excluded.content,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, kind, title[:200], content[:60000], _now_iso()),
+        )
+
+
+def get_pdf_source(user_id: int, kind: str) -> Optional[dict[str, Any]]:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT title, content FROM pdf_source WHERE user_id = ? AND kind = ?",
+            (user_id, kind),
+        ).fetchone()
+    return dict(row) if row else None
 

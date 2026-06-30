@@ -71,6 +71,63 @@ def broadcast_keyboard():
     )
 
 
+def _free_day_link(source: str = "") -> str:
+    from oracle_bot.config import ORACLE_BOT_USERNAME
+
+    username = ORACLE_BOT_USERNAME.lstrip("@")
+    return f"https://t.me/{username}?start=free_day"
+
+
+def channel_post(source: str = "") -> str:
+    """Пост в канал: сегодня полный бесплатный доступ."""
+    u = source.lstrip("@").lower()
+    link = _free_day_link(u)
+    cta = f'👉 <a href="{link}">Открыть @MOracul_bot бесплатно</a>'
+    if u == "signsvishe":
+        return (
+            "✨ <b>Сегодня — полный доступ для всех</b>\n\n"
+            "До конца дня в @MOracul_bot <b>без лимитов</b>: "
+            "Таро, гороскоп, сонник, совместимость, натальная — "
+            "всё открыто, тестируй сколько хочешь.\n\n"
+            f"{cta}"
+        )
+    if u == "auragirlss":
+        return (
+            "💫 <b>Сегодня всё бесплатно в боте</b>\n\n"
+            "Чакры, совместимость, сонник, Таро, ладонь — "
+            "<b>до конца дня без ограничений</b> в @MOracul_bot. "
+            "Заходи и проверь на себе.\n\n"
+            f"{cta}"
+        )
+    return (
+        "🎁 <b>Сегодня до конца дня — полный бесплатный доступ!</b>\n\n"
+        "В @MOracul_bot открыты <b>все разделы без лимитов</b>: "
+        "Таро, гороскоп на сегодня, совместимость, натальная карта и 25+ практик.\n\n"
+        "Заходи и протестируй — акция только сегодня.\n\n"
+        f"{cta}"
+    )
+
+
+async def post_to_admin_channels(bot) -> list[dict[str, Any]]:
+    """Пост во все каналы из ORACLE_PROMO_CHANNELS, где бот может писать."""
+    from oracle_bot.broadcast import post_to_channels
+    from oracle_bot.config import ORACLE_PROMO_CHANNELS
+
+    channels = [c.strip().lstrip("@") for c in ORACLE_PROMO_CHANNELS if c.strip()]
+    if not channels:
+        return []
+    posts = [channel_post(ch) for ch in channels]
+    results = await post_to_channels(bot, posts, channels)
+    day = get_free_day_date() or msk_today()
+    db.kv_set(
+        f"free_day_channels_{day}",
+        json.dumps(results, ensure_ascii=False),
+    )
+    db.log_event(None, "free_day_channels", json.dumps(results)[:500])
+    logger.info("free day channel posts %s: %s", day, results)
+    return results
+
+
 def track_visit(user_id: int, start_args: str = "") -> None:
     if not is_free_day_active():
         return

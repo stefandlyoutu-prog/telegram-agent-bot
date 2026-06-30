@@ -66,6 +66,10 @@ services:
         value: "599"
       - key: ORACLE_ULTRA_PLUS_PRICE_RUB
         value: "1499"
+      - key: ORACLE_PDF_HVD_PRICE_RUB
+        value: "200"
+      - key: ORACLE_PDF_READING_PRICE_RUB
+        value: "99"
       - key: ORACLE_ADMIN_IDS
         value: "5845195049"
       - key: ROBOKASSA_HASH

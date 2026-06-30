@@ -104,6 +104,9 @@ ROBOKASSA_HASH = os.getenv("ROBOKASSA_HASH", "md5").strip().lower()
 ORACLE_DEEP_PRICE_RUB = int(os.getenv("ORACLE_DEEP_PRICE_RUB", "99"))
 ORACLE_EXCLUSIVE_HVD_PRICE_RUB = int(os.getenv("ORACLE_EXCLUSIVE_HVD_PRICE_RUB", "599"))
 ORACLE_ULTRA_PLUS_PRICE_RUB = int(os.getenv("ORACLE_ULTRA_PLUS_PRICE_RUB", "1499"))
+# PDF-довыгрузка: ХВД в книге PDF (+200₽), любой обычный расклад в PDF (+99₽)
+ORACLE_PDF_HVD_PRICE_RUB = int(os.getenv("ORACLE_PDF_HVD_PRICE_RUB", "200"))
+ORACLE_PDF_READING_PRICE_RUB = int(os.getenv("ORACLE_PDF_READING_PRICE_RUB", "99"))
 
 
 def robokassa_configured() -> bool:

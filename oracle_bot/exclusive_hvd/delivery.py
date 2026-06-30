@@ -40,12 +40,37 @@ async def deliver_hvd_report(bot, user_id: int) -> bool:
 
     parts = build_report_parts(profile)
     try:
+        from oracle_bot.keyboards import kb_hvd_done
+
         for chunk in parts:
             await bot.send_message(user_id, chunk)
-        await bot.send_message(user_id, "✅ Полный разбор ХВД готов.", reply_markup=kb_main())
+        await bot.send_message(
+            user_id,
+            "✅ Полный разбор ХВД готов.\n\n"
+            "💬 Что-то непонятно? Просто напиши вопрос — отвечу по твоему разбору.\n"
+            "📖 Хочешь всё это аккуратной книгой PDF — кнопка ниже.",
+            reply_markup=kb_hvd_done(),
+        )
     except Exception as e:
         logger.exception("deliver_hvd send %s: %s", user_id, e)
         return False
 
+    _save_followup_and_pdf(user_id, profile.name, parts)
     db.clear_hvd_pending(user_id)
     return True
+
+
+def _save_followup_and_pdf(user_id: int, name: str, parts: list[str]) -> None:
+    import re
+
+    full = re.sub(r"<[^>]+>", "", "\n\n".join(parts)).strip()
+    try:
+        db.save_session(
+            user_id,
+            module="exclusive_hvd",
+            snippet=full[:500],
+            last_context=full[:3500],
+        )
+        db.save_pdf_source(user_id, "pdf_hvd", f"ХВД — {name}", full)
+    except Exception as e:
+        logger.warning("hvd followup/pdf save %s: %s", user_id, e)

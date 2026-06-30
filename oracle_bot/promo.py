@@ -135,8 +135,22 @@ def post_referral(source: str = "") -> str:
     )
 
 
+def post_hvd(source: str = "") -> str:
+    from oracle_bot.ads import hvd_channel
+
+    return hvd_channel(source)
+
+
+def post_ultra(source: str = "") -> str:
+    from oracle_bot.ads import ultra_channel
+
+    return ultra_channel(source)
+
+
 PROMO_VARIANTS: list[tuple[str, Callable[[str], str]]] = [
+    ("hvd", post_hvd),
     ("tarot", post_tarot_hook),
+    ("ultra", post_ultra),
     ("dream", post_dream),
     ("voice", post_voice),
     ("compat", post_love_compat),

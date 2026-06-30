@@ -56,6 +56,9 @@ def fulfill_invoice(inv_id: int) -> Optional[dict[str, Any]]:
     elif kind == "ultra_plus":
         db.record_payment(uid, "ultra_plus", 0, f"robokassa:{inv_id}", currency="RUB", amount=amount)
         inv["_deliver_ultra_plus"] = True
+    elif kind in ("pdf_hvd", "pdf_reading"):
+        db.record_payment(uid, kind, 0, f"robokassa:{inv_id}", currency="RUB", amount=amount)
+        inv["_deliver_pdf"] = kind
     else:
         logger.warning("fulfill_invoice: неизвестный kind=%s inv=%s", kind, inv_id)
     return inv
@@ -102,6 +105,11 @@ async def notify_paid(bot, inv: dict[str, Any]) -> None:
 
             await bot.send_message(uid, "✅ Оплата получена. Собираю персональную книгу PDF…")
             await deliver_ultra_plus_book(bot, uid)
+        elif kind in ("pdf_hvd", "pdf_reading"):
+            from oracle_bot.pdf_export import deliver_pdf
+
+            await bot.send_message(uid, "✅ Оплата получена. Готовлю PDF…")
+            await deliver_pdf(bot, uid, kind)
     except Exception as e:
         logger.warning("notify_paid user %s: %s", uid, e)
 
@@ -116,6 +124,12 @@ async def notify_paid(bot, inv: dict[str, Any]) -> None:
             else "🔮 Эксклюзив HVD"
             if kind == "exclusive_hvd"
             else "📖 Ultra Plus"
+            if kind == "ultra_plus"
+            else "📄 ХВД в PDF"
+            if kind == "pdf_hvd"
+            else "📄 Разбор в PDF"
+            if kind == "pdf_reading"
+            else kind
         )
         await notify_admins(
             bot,

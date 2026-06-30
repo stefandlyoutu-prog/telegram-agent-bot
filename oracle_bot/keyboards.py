@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
-from oracle_bot.config import ORACLE_DEEP_STARS, ORACLE_EXCLUSIVE_HVD_PRICE_RUB, ORACLE_PREMIUM_STARS, ORACLE_REFERRAL_BONUS, ORACLE_ULTRA_PLUS_PRICE_RUB, ORACLE_WEBAPP_URL
+from oracle_bot.config import ORACLE_DEEP_STARS, ORACLE_EXCLUSIVE_HVD_PRICE_RUB, ORACLE_PDF_HVD_PRICE_RUB, ORACLE_PDF_READING_PRICE_RUB, ORACLE_PREMIUM_STARS, ORACLE_REFERRAL_BONUS, ORACLE_ULTRA_PLUS_PRICE_RUB, ORACLE_WEBAPP_URL
 from oracle_bot.mystic_data import ZODIAC_SIGNS
 from oracle_bot.paywall import referral_primary, stars_enabled
 from oracle_bot.prompts import CROSS_SELL
@@ -150,6 +150,32 @@ def kb_mystic() -> InlineKeyboardMarkup:
     )
 
 
+def kb_hvd_done() -> InlineKeyboardMarkup:
+    """После полного разбора ХВД: вопрос ассистенту + PDF-книга."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💬 Спросить по разбору", callback_data="ask:start")],
+            [
+                InlineKeyboardButton(
+                    text=f"📖 Получить в книге PDF · {ORACLE_PDF_HVD_PRICE_RUB}₽",
+                    callback_data="pdf:hvd",
+                )
+            ],
+            [InlineKeyboardButton(text="Меню", callback_data="nav:menu")],
+        ]
+    )
+
+
+def kb_book_done() -> InlineKeyboardMarkup:
+    """После Ultra Plus (книга уже PDF) — только вопрос ассистенту."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💬 Спросить по книге", callback_data="ask:start")],
+            [InlineKeyboardButton(text="Меню", callback_data="nav:menu")],
+        ]
+    )
+
+
 def kb_zodiac(prefix: str = "sign") -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     row: list[InlineKeyboardButton] = []
@@ -187,6 +213,16 @@ def kb_after_reading(
                     callback_data=f"deep:{cont_id}",
                 )
             ])
+    rows.append([
+        InlineKeyboardButton(text="💬 Спросить по разбору", callback_data="ask:start"),
+    ])
+    if module not in ("exclusive_hvd", "ultra_plus"):
+        rows.append([
+            InlineKeyboardButton(
+                text=f"📄 Сохранить в PDF · {ORACLE_PDF_READING_PRICE_RUB}₽",
+                callback_data="pdf:reading",
+            ),
+        ])
     cross = CROSS_SELL.get(module)
     if cross:
         label, data = cross

@@ -27,6 +27,8 @@ from oracle_bot.config import (
     ORACLE_DEEP_STARS,
     ORACLE_EXCLUSIVE_HVD_PRICE_RUB,
     ORACLE_FREE_PER_DAY,
+    ORACLE_PDF_HVD_PRICE_RUB,
+    ORACLE_PDF_READING_PRICE_RUB,
     ORACLE_PREMIUM_PRICE_RUB,
     ORACLE_ULTRA_PLUS_PRICE_RUB,
     ORACLE_PREMIUM_STARS,
@@ -373,12 +375,17 @@ async def _send_reading(
         logger.warning("footer: %s", e)
     from oracle_bot.dialogue import build_reading_context
 
+    reading_ctx = build_reading_context(text, cont_id, uid)
     db.save_session(
         uid,
         module=module,
         snippet=text[:500],
-        last_context=build_reading_context(text, cont_id, uid),
+        last_context=reading_ctx,
     )
+    try:
+        db.save_pdf_source(uid, "pdf_reading", header or module, reading_ctx or text)
+    except Exception as e:
+        logger.warning("pdf source save: %s", e)
     try:
         from oracle_bot.coach import after_reading_coach
 
@@ -499,6 +506,12 @@ def _robokassa_url(uid: int, kind: str, cont_id: int | None = None) -> str | Non
     elif kind == "ultra_plus":
         amount = ORACLE_ULTRA_PLUS_PRICE_RUB
         desc = "Оракул — Ultra Plus, Книга о тебе"
+    elif kind == "pdf_hvd":
+        amount = ORACLE_PDF_HVD_PRICE_RUB
+        desc = "Оракул — ХВД в книге PDF"
+    elif kind == "pdf_reading":
+        amount = ORACLE_PDF_READING_PRICE_RUB
+        desc = "Оракул — разбор в PDF"
     else:
         amount = ORACLE_DEEP_PRICE_RUB
         desc = "Оракул — продолжение чтения"
@@ -862,6 +875,53 @@ async def _run_broadcast(message: Message, text: str) -> None:
     await status.edit_text(f"✅ Рассылка готова: доставлено {ok}, ошибок {fail}.")
 
 
+@router.message(Command("promo_books"))
+async def cmd_promo_books(message: Message, command: CommandObject) -> None:
+    """Персональная рассылка рекламы ХВД + Ultra Plus в личку всем."""
+    uid = message.from_user.id if message.from_user else 0
+    if not _is_admin(uid):
+        await message.answer("Нет доступа.")
+        return
+    variant = (command.args or "combo").strip().lower()
+    if variant not in ("combo", "hvd", "ultra"):
+        variant = "combo"
+    from oracle_bot.ads import push_books_ad_to_all
+
+    status = await message.answer(f"📤 Рассылаю рекламу книг ({variant}) в личку…")
+    try:
+        res = await push_books_ad_to_all(message.bot, variant=variant)
+        await status.edit_text(
+            f"✅ Реклама книг ({variant}): доставлено <b>{res['ok']}</b> из "
+            f"{res['total']} (ошибок {res['fail']})."
+        )
+    except Exception as e:
+        await status.edit_text(f"⚠️ Ошибка рассылки: {e}")
+
+
+@router.message(Command("seed_week"))
+async def cmd_seed_week(message: Message, command: CommandObject) -> None:
+    """Пересобрать недельную очередь постов по каналам (ХВД/Ultra включены)."""
+    uid = message.from_user.id if message.from_user else 0
+    if not _is_admin(uid):
+        await message.answer("Нет доступа.")
+        return
+    from datetime import date, timedelta
+
+    from oracle_bot.channel_queue import seed_week_queue
+
+    arg = (command.args or "").strip().lower()
+    start = date.today() + timedelta(days=1) if arg in ("tomorrow", "завтра", "") else date.today()
+    try:
+        res = seed_week_queue(start_day=start, days=7, replace_pending=True)
+        await message.answer(
+            f"✅ Очередь каналов пересобрана с {res['start']} на {res['days']} дн.\n"
+            f"Поставлено постов: <b>{res['enqueued']}</b> · в ожидании: {res['pending']}.\n"
+            "Реклама ХВД и Ultra Plus включена в ротацию."
+        )
+    except Exception as e:
+        await message.answer(f"⚠️ Ошибка: {e}")
+
+
 @router.message(Command("free_day"))
 async def cmd_free_day(message: Message) -> None:
     uid = message.from_user.id if message.from_user else 0
@@ -982,6 +1042,89 @@ async def cb_deep(call: CallbackQuery) -> None:
         return
     if call.message:
         await _offer_deep(call.message, uid, cont_id)
+
+
+@router.callback_query(F.data == "ask:start")
+async def cb_ask_start(call: CallbackQuery) -> None:
+    await call.answer()
+    uid = call.from_user.id if call.from_user else 0
+    if uid:
+        analytics_mod.track_click(uid, "ask:start")
+    from oracle_bot.dialogue import has_context
+
+    if call.message:
+        if has_context(uid):
+            await call.message.answer(
+                "💬 Напиши свой вопрос по разбору — отвечу как личный ассистент, "
+                "опираясь на твои данные. Например: «что это значит для отношений?», "
+                "«с чего начать?», «как это в деньгах?»"
+            )
+        else:
+            await call.message.answer(
+                "Сначала сделай любой разбор в /menu — потом сможешь задавать "
+                "уточняющие вопросы по нему."
+            )
+
+
+async def _offer_pdf(message: Message, uid: int, kind: str, price: int, title: str) -> None:
+    url = _robokassa_url(uid, kind)
+    if not url:
+        await message.answer("Оплата картой временно недоступна. Напиши администратору.")
+        return
+    if uid:
+        analytics_mod.track_payment_intent(uid, kind)
+    rows = [
+        [InlineKeyboardButton(text=f"💳 Картой/СБП — {price}₽", url=url)],
+        [InlineKeyboardButton(text="📄 Оферта", url=_oferta_link())],
+    ]
+    await message.answer(
+        f"📄 <b>{title}</b>\n\n"
+        "Аккуратный PDF-файл с твоим разбором — можно сохранить, распечатать "
+        "или подарить. Оформляется отдельно.\n\nВыбери способ оплаты:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+@router.callback_query(F.data == "pdf:reading")
+async def cb_pdf_reading(call: CallbackQuery) -> None:
+    await call.answer()
+    uid = call.from_user.id if call.from_user else 0
+    if uid:
+        analytics_mod.track_click(uid, "pdf:reading")
+    if not db.get_pdf_source(uid, "pdf_reading"):
+        if call.message:
+            await call.message.answer("Сначала сделай разбор — потом сохраню его в PDF.")
+        return
+    if not call.message:
+        return
+    if is_admin_user(uid):
+        from oracle_bot.pdf_export import deliver_pdf
+
+        await call.message.answer("👑 Админ — отправляю PDF без оплаты…")
+        await deliver_pdf(call.message.bot, uid, "pdf_reading")
+        return
+    await _offer_pdf(call.message, uid, "pdf_reading", ORACLE_PDF_READING_PRICE_RUB, "Разбор в PDF")
+
+
+@router.callback_query(F.data == "pdf:hvd")
+async def cb_pdf_hvd(call: CallbackQuery) -> None:
+    await call.answer()
+    uid = call.from_user.id if call.from_user else 0
+    if uid:
+        analytics_mod.track_click(uid, "pdf:hvd")
+    if not db.get_pdf_source(uid, "pdf_hvd"):
+        if call.message:
+            await call.message.answer("Сначала получи разбор ХВД — потом соберу книгу PDF.")
+        return
+    if not call.message:
+        return
+    if is_admin_user(uid):
+        from oracle_bot.pdf_export import deliver_pdf
+
+        await call.message.answer("👑 Админ — отправляю книгу PDF без оплаты…")
+        await deliver_pdf(call.message.bot, uid, "pdf_hvd")
+        return
+    await _offer_pdf(call.message, uid, "pdf_hvd", ORACLE_PDF_HVD_PRICE_RUB, "ХВД — книга PDF")
 
 
 @router.pre_checkout_query()
