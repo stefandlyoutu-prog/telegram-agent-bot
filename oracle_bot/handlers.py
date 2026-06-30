@@ -1511,6 +1511,7 @@ async def exclusive_hvd_flow(message: Message, state: FSMContext) -> None:
     await message.answer(build_teaser(profile))
 
     if is_admin_user(uid):
+        await message.answer("👑 Админ — полный разбор ХВД без оплаты…")
         await deliver_hvd_report(message.bot, uid)
         return
 

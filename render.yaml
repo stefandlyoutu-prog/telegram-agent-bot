@@ -62,6 +62,12 @@ services:
         value: "299"
       - key: ORACLE_DEEP_PRICE_RUB
         value: "99"
+      - key: ORACLE_EXCLUSIVE_HVD_PRICE_RUB
+        value: "599"
+      - key: ORACLE_ULTRA_PLUS_PRICE_RUB
+        value: "1499"
+      - key: ORACLE_ADMIN_IDS
+        value: "5845195049"
       - key: ROBOKASSA_HASH
         value: "md5"       # как в кабинете Робокассы (Технические настройки)
       - key: ORACLE_STARS_ENABLED

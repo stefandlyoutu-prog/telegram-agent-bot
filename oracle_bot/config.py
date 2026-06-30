@@ -50,10 +50,11 @@ ORACLE_COACH_SEPARATE = os.getenv("ORACLE_COACH_SEPARATE", "0") not in {"1", "tr
 
 ORACLE_ADMIN_IDS: set[int] = {
     int(x.strip())
-    for x in os.getenv(
-        "MONEY_ADMIN_IDS",
+    for raw in (
+        os.getenv("MONEY_ADMIN_IDS", ""),
         os.getenv("ORACLE_ADMIN_IDS", "5845195049"),
-    ).split(",")
+    )
+    for x in raw.split(",")
     if x.strip().isdigit()
 }
 
