@@ -74,6 +74,7 @@ def _build_book(
     pdf.set_margins(24, 24, 24)
     pdf.set_auto_page_break(auto=True, margin=22)
     pdf.setup()
+    base_l_margin = pdf.l_margin  # запоминаем ИСХОДНОЕ поле — оно не должно «плыть»
     w = pdf.w - pdf.l_margin - pdf.r_margin
     cx = pdf.w / 2
 
@@ -162,21 +163,24 @@ def _build_book(
         pdf.multi_cell(w, 10, txt(ctitle), align="L")
         pdf.ln(2)
         rule(w, color=accent, thick=0.5)
-        pdf.set_x(pdf.l_margin)
+        pdf.set_x(base_l_margin)
         pdf.ln(6)
 
         if epigraph:
             inset = 14
-            pdf.set_left_margin(pdf.l_margin + inset)
-            pdf.set_x(pdf.l_margin + inset)
+            # Важно: считаем отступ от ИСХОДНОГО поля (base_l_margin), а не от
+            # текущего pdf.l_margin — иначе поле накопительно "уезжает" с каждой
+            # главой и текст в итоге обрезается за краем страницы.
+            pdf.set_left_margin(base_l_margin + inset)
+            pdf.set_x(base_l_margin + inset)
             pdf.set_font(pdf.body, size=11.5)
             pdf.set_text_color(*GOLD)
             pdf.multi_cell(w - inset * 2, 6.2, txt("« " + epigraph.strip(" «»\"") + " »"), align="C")
-            pdf.set_left_margin(pdf.l_margin)
-            pdf.set_x(pdf.l_margin)
+            pdf.set_left_margin(base_l_margin)
+            pdf.set_x(base_l_margin)
             pdf.ln(4)
             rule(20, color=GOLD, thick=0.4)
-            pdf.set_x(pdf.l_margin)
+            pdf.set_x(base_l_margin)
             pdf.ln(6)
 
         for block in (body or "").split("\n\n"):
