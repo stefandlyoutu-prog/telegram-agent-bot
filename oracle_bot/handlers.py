@@ -713,6 +713,16 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
             logger.warning("admin return notify: %s", e)
 
     args = (command.args or "").strip()
+    if args.lower().startswith("p_"):
+        from oracle_bot.partners import handle_start_arg
+
+        handle_start_arg(uid, args)
+        if is_new:
+            await message.answer(
+                "👇 Сейчас открою <b>Таро</b> — задай один вопрос, первая часть бесплатно."
+            )
+            await _open_module(message, state, uid, "tarot")
+        return
     if args == "free_day":
         await message.answer(
             "🎁 <b>Бесплатный день активен!</b>\n\n"
@@ -991,6 +1001,55 @@ async def cmd_ref(message: Message) -> None:
     from oracle_bot.referrals import stats_text
 
     await message.answer(stats_text(uid), reply_markup=kb_referral(uid))
+
+
+@router.message(Command("partner"))
+async def cmd_partner(message: Message) -> None:
+    """Партнёрка 25% для админов пабликов: ссылка, статистика, выплата."""
+    uid = message.from_user.id if message.from_user else 0
+    db.ensure_user(uid)
+    from oracle_bot.partners import partner_text
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💸 Запросить выплату", callback_data="partner:payout")]
+        ]
+    )
+    await message.answer(partner_text(uid), reply_markup=kb, disable_web_page_preview=True)
+
+
+@router.callback_query(F.data == "partner:payout")
+async def cb_partner_payout(callback: CallbackQuery) -> None:
+    uid = callback.from_user.id if callback.from_user else 0
+    from oracle_bot.partners import MIN_PAYOUT_RUB
+
+    st = db.partner_stats(uid)
+    balance = st["balance_rub"]
+    if balance < MIN_PAYOUT_RUB:
+        await callback.answer(
+            f"Минимальная выплата {MIN_PAYOUT_RUB}₽. Сейчас к выплате {balance}₽.",
+            show_alert=True,
+        )
+        return
+    db.create_partner_payout(uid, balance)
+    await callback.answer("Заявка принята ✅")
+    if callback.message:
+        await callback.message.answer(
+            f"💸 <b>Заявка на выплату {balance}₽ принята.</b>\n"
+            "Напиши сюда номер телефона для СБП и название банка — "
+            "переведём в течение 24 часов."
+        )
+    try:
+        from oracle_bot.admin_notify import notify_admins
+
+        await notify_admins(
+            callback.bot,
+            f"💸 <b>Заявка на выплату партнёру</b>\n"
+            f"Партнёр <a href=\"tg://user?id={uid}\">{uid}</a> · <b>{balance}₽</b>\n"
+            "Свяжись и переведи, затем отметь в БД partner_payouts → paid.",
+        )
+    except Exception as e:
+        logger.warning("partner payout notify: %s", e)
 
 
 @router.message(Command("menu"))

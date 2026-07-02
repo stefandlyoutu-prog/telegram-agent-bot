@@ -191,6 +191,33 @@ def init_db() -> None:
             conn.execute("ALTER TABLE user_meta ADD COLUMN signup_source TEXT")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE user_meta ADD COLUMN partner_id INTEGER")
+        except sqlite3.OperationalError:
+            pass
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS partner_earnings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                partner_id INTEGER NOT NULL,
+                payer_id INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                amount_rub INTEGER NOT NULL,
+                commission_rub INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS partner_payouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                partner_id INTEGER NOT NULL,
+                amount_rub INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                details TEXT,
+                created_at TEXT NOT NULL,
+                paid_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_partner_earn ON partner_earnings(partner_id, created_at);
+            """
+        )
         for col, sql in (
             ("currency", "ALTER TABLE payments ADD COLUMN currency TEXT NOT NULL DEFAULT 'XTR'"),
             ("amount", "ALTER TABLE payments ADD COLUMN amount INTEGER NOT NULL DEFAULT 0"),
@@ -785,6 +812,97 @@ def signups_by_source(days: int = 30) -> list[dict[str, Any]]:
             (since,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def set_partner_ref(user_id: int, partner_id: int) -> bool:
+    """Привязка пользователя к партнёру (first-touch, самопривязка запрещена)."""
+    if partner_id <= 0 or user_id == partner_id:
+        return False
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT partner_id FROM user_meta WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        if row and row["partner_id"]:
+            return False
+        if row:
+            conn.execute(
+                "UPDATE user_meta SET partner_id = ? WHERE user_id = ?",
+                (partner_id, user_id),
+            )
+        else:
+            now = _now_iso()
+            conn.execute(
+                """
+                INSERT INTO user_meta (user_id, partner_id, push_opt_out, signup_at, last_active_at)
+                VALUES (?, ?, 0, ?, ?)
+                """,
+                (user_id, partner_id, now, now),
+            )
+    return True
+
+
+def get_partner_ref(user_id: int) -> int | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT partner_id FROM user_meta WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    return int(row["partner_id"]) if row and row["partner_id"] else None
+
+
+def add_partner_earning(
+    partner_id: int, payer_id: int, kind: str, amount_rub: int, commission_rub: int
+) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO partner_earnings (partner_id, payer_id, kind, amount_rub, commission_rub, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (partner_id, payer_id, kind, amount_rub, commission_rub, _now_iso()),
+        )
+    log_event(partner_id, "partner_earning", f"{kind}:{commission_rub}")
+
+
+def partner_stats(partner_id: int) -> dict[str, Any]:
+    """Статистика партнёра: приведено людей, оплат, начислено/выплачено ₽."""
+    with _connect() as conn:
+        referred = conn.execute(
+            "SELECT COUNT(*) FROM user_meta WHERE partner_id = ?", (partner_id,)
+        ).fetchone()[0]
+        earn = conn.execute(
+            """
+            SELECT COUNT(*), COALESCE(SUM(commission_rub), 0)
+            FROM partner_earnings WHERE partner_id = ?
+            """,
+            (partner_id,),
+        ).fetchone()
+        paid = conn.execute(
+            """
+            SELECT COALESCE(SUM(amount_rub), 0) FROM partner_payouts
+            WHERE partner_id = ? AND status != 'rejected'
+            """,
+            (partner_id,),
+        ).fetchone()[0]
+    earned = int(earn[1] or 0)
+    return {
+        "referred": int(referred or 0),
+        "payments": int(earn[0] or 0),
+        "earned_rub": earned,
+        "paid_rub": int(paid or 0),
+        "balance_rub": earned - int(paid or 0),
+    }
+
+
+def create_partner_payout(partner_id: int, amount_rub: int, details: str = "") -> int:
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO partner_payouts (partner_id, amount_rub, status, details, created_at)
+            VALUES (?, ?, 'pending', ?, ?)
+            """,
+            (partner_id, amount_rub, details[:300], _now_iso()),
+        )
+        return int(cur.lastrowid)
 
 
 def set_signup_source(user_id: int, source: str) -> None:

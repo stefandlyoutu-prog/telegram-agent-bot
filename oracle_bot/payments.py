@@ -76,6 +76,15 @@ def fulfill_invoice(inv_id: int) -> Optional[dict[str, Any]]:
         inv["_deliver_pdf"] = kind
     else:
         logger.warning("fulfill_invoice: неизвестный kind=%s inv=%s", kind, inv_id)
+
+    try:
+        from oracle_bot.partners import credit_for_payment
+
+        credited = credit_for_payment(uid, kind, amount)
+        if credited:
+            inv["_partner_credit"] = credited
+    except Exception as e:
+        logger.warning("partner credit inv %s: %s", inv_id, e)
     return inv
 
 
@@ -127,6 +136,22 @@ async def notify_paid(bot, inv: dict[str, Any]) -> None:
             await deliver_pdf(bot, uid, kind)
     except Exception as e:
         logger.warning("notify_paid user %s: %s", uid, e)
+
+    credited = inv.get("_partner_credit")
+    if credited:
+        partner_id, commission = credited
+        try:
+            from oracle_bot import storage as _db
+
+            st = _db.partner_stats(partner_id)
+            await bot.send_message(
+                partner_id,
+                f"🤝 <b>Партнёрское начисление: +{commission}₽</b>\n"
+                f"Человек по твоей ссылке оплатил продукт.\n"
+                f"К выплате: <b>{st['balance_rub']}₽</b> · /partner — статистика и выплата",
+            )
+        except Exception as e:
+            logger.warning("partner notify %s: %s", partner_id, e)
 
     try:
         from oracle_bot.admin_notify import notify_admins
