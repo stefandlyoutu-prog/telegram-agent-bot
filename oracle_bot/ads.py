@@ -272,27 +272,46 @@ EXTERNAL_CREATIVES: dict[str, "callable"] = {
 }
 
 
+def _already_bought(user_id: int, variant: str) -> bool:
+    """Не рекламируем то, что человек уже купил (combo — только если купил оба)."""
+    hvd = db.has_paid(user_id, "exclusive_hvd")
+    ultra = db.has_paid(user_id, "ultra_plus")
+    if variant == "hvd":
+        return hvd
+    if variant == "ultra":
+        return ultra
+    return hvd and ultra
+
+
+# После рассылки запускаем воронку возражений (час не купил → дожим).
+# Лестница ultra_plus сама спускается до ХВД и Премиума, поэтому для combo — она.
+_VARIANT_OBJECTION = {"combo": "ultra_plus", "hvd": "exclusive_hvd", "ultra": "ultra_plus"}
+
+
 async def push_books_ad_to_all(bot, *, variant: str = "combo") -> dict[str, Any]:
     """Персональная рассылка рекламы книг всем пользователям бота."""
     builder = {"combo": combo_dm, "hvd": hvd_dm, "ultra": ultra_dm}.get(variant, combo_dm)
+    obj_kind = _VARIANT_OBJECTION.get(variant, "ultra_plus")
     ids = db.all_user_ids()
-    ok = fail = 0
+    ok = fail = skipped = 0
     for user_id in ids:
         meta = db.get_user_meta(user_id)
-        if meta.get("push_opt_out"):
+        if meta.get("push_opt_out") or _already_bought(user_id, variant):
+            skipped += 1
             continue
+        sent = False
         try:
             await bot.send_message(
                 user_id, builder(user_id), parse_mode="HTML", reply_markup=kb_books()
             )
-            ok += 1
+            sent = True
         except TelegramRetryAfter as e:
             await asyncio.sleep(float(e.retry_after) + 0.5)
             try:
                 await bot.send_message(
                     user_id, builder(user_id), parse_mode="HTML", reply_markup=kb_books()
                 )
-                ok += 1
+                sent = True
             except Exception:
                 fail += 1
         except TelegramForbiddenError:
@@ -300,5 +319,14 @@ async def push_books_ad_to_all(bot, *, variant: str = "combo") -> dict[str, Any]
         except Exception as e:  # noqa: BLE001
             logger.warning("books ad %s: %s", user_id, e)
             fail += 1
+        if sent:
+            ok += 1
+            db.log_event(user_id, "books_ad_sent", variant)
+            try:
+                from oracle_bot.pushes import schedule_objection_flow
+
+                schedule_objection_flow(user_id, obj_kind)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("objection schedule %s: %s", user_id, e)
         await asyncio.sleep(0.05)
-    return {"total": len(ids), "ok": ok, "fail": fail}
+    return {"total": len(ids), "ok": ok, "fail": fail, "skipped": skipped}

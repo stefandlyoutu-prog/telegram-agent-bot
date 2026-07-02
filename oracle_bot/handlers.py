@@ -491,8 +491,18 @@ async def _send_deep_invoice(message: Message, cont_id: int) -> None:
     )
 
 
-def _robokassa_url(uid: int, kind: str, cont_id: int | None = None) -> str | None:
-    """Создаёт инвойс и возвращает ссылку Робокассы (или None если не настроена)."""
+def _robokassa_url(
+    uid: int,
+    kind: str,
+    cont_id: int | None = None,
+    *,
+    override_amount: int | None = None,
+) -> str | None:
+    """Создаёт инвойс и возвращает ссылку Робокассы (или None если не настроена).
+
+    override_amount — для скидочных предложений в воронке отработки возражений:
+    сумма другая, но kind тот же, поэтому выдача доступа при оплате работает как обычно.
+    """
     if not robokassa_configured() or uid <= 0:
         return None
     from oracle_bot.robokassa import build_payment_url
@@ -515,6 +525,9 @@ def _robokassa_url(uid: int, kind: str, cont_id: int | None = None) -> str | Non
     else:
         amount = ORACLE_DEEP_PRICE_RUB
         desc = "Оракул — продолжение чтения"
+    if override_amount is not None and override_amount > 0:
+        amount = override_amount
+        desc = f"{desc} (спецпредложение)"
     inv_id = db.create_invoice(uid, kind, amount, cont_id=cont_id)
     return build_payment_url(
         inv_id=inv_id,
@@ -558,6 +571,9 @@ async def _offer_exclusive_hvd(message: Message, uid: int) -> None:
         return
     if uid:
         analytics_mod.track_payment_intent(uid, "exclusive_hvd")
+        from oracle_bot.pushes import schedule_objection_flow
+
+        schedule_objection_flow(uid, "exclusive_hvd")
     rows = [
         [InlineKeyboardButton(text=f"💳 Картой/СБП — {ORACLE_EXCLUSIVE_HVD_PRICE_RUB}₽", url=url)],
         [InlineKeyboardButton(text="📄 Оферта", url=_oferta_link())],
@@ -581,6 +597,9 @@ async def _offer_ultra_plus(message: Message, uid: int) -> None:
         return
     if uid:
         analytics_mod.track_payment_intent(uid, "ultra_plus")
+        from oracle_bot.pushes import schedule_objection_flow
+
+        schedule_objection_flow(uid, "ultra_plus")
     rows = [
         [InlineKeyboardButton(text=f"💳 Картой/СБП — {ORACLE_ULTRA_PLUS_PRICE_RUB}₽", url=url)],
         [InlineKeyboardButton(text="📄 Оферта", url=_oferta_link())],
@@ -892,7 +911,9 @@ async def cmd_promo_books(message: Message, command: CommandObject) -> None:
         res = await push_books_ad_to_all(message.bot, variant=variant)
         await status.edit_text(
             f"✅ Реклама книг ({variant}): доставлено <b>{res['ok']}</b> из "
-            f"{res['total']} (ошибок {res['fail']})."
+            f"{res['total']} (ошибок {res['fail']}, пропущено {res.get('skipped', 0)} — "
+            "уже купили или отписались).\n"
+            "⏱ Через час тем, кто не купил, автоматически включится отработка возражений."
         )
     except Exception as e:
         await status.edit_text(f"⚠️ Ошибка рассылки: {e}")
@@ -1142,6 +1163,61 @@ async def cb_pdf_hvd(call: CallbackQuery) -> None:
         await deliver_pdf(call.message.bot, uid, "pdf_hvd")
         return
     await _offer_pdf(call.message, uid, "pdf_hvd", ORACLE_PDF_HVD_PRICE_RUB, "ХВД — книга PDF")
+
+
+_OBJ_LABEL = {"exclusive_hvd": "Эксклюзив ХВД", "ultra_plus": "Ultra Plus — Книга о тебе"}
+_OBJ_BASE_PRICE = {"exclusive_hvd": ORACLE_EXCLUSIVE_HVD_PRICE_RUB, "ultra_plus": ORACLE_ULTRA_PLUS_PRICE_RUB}
+
+
+@router.callback_query(F.data.startswith("obj:"))
+async def cb_objection(call: CallbackQuery) -> None:
+    """Ответ на вопрос воронки отработки возражений (obj_ask): почему не купил(а)."""
+    await call.answer()
+    if not call.message:
+        return
+    uid = call.from_user.id if call.from_user else 0
+    parts = (call.data or "").split(":")
+    reason = parts[1] if len(parts) > 1 else ""
+    kind = parts[2] if len(parts) > 2 else ""
+    label = _OBJ_LABEL.get(kind, "продукт")
+    base = _OBJ_BASE_PRICE.get(kind, 0)
+    if uid:
+        analytics_mod.track_click(uid, f"obj:{reason}:{kind}")
+
+    if reason == "bought":
+        from oracle_bot.pushes import cancel_objection_flow
+
+        cancel_objection_flow(uid, kind)
+        await call.message.answer("🙏 Отлично, спасибо! Если что-то ещё понадобится — я рядом.")
+        return
+
+    price20 = max(int(base * 0.8), 99)
+    url = _robokassa_url(uid, kind, override_amount=price20) if uid else None
+    rows: list[list[InlineKeyboardButton]] = []
+    if url:
+        rows.append([InlineKeyboardButton(text=f"💳 Забрать за {price20}₽ (−20%, лично тебе)", url=url)])
+    rows.append([InlineKeyboardButton(text="🏠 Меню", callback_data="nav:menu")])
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+
+    if reason == "price":
+        text = (
+            f"Понимаю 🙏 Тогда держи персональную скидку на «{label}»: "
+            f"<s>{base}₽</s> → <b>{price20}₽</b> (−20%). Предложение только для тебя "
+            "и только сейчас — потом такой цены не будет."
+        )
+    elif reason == "fit":
+        text = (
+            f"«{label}» — это не общие фразы, а разбор именно ТВОИХ данных: даты рождения "
+            "и уникального кода. Люди обычно находят там то, что интуитивно чувствовали, "
+            "но не могли сформулировать про себя. Заодно — скидка, чтобы решиться проще: "
+            f"<s>{base}₽</s> → <b>{price20}₽</b>."
+        )
+    else:  # later / неизвестная причина
+        text = (
+            "Хорошо, не тороплю 🙏 Просто чтобы не забыть: держи персональную скидку "
+            f"на «{label}» — <s>{base}₽</s> → <b>{price20}₽</b>. Она сгорит, если отложить надолго."
+        )
+    await call.message.answer(text, reply_markup=kb)
 
 
 @router.pre_checkout_query()

@@ -107,8 +107,11 @@ def _clean_fallbacks(profile: HVDProfile, leadership: str) -> dict[str, str]:
     def lv(name: str) -> str:
         return _clean_lvl(ch.get(name, 0))
 
+    span = 12
     periods = " ".join(
-        f"В возрасте {p.age_range} на первый план выходит тема «{p.theme}»: {p.description}"
+        f"В возрасте {(p.index - 1) * span}–{p.index * span} лет "
+        f"({profile.birth.year + (p.index - 1) * span}–{profile.birth.year + p.index * span} годы) "
+        f"на первый план выходит тема «{p.theme}»: {p.description}"
         for p in profile.life_periods
     )
     return {
@@ -189,6 +192,47 @@ def _clean_fallbacks(profile: HVDProfile, leadership: str) -> dict[str, str]:
     }
 
 
+def _period_timeline(profile: HVDProfile) -> tuple[str, str]:
+    """Конкретика по периодам: возраст + календарные годы + где человек сейчас.
+
+    Возвращает (строки фактов для LLM, короткая сводка «сейчас/дальше»).
+    """
+    from datetime import date as _date
+
+    today = _date.today()
+    age = today.year - profile.birth.year - (
+        (today.month, today.day) < (profile.birth.month, profile.birth.day)
+    )
+    lines: list[str] = [f"Сейчас человеку {age} лет (родился {profile.birth.strftime('%d.%m.%Y')})."]
+    now_line = ""
+    next_line = ""
+    span = 12  # PERIOD_AGE_YEARS в interpreter.py
+    for p in profile.life_periods:
+        start_age = (p.index - 1) * span  # index в калькуляторе идёт с 1
+        end_age = start_age + span
+        y_from = profile.birth.year + start_age
+        y_to = profile.birth.year + end_age
+        if start_age <= age < end_age:
+            status = "ЭТОТ ПЕРИОД ИДЁТ ПРЯМО СЕЙЧАС"
+            now_line = (
+                f"Текущий период: {start_age}–{end_age} лет ({y_from}–{y_to} гг.), "
+                f"тема «{p.theme}», продлится до {y_to} года."
+            )
+        elif age >= end_age:
+            status = "уже прожит"
+        else:
+            status = "впереди"
+            if not next_line:
+                next_line = (
+                    f"Следующий период начнётся в {y_from} году (в {start_age} лет): тема «{p.theme}»."
+                )
+        lines.append(
+            f"- {start_age}–{end_age} лет, это {y_from}–{y_to} годы ({status}): "
+            f"тема «{p.theme}» — {p.description}"
+        )
+    return "\n".join(lines), (now_line + " " + next_line).strip()
+
+
 def _specs(profile: HVDProfile) -> list[SectionSpec]:
     ya, my = profile.reactivity_ya, profile.reactivity_my
     leadership = (
@@ -200,9 +244,7 @@ def _specs(profile: HVDProfile) -> list[SectionSpec]:
     )
     fbk = _clean_fallbacks(profile, leadership)
 
-    periods_facts = "\n".join(
-        f"- {p.age_range}: тема «{p.theme}» — {p.description}" for p in profile.life_periods
-    )
+    periods_facts, periods_now = _period_timeline(profile)
     periods_course = "".join(
         _course(period_digit_course_text(d), 500)
         for d in dict.fromkeys(p.digit for p in profile.life_periods)
@@ -339,11 +381,15 @@ def _specs(profile: HVDProfile) -> list[SectionSpec]:
             brief=(
                 "Объясни, что в ХВД жизнь раскрывается по периодам-возрастам, и у каждого "
                 "своя тема и урок. Потом проведи человека по его периодам как по главам "
-                "истории: что важно прожить в каждом и не пропустить. Свяжи в единую "
-                "линию судьбы — прошлое, настоящее, будущее."
+                "истории. ОБЯЗАТЕЛЬНО называй конкретику: возраст И календарные годы "
+                "каждого периода («с 24 до 36 лет, то есть с 2018 по 2030 год»). "
+                "Прожитые периоды опиши коротко (что человек уже вынес). Главный акцент — "
+                "на ТЕКУЩЕМ периоде: что происходит сейчас, до какого года он длится, "
+                "что важно успеть. Затем — что ждёт в следующем периоде и с какого года "
+                "он начнётся. Никаких расплывчатых «когда-нибудь» — только точные годы."
             ),
-            facts=periods_facts + periods_course,
-            words="300–380",
+            facts=periods_facts + ("\n" + periods_now if periods_now else "") + periods_course,
+            words="320–420",
             fallback="",
         ),
         SectionSpec(

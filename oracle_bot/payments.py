@@ -37,9 +37,12 @@ def fulfill_invoice(inv_id: int) -> Optional[dict[str, Any]]:
         db.record_payment(uid, "premium_30d", 0, f"robokassa:{inv_id}", currency="RUB", amount=amount)
         db.cancel_pushes(uid, _PREMIUM_PUSHES)
         try:
-            from oracle_bot.pushes import schedule_premium_renewal
+            from oracle_bot.pushes import cancel_objection_flow, schedule_premium_renewal
 
             schedule_premium_renewal(uid, days=30)
+            # Премиум — финальная ступень воронки возражений: дожимать книги не нужно
+            cancel_objection_flow(uid, "exclusive_hvd")
+            cancel_objection_flow(uid, "ultra_plus")
         except Exception as e:
             logger.warning("renewal schedule: %s", e)
     elif kind == "deep_unlock":
@@ -53,9 +56,21 @@ def fulfill_invoice(inv_id: int) -> Optional[dict[str, Any]]:
     elif kind == "exclusive_hvd":
         db.record_payment(uid, "exclusive_hvd", 0, f"robokassa:{inv_id}", currency="RUB", amount=amount)
         inv["_deliver_hvd"] = True
+        try:
+            from oracle_bot.pushes import cancel_objection_flow
+
+            cancel_objection_flow(uid, "exclusive_hvd")
+        except Exception as e:
+            logger.warning("cancel objection hvd: %s", e)
     elif kind == "ultra_plus":
         db.record_payment(uid, "ultra_plus", 0, f"robokassa:{inv_id}", currency="RUB", amount=amount)
         inv["_deliver_ultra_plus"] = True
+        try:
+            from oracle_bot.pushes import cancel_objection_flow
+
+            cancel_objection_flow(uid, "ultra_plus")
+        except Exception as e:
+            logger.warning("cancel objection ultra: %s", e)
     elif kind in ("pdf_hvd", "pdf_reading"):
         db.record_payment(uid, kind, 0, f"robokassa:{inv_id}", currency="RUB", amount=amount)
         inv["_deliver_pdf"] = kind

@@ -657,6 +657,16 @@ def record_payment(
     log_event(user_id, "payment", f"{kind}:{currency}:{amount or stars}")
 
 
+def has_paid(user_id: int, kind: str) -> bool:
+    """Платил ли пользователь когда-либо за этот kind (payments — источник правды)."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM payments WHERE user_id = ? AND kind = ? LIMIT 1",
+            (user_id, kind),
+        ).fetchone()
+    return bool(row)
+
+
 def create_invoice(
     user_id: int,
     kind: str,
