@@ -247,6 +247,33 @@ async def api_admin_broadcast(body: AdminBroadcastBody):
     return await broadcast_text(_bot, text)
 
 
+class AdminChannelPostBody(BaseModel):
+    user_id: int
+    text: str = ""
+    channels: list[str] = []
+
+
+@app.post("/api/admin/channel-post")
+async def api_admin_channel_post(body: AdminChannelPostBody):
+    """Произвольный пост в свои каналы (по умолчанию — все промо-каналы)."""
+    if body.user_id <= 0 or not is_admin_user(body.user_id):
+        raise HTTPException(403, "Нет доступа")
+    text = (body.text or "").strip()
+    if len(text) < 2:
+        raise HTTPException(400, "Пустой текст")
+    from oracle_bot.cloud import _bot
+    from oracle_bot.broadcast import post_to_channels
+
+    if not _bot:
+        raise HTTPException(503, "Бот не инициализирован")
+    channels = [c.strip().lstrip("@") for c in body.channels if c.strip()]
+    if not channels:
+        from oracle_bot.config import ORACLE_PROMO_CHANNELS
+
+        channels = list(ORACLE_PROMO_CHANNELS)
+    return await post_to_channels(_bot, [text] * len(channels), channels)
+
+
 class AdminPromoBooksBody(BaseModel):
     user_id: int
     variant: str = "combo"
