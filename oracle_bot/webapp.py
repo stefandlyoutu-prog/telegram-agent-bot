@@ -261,8 +261,9 @@ async def api_admin_channel_post(body: AdminChannelPostBody):
     text = (body.text or "").strip()
     if len(text) < 2:
         raise HTTPException(400, "Пустой текст")
+    import asyncio as _asyncio
+
     from oracle_bot.cloud import _bot
-    from oracle_bot.broadcast import post_to_channels
 
     if not _bot:
         raise HTTPException(503, "Бот не инициализирован")
@@ -271,7 +272,15 @@ async def api_admin_channel_post(body: AdminChannelPostBody):
         from oracle_bot.config import ORACLE_PROMO_CHANNELS
 
         channels = list(ORACLE_PROMO_CHANNELS)
-    return await post_to_channels(_bot, [text] * len(channels), channels)
+    results = []
+    for u in channels:
+        try:
+            msg = await _bot.send_message(f"@{u}", text, parse_mode="HTML")
+            results.append({"channel": u, "ok": True, "message_id": msg.message_id})
+        except Exception as e:
+            results.append({"channel": u, "ok": False, "error": str(e)[:200]})
+        await _asyncio.sleep(1.0)
+    return results
 
 
 class AdminPromoBooksBody(BaseModel):
