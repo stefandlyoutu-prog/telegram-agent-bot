@@ -9,11 +9,31 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from oracle_bot import storage as db
 
 logger = logging.getLogger(__name__)
+
+_LAST_SENT_FILE = Path(__file__).resolve().parents[1] / "data" / "oracle_last_books_report.txt"
+
+
+def _last_sent_date() -> str | None:
+    try:
+        if _LAST_SENT_FILE.exists():
+            return _LAST_SENT_FILE.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        pass
+    return None
+
+
+def _mark_sent(today: str) -> None:
+    try:
+        _LAST_SENT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _LAST_SENT_FILE.write_text(today, encoding="utf-8")
+    except OSError:
+        pass
 
 _BOOK_KINDS = ("exclusive_hvd", "ultra_plus", "premium_30d")
 _KIND_LABEL = {
@@ -196,14 +216,13 @@ async def books_report_worker(bot, *, hour_msk: int = 22) -> None:
     """Раз в сутки в ~hour_msk МСК — итог продаж книг за день (устойчиво к рестартам)."""
     import asyncio
 
-    last_sent: str | None = None
     while True:
         try:
             now = datetime.now(_MSK)
             today = now.date().isoformat()
-            if now.hour == hour_msk and last_sent != today:
+            if now.hour == hour_msk and _last_sent_date() != today:
                 await send_sales_report(bot)
-                last_sent = today
+                _mark_sent(today)
                 logger.info("books sales report sent %s", today)
         except Exception:
             logger.exception("books_report_worker")
