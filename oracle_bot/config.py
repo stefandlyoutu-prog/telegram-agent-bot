@@ -37,6 +37,8 @@ ORACLE_FREE_DAY_REPORT = os.getenv("ORACLE_FREE_DAY_REPORT", "1") not in {
     "False",
 }
 ORACLE_FREE_DAY_REPORT_HOUR_MSK = int(os.getenv("ORACLE_FREE_DAY_REPORT_HOUR_MSK", "0"))
+# Итоговый отчёт по продажам книг (кампания ХВД/Ultra) — вечером по МСК
+ORACLE_BOOKS_REPORT_HOUR_MSK = int(os.getenv("ORACLE_BOOKS_REPORT_HOUR_MSK", "22"))
 ORACLE_CHANNEL_POSTS_ENABLED = os.getenv("ORACLE_CHANNEL_POSTS_ENABLED", "1") not in {
     "0",
     "false",

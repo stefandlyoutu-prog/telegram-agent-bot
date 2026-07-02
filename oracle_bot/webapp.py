@@ -247,6 +247,32 @@ async def api_admin_broadcast(body: AdminBroadcastBody):
     return await broadcast_text(_bot, text)
 
 
+class AdminPromoBooksBody(BaseModel):
+    user_id: int
+    variant: str = "combo"
+
+
+@app.post("/api/admin/promo-books")
+async def api_admin_promo_books(body: AdminPromoBooksBody):
+    """Прогноз админу + рассылка книг + запуск воронки возражений получателям."""
+    if body.user_id <= 0 or not is_admin_user(body.user_id):
+        raise HTTPException(403, "Нет доступа")
+    from oracle_bot.cloud import _bot
+
+    if not _bot:
+        raise HTTPException(503, "Бот не инициализирован")
+    variant = (body.variant or "combo").strip().lower()
+    if variant not in ("combo", "hvd", "ultra"):
+        variant = "combo"
+
+    from oracle_bot.ads import push_books_ad_to_all
+    from oracle_bot.campaign_report import send_forecast
+
+    await send_forecast(_bot, variant)
+    result = await push_books_ad_to_all(_bot, variant=variant)
+    return {"variant": variant, "result": result}
+
+
 class AdminFreeDayBody(BaseModel):
     user_id: int
 
