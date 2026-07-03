@@ -9,6 +9,9 @@ from typing import Any
 
 from video_bot.content_product.models import Scene, VideoScript
 from video_bot.content_product.prompts import (
+    FORMAT_HINT_INTERACTIVE,
+    FORMAT_HINT_PARABLE,
+    FORMAT_HINT_ZODIAC_LIST,
     PRODUCT_BRIEF_NOVA,
     PRODUCT_BRIEF_WORK_BOT,
     SCRIPT_JSON_PROMPT,
@@ -207,7 +210,10 @@ def _fallback_nova_potolki() -> VideoScript:
     )
 
 
-_ORACLE_HINTS = ("оракул", "таро", "гороскоп", "расклад", "знак", "карт", "судьб", "вселенн", "зодиак")
+_ORACLE_HINTS = (
+    "оракул", "таро", "гороскоп", "расклад", "знак", "карт", "судьб",
+    "вселенн", "зодиак", "притча", "загадай", "останови видео", "чакра",
+)
 
 
 def _is_oracle_topic(topic: str) -> bool:
@@ -348,23 +354,45 @@ async def generate_script(
     return _fallback_earn_2026()
 
 
+def _format_hint(topic: str) -> str:
+    """Виральный формат по теме (референсы: списки знаков, притчи, интерактив)."""
+    t = topic.lower()
+    if "притча" in t:
+        return FORMAT_HINT_PARABLE
+    if any(h in t for h in ("останови видео", "выбери карту", "загадай", "стопни")):
+        return FORMAT_HINT_INTERACTIVE
+    if "знаки зодиака" in t or ("знаки" in t and ("котор" in t or "душой" in t)):
+        return FORMAT_HINT_ZODIAC_LIST
+    return ""
+
+
 async def _generate_via_llm(topic: str, *, product_brief: str, cta: str) -> VideoScript:
-    from bot.services.gemini_llm import gemini_chat_completion, gemini_llm_configured
-
-    if not gemini_llm_configured():
-        raise RuntimeError("GEMINI_API_KEY не настроен")
-
     prompt = SCRIPT_JSON_PROMPT.format(
         topic=topic,
         product_brief=product_brief.strip(),
         cta=cta,
+        format_hint=_format_hint(topic),
     )
-    raw = await gemini_chat_completion(
-        [{"role": "user", "content": prompt}],
-        system=SYSTEM_SALES_DIRECTOR,
-        temperature=0.85,
-        timeout_sec=90,
-    )
+    raw = ""
+    try:
+        # Основной путь: цепочка Оракула (Groq → OpenAI платный → Gemini)
+        from oracle_bot.llm_helpers import oracle_chat_with_system
+
+        raw = await oracle_chat_with_system(
+            prompt, system=SYSTEM_SALES_DIRECTOR, temperature=0.85, max_tokens=1800
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("oracle llm chain failed (%s), пробую Gemini напрямую", e)
+        from bot.services.gemini_llm import gemini_chat_completion, gemini_llm_configured
+
+        if not gemini_llm_configured():
+            raise RuntimeError("LLM недоступен: цепочка Оракула упала, GEMINI_API_KEY не настроен")
+        raw = await gemini_chat_completion(
+            [{"role": "user", "content": prompt}],
+            system=SYSTEM_SALES_DIRECTOR,
+            temperature=0.85,
+            timeout_sec=90,
+        )
     data = _parse_json(raw)
     scenes: list[Scene] = []
     for s in data.get("scenes") or []:
