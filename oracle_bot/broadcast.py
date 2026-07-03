@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 async def broadcast_text(bot, text: str, *, reply_markup=None) -> dict[str, Any]:
     ids = db.all_user_ids()
     ok = fail = 0
+    failed: list[dict[str, Any]] = []
     for user_id in ids:
         try:
             await bot.send_message(
@@ -29,15 +30,18 @@ async def broadcast_text(bot, text: str, *, reply_markup=None) -> dict[str, Any]
                     user_id, text, parse_mode="HTML", reply_markup=reply_markup
                 )
                 ok += 1
-            except Exception:
+            except Exception as e2:
                 fail += 1
+                failed.append({"user_id": user_id, "error": str(e2)[:120]})
         except TelegramForbiddenError:
             fail += 1
+            failed.append({"user_id": user_id, "error": "blocked_or_deleted"})
         except Exception as e:
             logger.warning("broadcast %s: %s", user_id, e)
             fail += 1
+            failed.append({"user_id": user_id, "error": str(e)[:120]})
         await asyncio.sleep(0.05)
-    return {"total": len(ids), "ok": ok, "fail": fail}
+    return {"total": len(ids), "ok": ok, "fail": fail, "failed": failed}
 
 
 async def post_to_channels(bot, posts: list[str], channels: list[str]) -> list[dict[str, Any]]:

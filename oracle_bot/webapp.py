@@ -247,6 +247,42 @@ async def api_admin_broadcast(body: AdminBroadcastBody):
     return await broadcast_text(_bot, text)
 
 
+@app.get("/api/admin/user-check")
+async def api_admin_user_check(user_id: int = Query(...), target: int = Query(...)):
+    """Диагностика конкретного пользователя: есть ли в базе рассылки, opt-out, покупки."""
+    if user_id <= 0 or not is_admin_user(user_id):
+        raise HTTPException(403, "Нет доступа")
+    from oracle_bot import storage as db
+
+    ids = set(db.all_user_ids())
+    meta = db.get_user_meta(target)
+    profile = db.get_profile(target)
+    reachable = None
+    error = ""
+    from oracle_bot.cloud import _bot
+
+    if _bot:
+        try:
+            chat = await _bot.get_chat(target)
+            reachable = True
+            profile["tg_name"] = (chat.first_name or "") + (
+                f" @{chat.username}" if chat.username else ""
+            )
+        except Exception as e:  # noqa: BLE001
+            reachable = False
+            error = str(e)[:200]
+    return {
+        "target": target,
+        "in_broadcast_list": target in ids,
+        "push_opt_out": bool(meta.get("push_opt_out")),
+        "bought_hvd": db.has_paid(target, "exclusive_hvd"),
+        "bought_ultra": db.has_paid(target, "ultra_plus"),
+        "profile": profile,
+        "chat_reachable": reachable,
+        "error": error,
+    }
+
+
 class AdminChannelPostBody(BaseModel):
     user_id: int
     text: str = ""
