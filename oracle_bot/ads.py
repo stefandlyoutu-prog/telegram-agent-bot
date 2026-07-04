@@ -47,6 +47,16 @@ def kb_books() -> InlineKeyboardMarkup:
     )
 
 
+def kb_entry() -> InlineKeyboardMarkup:
+    """Лестница: главный CTA — бесплатный вопрос (дальше пейволл сам предложит 99₽)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔮 Задать вопрос бесплатно", url=f"https://t.me/{BOT}?start=mod_tarot")],
+            [InlineKeyboardButton(text=f"Сразу полный разбор себя · {HVD_PRICE}₽", url=f"https://t.me/{BOT}?start=hvd")],
+        ]
+    )
+
+
 def _greeting(profile: dict, meta: dict) -> str:
     name = (profile.get("name") or meta.get("first_name") or "").strip()
     return f"{name}, " if name and name.lower() not in ("гость", "guest") else ""
@@ -105,6 +115,21 @@ def ultra_dm(user_id: int) -> str:
     )
 
 
+def entry_dm(user_id: int) -> str:
+    """Вход за 99₽: сначала бесплатный вопрос, полный разбор — 99₽. Без большого чека в лоб."""
+    intro = personal_intro(user_id)
+    return (
+        f"🔮 <b>Один вопрос — полный ответ за 99₽</b>\n\n"
+        f"{intro}\n\n"
+        "Работает просто:\n"
+        "1️⃣ Задаёшь свой вопрос — <b>бесплатно</b>: любовь, деньги, решение, человек\n"
+        "2️⃣ Получаешь первую часть разбора сразу\n"
+        f"3️⃣ Полная версия — детали, прогноз, личный совет — всего <b>99₽</b>\n\n"
+        "Дешевле чашки кофе. А ясности — на месяц вперёд.\n\n"
+        "Начни с бесплатного вопроса 👇"
+    )
+
+
 def combo_dm(user_id: int) -> str:
     """Главное рекламное сообщение в личку — персональное, с двумя продуктами."""
     intro = personal_intro(user_id)
@@ -123,6 +148,20 @@ def combo_dm(user_id: int) -> str:
 
 
 # --- Каналы (без персонализации) ---
+
+def entry_channel(source: str = "") -> str:
+    src = f"?start=src_{source.lstrip('@').lower()}" if source else "?start=mod_tarot"
+    return (
+        "🔮 <b>Один вопрос — честный разбор за 99₽</b>\n\n"
+        "Не «вас ждут перемены», а конкретно по твоей ситуации: "
+        "что происходит, что делать и чего ждать.\n\n"
+        "1️⃣ Задай вопрос — <b>бесплатно</b>\n"
+        "2️⃣ Первая часть ответа — сразу\n"
+        "3️⃣ Полный разбор с прогнозом и советом — <b>99₽</b>\n\n"
+        "Дешевле кофе. Работает прямо в Telegram, 30 секунд.\n\n"
+        f'👉 <a href="https://t.me/{BOT}{src}">Задать вопрос бесплатно</a>'
+    )
+
 
 def hvd_channel(source: str = "") -> str:
     return (
@@ -285,13 +324,15 @@ def _already_bought(user_id: int, variant: str) -> bool:
 
 # После рассылки запускаем воронку возражений (час не купил → дожим).
 # Лестница ultra_plus сама спускается до ХВД и Премиума, поэтому для combo — она.
-_VARIANT_OBJECTION = {"combo": "ultra_plus", "hvd": "exclusive_hvd", "ultra": "ultra_plus"}
+# У entry дожима нет: вход за 99₽ не должен давить большим чеком.
+_VARIANT_OBJECTION = {"combo": "ultra_plus", "hvd": "exclusive_hvd", "ultra": "ultra_plus", "entry": "none"}
 
 
-async def push_books_ad_to_all(bot, *, variant: str = "combo") -> dict[str, Any]:
-    """Персональная рассылка рекламы книг всем пользователям бота."""
-    builder = {"combo": combo_dm, "hvd": hvd_dm, "ultra": ultra_dm}.get(variant, combo_dm)
-    obj_kind = _VARIANT_OBJECTION.get(variant, "ultra_plus")
+async def push_books_ad_to_all(bot, *, variant: str = "entry") -> dict[str, Any]:
+    """Персональная рассылка рекламы всем пользователям бота (по умолчанию — вход за 99₽)."""
+    builder = {"combo": combo_dm, "hvd": hvd_dm, "ultra": ultra_dm, "entry": entry_dm}.get(variant, entry_dm)
+    obj_kind = _VARIANT_OBJECTION.get(variant, "none")
+    kb = kb_entry() if variant == "entry" else kb_books()
     ids = db.all_user_ids()
     ok = fail = skipped = 0
     for user_id in ids:
@@ -302,14 +343,14 @@ async def push_books_ad_to_all(bot, *, variant: str = "combo") -> dict[str, Any]
         sent = False
         try:
             await bot.send_message(
-                user_id, builder(user_id), parse_mode="HTML", reply_markup=kb_books()
+                user_id, builder(user_id), parse_mode="HTML", reply_markup=kb
             )
             sent = True
         except TelegramRetryAfter as e:
             await asyncio.sleep(float(e.retry_after) + 0.5)
             try:
                 await bot.send_message(
-                    user_id, builder(user_id), parse_mode="HTML", reply_markup=kb_books()
+                    user_id, builder(user_id), parse_mode="HTML", reply_markup=kb
                 )
                 sent = True
             except Exception:

@@ -358,9 +358,9 @@ async def api_admin_promo_books(body: AdminPromoBooksBody):
 
     if not _bot:
         raise HTTPException(503, "Бот не инициализирован")
-    variant = (body.variant or "combo").strip().lower()
-    if variant not in ("combo", "hvd", "ultra"):
-        variant = "combo"
+    variant = (body.variant or "entry").strip().lower()
+    if variant not in ("combo", "hvd", "ultra", "entry"):
+        variant = "entry"
 
     from oracle_bot.ads import push_books_ad_to_all
     from oracle_bot.campaign_report import send_forecast

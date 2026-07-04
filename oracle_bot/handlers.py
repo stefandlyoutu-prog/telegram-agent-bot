@@ -911,9 +911,9 @@ async def cmd_promo_books(message: Message, command: CommandObject) -> None:
     if not _is_admin(uid):
         await message.answer("Нет доступа.")
         return
-    variant = (command.args or "combo").strip().lower()
-    if variant not in ("combo", "hvd", "ultra"):
-        variant = "combo"
+    variant = (command.args or "entry").strip().lower()
+    if variant not in ("combo", "hvd", "ultra", "entry"):
+        variant = "entry"
     from oracle_bot.ads import push_books_ad_to_all
 
     status = await message.answer(f"📤 Рассылаю рекламу книг ({variant}) в личку…")

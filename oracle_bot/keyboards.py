@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
-from oracle_bot.config import ORACLE_DEEP_STARS, ORACLE_EXCLUSIVE_HVD_PRICE_RUB, ORACLE_PDF_HVD_PRICE_RUB, ORACLE_PDF_READING_PRICE_RUB, ORACLE_PREMIUM_STARS, ORACLE_REFERRAL_BONUS, ORACLE_ULTRA_PLUS_PRICE_RUB, ORACLE_WEBAPP_URL
+from oracle_bot.config import ORACLE_DEEP_PRICE_RUB, ORACLE_DEEP_STARS, ORACLE_EXCLUSIVE_HVD_PRICE_RUB, ORACLE_PDF_HVD_PRICE_RUB, ORACLE_PDF_READING_PRICE_RUB, ORACLE_PREMIUM_STARS, ORACLE_REFERRAL_BONUS, ORACLE_ULTRA_PLUS_PRICE_RUB, ORACLE_WEBAPP_URL
 from oracle_bot.mystic_data import ZODIAC_SIGNS
 from oracle_bot.paywall import referral_primary, stars_enabled
 from oracle_bot.prompts import CROSS_SELL
@@ -202,7 +202,7 @@ def kb_after_reading(
         if stars_enabled():
             rows.append([
                 InlineKeyboardButton(
-                    text=f"Полная версия · {ORACLE_DEEP_STARS}⭐",
+                    text=f"🔓 Полная версия · {ORACLE_DEEP_PRICE_RUB}₽",
                     callback_data=f"deep:{cont_id}",
                 )
             ])

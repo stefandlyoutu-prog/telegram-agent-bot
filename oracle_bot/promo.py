@@ -243,6 +243,12 @@ def post_interactive(source: str = "", *, offset: int = 0) -> str:
     return body + _cta(source, label="Спросить Оракула — бесплатно")
 
 
+def post_entry99(source: str = "") -> str:
+    from oracle_bot.ads import entry_channel
+
+    return entry_channel(source)
+
+
 def post_hvd(source: str = "") -> str:
     from oracle_bot.ads import hvd_channel
 
@@ -257,16 +263,16 @@ def post_ultra(source: str = "") -> str:
 
 PROMO_VARIANTS: list[tuple[str, Callable[[str], str]]] = [
     ("zodiac_list", post_zodiac_list),
-    ("hvd", post_hvd),
+    ("entry99", post_entry99),
     ("interactive", post_interactive),
-    ("tarot", post_tarot_hook),
     ("parable", post_parable),
-    ("ultra", post_ultra),
+    ("entry99b", post_entry99),
     ("zodiac_list2", lambda s="": post_zodiac_list(s, offset=1)),
-    ("compat", post_love_compat),
+    ("hvd", post_hvd),
     ("interactive2", lambda s="": post_interactive(s, offset=1)),
-    ("dream", post_dream),
+    ("compat", post_love_compat),
     ("parable2", lambda s="": post_parable(s, offset=1)),
+    ("ultra", post_ultra),
     ("natal", post_natal),
     ("referral", post_referral),
 ]
