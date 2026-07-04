@@ -247,6 +247,31 @@ async def api_admin_broadcast(body: AdminBroadcastBody):
     return await broadcast_text(_bot, text)
 
 
+@app.get("/api/admin/pay-config")
+def api_admin_pay_config(user_id: int = Query(...)):
+    """Санити-проверка платёжного контура: режим, пароли, цены (без секретов)."""
+    if user_id <= 0 or not is_admin_user(user_id):
+        raise HTTPException(403, "Нет доступа")
+    from oracle_bot import config as cfg
+
+    return {
+        "robokassa_test_mode": cfg.ROBOKASSA_TEST,
+        "robokassa_login_set": bool(cfg.ROBOKASSA_LOGIN),
+        "live_password1_set": bool(cfg.ROBOKASSA_PASSWORD1),
+        "live_password2_set": bool(cfg.ROBOKASSA_PASSWORD2),
+        "test_password1_set": bool(cfg.ROBOKASSA_TEST_PASSWORD1),
+        "test_password2_set": bool(cfg.ROBOKASSA_TEST_PASSWORD2),
+        "hash_algo": cfg.ROBOKASSA_HASH,
+        "prices_rub": {
+            "premium": cfg.ORACLE_PREMIUM_PRICE_RUB,
+            "deep": cfg.ORACLE_DEEP_PRICE_RUB,
+            "hvd": cfg.ORACLE_EXCLUSIVE_HVD_PRICE_RUB,
+            "ultra_plus": cfg.ORACLE_ULTRA_PLUS_PRICE_RUB,
+            "pdf_hvd": cfg.ORACLE_PDF_HVD_PRICE_RUB,
+        },
+    }
+
+
 @app.get("/api/admin/user-check")
 async def api_admin_user_check(user_id: int = Query(...), target: int = Query(...)):
     """Диагностика конкретного пользователя: есть ли в базе рассылки, opt-out, покупки."""
