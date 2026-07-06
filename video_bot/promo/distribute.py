@@ -242,7 +242,11 @@ def post_uploadpost(item: PromoItem, *, platforms: list[str] | None = None,
         if r.status_code in (200, 202):
             url = ""
             try:
-                url = (resp.get("results") or {}).get("tiktok", {}).get("url", "")
+                results = resp.get("results") or {}
+                for plat in plats:
+                    url = (results.get(plat) or {}).get("url", "")
+                    if url:
+                        break
             except AttributeError:
                 pass
             status = "scheduled" if scheduled_iso else "posted"

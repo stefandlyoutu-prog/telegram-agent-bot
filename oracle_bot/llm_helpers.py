@@ -1,4 +1,4 @@
-"""LLM для Оракула: Groq → Kupi (OpenAI) → Gemini."""
+"""LLM для Оракула: OpenAI (платный, основной) → Groq → Gemini (бесплатные, только на подхвате)."""
 
 from __future__ import annotations
 
@@ -54,20 +54,12 @@ async def oracle_chat_with_system(
 ) -> str:
     """Чат с произвольным system-промптом (для книг-разборов).
 
-    Порядок: Groq (бесплатно, но лимит 100k токенов/день) → Kupi/OpenAI
-    (платный, надёжный — основной провайдер книг) → Gemini (бесплатный
-    запасной на крайний случай).
+    Порядок: OpenAI (платный, оплачен и не упирается в лимиты — основной
+    провайдер) → Groq → Gemini (бесплатные, только если платный сервис
+    реально недоступен, не как "гонка" перед ним).
     """
     async with _llm_sem():
         errors: list[str] = []
-        if groq_configured():
-            try:
-                return await groq_chat(
-                    user_prompt, system=system, temperature=temperature, max_tokens=max_tokens
-                )
-            except Exception as e:  # noqa: BLE001
-                errors.append(f"Groq: {e}")
-                logger.warning("book groq: %s", e)
         try:
             return await kupi_chat(
                 user_prompt,
@@ -84,8 +76,16 @@ async def oracle_chat_with_system(
                 temperature=temperature,
             )
         except Exception as e:  # noqa: BLE001
-            errors.append(f"Kupi: {e}")
-            logger.warning("book kupi: %s", e)
+            errors.append(f"OpenAI: {e}")
+            logger.warning("book openai: %s", e)
+        if groq_configured():
+            try:
+                return await groq_chat(
+                    user_prompt, system=system, temperature=temperature, max_tokens=max_tokens
+                )
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"Groq: {e}")
+                logger.warning("book groq: %s", e)
         if gemini_llm_configured():
             try:
                 return await gemini_chat_completion(
@@ -104,6 +104,17 @@ async def oracle_chat_with_system(
 async def _oracle_chat_inner(user_prompt: str, *, temperature: float = 0.8) -> str:
     errors: list[str] = []
 
+    try:
+        return await kupi_chat(
+            user_prompt,
+            system=ORACLE_SYSTEM,
+            model=ORACLE_LLM_MODEL or DEFAULT_MODEL,
+            temperature=temperature,
+        )
+    except Exception as e:
+        errors.append(f"OpenAI: {e}")
+        logger.warning("oracle openai chat: %s", e)
+
     if groq_configured():
         try:
             return await groq_chat(
@@ -114,17 +125,6 @@ async def _oracle_chat_inner(user_prompt: str, *, temperature: float = 0.8) -> s
         except Exception as e:
             errors.append(f"Groq: {e}")
             logger.warning("oracle groq chat: %s", e)
-
-    try:
-        return await kupi_chat(
-            user_prompt,
-            system=ORACLE_SYSTEM,
-            model=ORACLE_LLM_MODEL or DEFAULT_MODEL,
-            temperature=temperature,
-        )
-    except Exception as e:
-        errors.append(f"Kupi: {e}")
-        logger.warning("oracle kupi chat: %s", e)
 
     if gemini_llm_configured():
         try:
@@ -155,6 +155,19 @@ async def _vision_facts(image_data: bytes) -> str:
     data_url = to_data_url(image_data, detect_mime(image_data))
     errors: list[str] = []
 
+    try:
+        text = await kupi_vision(
+            VISION_DESCRIBE_PROMPT,
+            data_url,
+            system=VISION_SYSTEM_PROMPT,
+            temperature=0.3,
+        )
+        if text.strip():
+            return text
+    except Exception as e:
+        errors.append(f"OpenAI: {e}")
+        logger.warning("oracle openai vision: %s", e)
+
     if groq_configured():
         try:
             text = await groq_vision(
@@ -168,19 +181,6 @@ async def _vision_facts(image_data: bytes) -> str:
         except Exception as e:
             errors.append(f"Groq: {e}")
             logger.warning("oracle groq vision: %s", e)
-
-    try:
-        text = await kupi_vision(
-            VISION_DESCRIBE_PROMPT,
-            data_url,
-            system=VISION_SYSTEM_PROMPT,
-            temperature=0.3,
-        )
-        if text.strip():
-            return text
-    except Exception as e:
-        errors.append(f"Kupi: {e}")
-        logger.warning("oracle kupi vision: %s", e)
 
     if gemini_llm_configured():
         try:
