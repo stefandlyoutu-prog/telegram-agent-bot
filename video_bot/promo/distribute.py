@@ -250,7 +250,8 @@ def post_uploadpost(item: PromoItem, *, platforms: list[str] | None = None,
             except AttributeError:
                 pass
             status = "scheduled" if scheduled_iso else "posted"
-            return UploadResult(True, label, status, url=url or "https://www.tiktok.com/")
+            fallback_urls = {"tiktok": "https://www.tiktok.com/", "instagram": "https://instagram.com/moracul_taro"}
+            return UploadResult(True, label, status, url=url or fallback_urls.get(plats[0] if plats else "", ""))
         return UploadResult(False, label, "failed", error=f"upload-post {r.status_code}: {str(resp)[:200]}")
     except Exception as e:  # noqa: BLE001
         return UploadResult(False, label, "failed", error=str(e)[:200])
