@@ -64,13 +64,29 @@ def oferta_page():
     return FileResponse(SITE / "oferta.html")
 
 
+@app.get("/blog")
+def blog_index():
+    return FileResponse(SITE / "blog" / "index.html")
+
+
+@app.get("/blog/{slug}")
+def blog_article(slug: str):
+    # только [a-z0-9-] — защита от обхода пути
+    safe = "".join(c for c in slug if c.isalnum() or c == "-")
+    path = SITE / "blog" / f"{safe}.html"
+    if not path.exists():
+        raise HTTPException(404, "Статья не найдена")
+    return FileResponse(path)
+
+
 @app.get("/robots.txt")
 def robots_txt():
     from fastapi.responses import PlainTextResponse
 
     base = cloud_webapp_url() or "https://moracul.onrender.com"
     return PlainTextResponse(
-        f"User-agent: *\nAllow: /landing\nAllow: /oferta\nSitemap: {base}/sitemap.xml\n"
+        "User-agent: *\nAllow: /landing\nAllow: /oferta\nAllow: /blog\n"
+        f"Sitemap: {base}/sitemap.xml\n"
     )
 
 
@@ -79,9 +95,18 @@ def sitemap_xml():
     from fastapi.responses import Response
 
     base = cloud_webapp_url() or "https://moracul.onrender.com"
+    blog_dir = SITE / "blog"
+    blog_urls = ""
+    if blog_dir.exists():
+        slugs = sorted(p.stem for p in blog_dir.glob("*.html") if p.stem != "index")
+        blog_urls = "\n".join(
+            f"  <url><loc>{base}/blog/{s}</loc><priority>0.8</priority></url>" for s in slugs
+        )
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>{base}/landing</loc><priority>1.0</priority></url>
+  <url><loc>{base}/blog</loc><priority>0.9</priority></url>
+{blog_urls}
   <url><loc>{base}/oferta</loc><priority>0.5</priority></url>
 </urlset>"""
     return Response(content=xml, media_type="application/xml")
