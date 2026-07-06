@@ -5,6 +5,7 @@ aiosqlite>=0.20.0
 pypdf>=5.0.0
 python-docx>=1.1.0
 Pillow>=10.0.0
+qrcode>=8.0
 easyocr>=1.7.0
 # Keep a macOS x86_64/Python 3.11 wheel; newer OpenCV releases may build from source here.
 opencv-python-headless==4.8.1.78
@@ -17,6 +18,8 @@ pytesseract>=0.3.10
 fpdf2>=2.8.0
 imageio>=2.34.0
 imageio-ffmpeg>=0.5.0
+edge-tts>=6.1.0
+requests>=2.31.0
 matplotlib>=3.8.0
 aiohttp-socks>=0.8.3
 openpyxl>=3.1.0
