@@ -8,11 +8,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from video_bot.promo.oracle_promo import PromoItem
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -75,10 +78,21 @@ def post_youtube(item: PromoItem) -> UploadResult:
     try:
         token = get_access_token()
         title = f"{item.topic} #shorts"[:95]
+        # YouTube с 2023 не делает ссылки кликабельными в Shorts (описание и
+        # комментарии). Основной путь перехода теперь — QR-код и хендл "TG: ОРАКУЛ БОТ",
+        # впечатанные прямо в кадр видео (см. captions.py/assembler.py). Ссылка
+        # текстом и в шапке канала — запасной вариант для тех, кто читает описание.
         meta = {
             "snippet": {
                 "title": title,
-                "description": f"{item.topic}\n\nБесплатный расклад таро и гороскоп: {item.link}\n#shorts #таро #гороскоп",
+                "description": (
+                    f"{item.topic}\n\n"
+                    f"🔮 Наведи камеру на QR в конце видео — попадёшь прямо в бота\n"
+                    f"Или в Telegram найди: MOracul_bot\n"
+                    f"Кликабельная ссылка — в шапке канала.\n"
+                    f"{item.link}\n"
+                    f"#shorts #таро #гороскоп"
+                ),
                 "tags": ["таро", "гороскоп", "оракул", "shorts"],
                 "categoryId": "24",
             },
@@ -111,9 +125,43 @@ def post_youtube(item: PromoItem) -> UploadResult:
         vid = data.get("id")
         if not vid:
             return UploadResult(False, "youtube", "failed", error=str(data)[:200])
+        _yt_comment_link(token, vid, item)
         return UploadResult(True, "youtube", "posted", url=f"https://youtube.com/shorts/{vid}")
     except Exception as e:  # noqa: BLE001
         return UploadResult(False, "youtube", "failed", error=str(e)[:200])
+
+
+def _yt_comment_link(token: str, video_id: str, item: PromoItem) -> None:
+    """Первый комментарий с кликабельной ссылкой (в Shorts описание не кликается)."""
+    import requests
+
+    try:
+        r = requests.post(
+            "https://www.googleapis.com/youtube/v3/commentThreads",
+            params={"part": "snippet"},
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "snippet": {
+                    "videoId": video_id,
+                    "topLevelComment": {
+                        "snippet": {
+                            # В Shorts ссылки в комментариях НЕ кликабельны (политика
+                            # YouTube) — даём QR (в видео) + имя для поиска + ссылку текстом.
+                            "textOriginal": (
+                                "🔮 QR в конце видео → сразу в бота. Либо в Telegram набери MOracul_bot\n"
+                                f"Или скопируй ссылку: {item.link}\n"
+                                "Кликабельная ссылка — в шапке канала."
+                            )
+                        }
+                    },
+                }
+            },
+            timeout=30,
+        )
+        if r.status_code not in (200, 201):
+            logger.warning("yt comment %s: %s", r.status_code, r.text[:150])
+    except Exception as e:  # noqa: BLE001
+        logger.warning("yt comment: %s", e)
 
 
 # ───────────────────────── VK (видео в сообществе) ─────────────────────────
@@ -150,14 +198,69 @@ def post_vk(item: PromoItem) -> UploadResult:
         return UploadResult(False, "vk", "failed", error=str(e)[:200])
 
 
-# ───────────────────────── TikTok (API требует одобрения dev-приложения) ─────────────────────────
-def post_tiktok(item: PromoItem) -> UploadResult:
+# ───────────────────────── TikTok / Instagram (upload-post.com) ─────────────────────────
+def uploadpost_platforms() -> list[str]:
+    """Площадки автопостинга через upload-post (env UPLOAD_POST_PLATFORMS, через запятую)."""
+    raw = os.getenv("UPLOAD_POST_PLATFORMS", "tiktok").strip()
+    return [p.strip().lower() for p in raw.split(",") if p.strip()]
+
+
+def post_uploadpost(item: PromoItem, *, platforms: list[str] | None = None,
+                    scheduled_iso: str = "") -> UploadResult:
+    """Автопостинг через upload-post.com (одним запросом на несколько площадок).
+
+    scheduled_iso — ISO-8601 время отложенной публикации (интерпретируется
+    в Europe/Moscow); пусто = опубликовать сразу.
+    """
+    api_key = os.getenv("UPLOAD_POST_API_KEY", "").strip()
+    profile = os.getenv("UPLOAD_POST_USER", "oracle").strip()
+    plats = platforms or uploadpost_platforms()
+    import requests
+
+    caption = _caption(item, with_link=False)[:2000] + " Бот — в шапке профиля"
+    data: list[tuple[str, str]] = [
+        ("user", profile),
+        ("title", caption[:2100]),
+        ("post_mode", "DIRECT_POST"),        # tiktok
+        ("media_type", "REELS"),             # instagram
+        ("async_upload", "true"),
+    ]
+    data += [("platform[]", p) for p in plats]
+    if scheduled_iso:
+        data += [("scheduled_date", scheduled_iso), ("timezone", "Europe/Moscow")]
+    label = "+".join(plats)
+    try:
+        with open(item.file, "rb") as f:
+            r = requests.post(
+                "https://api.upload-post.com/api/upload",
+                headers={"Authorization": f"Apikey {api_key}"},
+                data=data,
+                files={"video": (Path(item.file).name, f, "video/mp4")},
+                timeout=900,
+            )
+        resp = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        if r.status_code in (200, 202):
+            url = ""
+            try:
+                url = (resp.get("results") or {}).get("tiktok", {}).get("url", "")
+            except AttributeError:
+                pass
+            status = "scheduled" if scheduled_iso else "posted"
+            return UploadResult(True, label, status, url=url or "https://www.tiktok.com/")
+        return UploadResult(False, label, "failed", error=f"upload-post {r.status_code}: {str(resp)[:200]}")
+    except Exception as e:  # noqa: BLE001
+        return UploadResult(False, label, "failed", error=str(e)[:200])
+
+
+def post_tiktok(item: PromoItem, *, scheduled_iso: str = "") -> UploadResult:
+    if os.getenv("UPLOAD_POST_API_KEY", "").strip():
+        return post_uploadpost(item, scheduled_iso=scheduled_iso)
     token = os.getenv("TIKTOK_ACCESS_TOKEN", "").strip()
     if not token:
         # Файл остаётся в папке — выкладываешь вручную, ссылка-метка уже в плане
         return UploadResult(
             False, "tiktok", "manual",
-            error="TikTok Content Posting API требует одобренного dev-приложения; ролик в папке для ручной загрузки",
+            error="Автопостинг не настроен (UPLOAD_POST_API_KEY пуст); ролик в папке для ручной загрузки",
         )
     import requests
 

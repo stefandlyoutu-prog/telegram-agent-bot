@@ -11,6 +11,11 @@ from video_bot.generate import W, H
 
 FONT_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 
+# Постоянная плашка-хендл: видна в КАЖДОМ кадре ролика, а не только в CTA-сцене.
+# На Shorts/Reels ссылки не кликабельны — зритель должен УВИДЕТЬ и ЗАПОМНИТЬ
+# короткий адрес, а не искать его в описании/комментах.
+WATERMARK_TEXT = "TG: ОРАКУЛ БОТ"
+
 
 def _font(size: int):
     try:
@@ -19,6 +24,24 @@ def _font(size: int):
         from video_bot.generate import _font as gf
 
         return gf(size)
+
+
+def _draw_watermark(img: Image.Image) -> None:
+    """Мелкая плашка вверху экрана — постоянный «хендл» бота на протяжении всего ролика."""
+    draw = ImageDraw.Draw(img)
+    font = _font(30)
+    text = WATERMARK_TEXT
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    pad_x, pad_y = 22, 12
+    box_w, box_h = tw + pad_x * 2, th + pad_y * 2
+    x0, y0 = (W - box_w) // 2, 44
+    pill = Image.new("RGBA", (box_w, box_h), (0, 0, 0, 0))
+    pd = ImageDraw.Draw(pill)
+    pd.rounded_rectangle([0, 0, box_w - 1, box_h - 1], radius=box_h // 2, fill=(10, 10, 18, 165))
+    img.alpha_composite(pill, (x0, y0))
+    draw.text((x0 + box_w // 2, y0 + box_h // 2), text, font=font,
+              fill=(240, 195, 60, 255), anchor="mm")
 
 
 def render_kinetic_caption(
@@ -73,9 +96,10 @@ def render_kinetic_caption(
     # бейдж стадии (hook/cta)
     if stage in ("hook", "cta"):
         # без эмодзи: PIL-шрифт не содержит эмодзи-глифов, вместо них рисуется «□»
-        badge = "СМОТРИ ДО КОНЦА" if stage == "hook" else "ССЫЛКА В ОПИСАНИИ"
+        badge = "СМОТРИ ДО КОНЦА" if stage == "hook" else "НАВЕДИ КАМЕРУ НА QR"
         _draw_stroked_center(draw, badge, H - 180, sub_font, fill=(255, 200, 80))
 
+    _draw_watermark(img)
     img.save(path)
     return path
 
@@ -132,6 +156,7 @@ def render_documentary_caption(
     # тонкая красная линия — акцент репортажа
     draw.line([(80, H - bar_h + 18), (W - 80, H - bar_h + 18)], fill=(180, 40, 40, 200), width=3)
 
+    _draw_watermark(img)
     img.save(path)
     return path
 
