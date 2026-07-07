@@ -121,7 +121,7 @@ services:
   - type: cron
     name: oracle-video
     runtime: python
-    plan: starter
+    plan: standard
     schedule: "0 6 * * *"   # 06:00 UTC = 09:00 МСК ежедневно
     buildCommand: pip install -r requirements-video.txt
     startCommand: >-
