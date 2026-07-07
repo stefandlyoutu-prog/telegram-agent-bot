@@ -113,3 +113,69 @@ services:
       name: work-data
       mountPath: /var/data
       sizeGB: 1
+
+  # ── Облачный рендер роликов (чтобы не зависеть от включённого Mac) ──
+  # Каждый день: постит сегодняшние VK+YouTube и планирует завтрашние TikTok+Instagram
+  # (через upload-post.com). Плана хватает «из коробки» — файловая система эфемерная,
+  # каждый запуск самодостаточен. Если словим OOM — поменяй plan на standard.
+  - type: cron
+    name: oracle-video
+    runtime: python
+    plan: starter
+    schedule: "0 6 * * *"   # 06:00 UTC = 09:00 МСК ежедневно
+    buildCommand: pip install -r requirements-video.txt
+    startCommand: >-
+      python scripts/oracle_video_promo.py run --today-only --platforms vk,youtube --limit 2 &&
+      python scripts/tiktok_daily_dropoff.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: VIDEO_TIKTOK_PER_DAY
+        value: "2"
+      # LLM (сценарии + правка озвучки): платный OpenAI в приоритете
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        value: https://api.openai.com/v1
+      - key: GROK_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # Озвучка (OpenAI TTS → GCP → edge-tts)
+      - key: VIDEO_TTS_MODEL
+        value: gpt-4o-mini-tts
+      - key: VIDEO_TTS_VOICE
+        value: onyx
+      - key: VIDEO_TTS_POLISH
+        value: "1"
+      # Сток-видео для фона
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: PIXABAY_API_KEY
+        sync: false
+      # VK
+      - key: VK_TOKEN
+        sync: false
+      - key: VK_GROUP_ID
+        sync: false
+      - key: VK_API_VERSION
+        value: "5.199"
+      # YouTube (OAuth refresh)
+      - key: YOUTUBE_CLIENT_ID
+        sync: false
+      - key: YOUTUBE_CLIENT_SECRET
+        sync: false
+      - key: YOUTUBE_REFRESH_TOKEN
+        sync: false
+      # TikTok + Instagram через upload-post.com (отложенный постинг)
+      - key: UPLOAD_POST_API_KEY
+        sync: false
+      - key: UPLOAD_POST_USER
+        sync: false
+      - key: UPLOAD_POST_PLATFORMS
+        value: tiktok,instagram
+      # Отчёт админу в Telegram
+      - key: ORACLE_BOT_TOKEN
+        sync: false
+      - key: MONEY_ADMIN_IDS
+        sync: false

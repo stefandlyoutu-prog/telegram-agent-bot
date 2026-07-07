@@ -1,0 +1,16 @@
+# Облачный рендер роликов @MOracul_bot (Render cron).
+# Лёгкий набор: без OCR/3D/OpenCV/torch. ffmpeg — через imageio-ffmpeg.
+aiogram>=3.15.0,<4
+aiohttp>=3.9.0
+aiohttp-socks>=0.8.3
+aiosqlite>=0.20.0
+python-dotenv>=1.0.0
+Pillow>=10.0.0
+fpdf2>=2.8.0
+# видео-рендер + озвучка + постинг
+numpy>=1.24.0,<2
+imageio>=2.34.0
+imageio-ffmpeg>=0.5.0
+edge-tts>=6.1.0
+requests>=2.31.0
+qrcode>=8.0
