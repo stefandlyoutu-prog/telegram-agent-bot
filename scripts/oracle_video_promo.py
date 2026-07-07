@@ -194,6 +194,11 @@ def cmd_run(args: argparse.Namespace) -> None:
         print("План отсутствовал — создан автоматически (4/день yt/tt/vk).")
     on = date.fromisoformat(args.date) if args.date else date.today()
     due = [i for i in op.due_items(plan, on)]
+    platforms = {p.strip() for p in (args.platforms or "").split(",") if p.strip()}
+    if platforms:
+        due = [i for i in due if i.platform in platforms]
+    if args.today_only:
+        due = [i for i in due if i.date == on.isoformat()]
     if args.limit:
         due = due[: args.limit]
     if not due:
@@ -300,6 +305,8 @@ def main() -> None:
     srun.add_argument("--channel")
     srun.add_argument("--no-render", action="store_true", help="только загрузка готовых")
     srun.add_argument("--no-llm", action="store_true")
+    srun.add_argument("--platforms", default="", help="только эти площадки, через запятую: vk,youtube")
+    srun.add_argument("--today-only", action="store_true", help="не подтягивать долги прошлых дней")
     srun.set_defaults(func=cmd_run)
 
     srep = sub.add_parser("report", help="атрибуция трафика")
