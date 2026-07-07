@@ -616,27 +616,45 @@ async def _offer_ultra_plus(message: Message, uid: int) -> None:
 
 async def _offer_deep(message: Message, uid: int, cont_id: int) -> None:
     from oracle_bot.paywall import stars_enabled
+    from oracle_bot.config import ORACLE_DEEP_FIRST_PRICE_RUB
 
     cont = db.get_continuation(cont_id)
     if not cont:
         await message.answer("Чтение устарело — запроси новое из меню.", reply_markup=kb_main())
         return
-    url = _robokassa_url(uid, "deep_unlock", cont_id=cont_id)
+    # Первая покупка — «разбить печать»: холодному юзеру спеццена на первую разблокировку.
+    first_buy = uid > 0 and not db.has_any_payment(uid)
+    price = ORACLE_DEEP_FIRST_PRICE_RUB if first_buy else ORACLE_DEEP_PRICE_RUB
+    override = ORACLE_DEEP_FIRST_PRICE_RUB if first_buy else None
+    url = _robokassa_url(uid, "deep_unlock", cont_id=cont_id, override_amount=override)
     if not url:
         await _send_deep_invoice(message, cont_id)
         return
     if uid:
         analytics_mod.track_payment_intent(uid, f"deep:{cont_id}")
-    rows = [[InlineKeyboardButton(text=f"💳 Картой/СБП — {ORACLE_DEEP_PRICE_RUB}₽", url=url)]]
+    btn = (
+        f"💳 Открыть за {price}₽ (первый раз −50%)" if first_buy
+        else f"💳 Картой/СБП — {price}₽"
+    )
+    rows = [[InlineKeyboardButton(text=btn, url=url)]]
     if stars_enabled():
         rows.append(
             [InlineKeyboardButton(text=f"⭐ Telegram Stars — {ORACLE_DEEP_STARS}", callback_data=f"stars:deep:{cont_id}")]
         )
     rows.append([InlineKeyboardButton(text="📄 Оферта", url=_oferta_link())])
-    await message.answer(
+    head = (
         "🔓 <b>Продолжение чтения</b>\n"
         "Скрытая часть: детали, прогноз, личный совет\n\n"
-        "Выбери способ оплаты:",
+    )
+    if first_buy:
+        head += (
+            f"🎁 <b>Только первая разблокировка — {price}₽ вместо {ORACLE_DEEP_PRICE_RUB}₽.</b>\n"
+            "Попробуй, как это работает 👇\n\n"
+        )
+    else:
+        head += "Выбери способ оплаты:"
+    await message.answer(
+        head.rstrip(),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
 

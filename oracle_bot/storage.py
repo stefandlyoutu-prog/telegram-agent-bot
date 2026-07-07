@@ -694,6 +694,16 @@ def has_paid(user_id: int, kind: str) -> bool:
     return bool(row)
 
 
+def has_any_payment(user_id: int) -> bool:
+    """Совершал ли пользователь хоть одну оплату (для оффера «первая покупка -50%»)."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM payments WHERE user_id = ? LIMIT 1",
+            (user_id,),
+        ).fetchone()
+    return bool(row)
+
+
 def create_invoice(
     user_id: int,
     kind: str,
