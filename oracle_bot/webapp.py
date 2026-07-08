@@ -245,6 +245,30 @@ def api_admin_funnel(user_id: int = Query(...)):
     return funnel_snapshot()
 
 
+@app.get("/api/admin/sources")
+def api_admin_sources(user_id: int = Query(...), days: int = Query(30)):
+    if user_id <= 0 or not is_admin_user(user_id):
+        raise HTTPException(403, "Нет доступа")
+    from datetime import date
+
+    today = date.today().isoformat()
+    with db._connect() as conn:
+        today_rows = conn.execute(
+            """
+            SELECT COALESCE(NULLIF(signup_source, ''), '(без метки)') AS source,
+                   COUNT(*) AS users
+            FROM user_meta
+            WHERE substr(COALESCE(signup_at, ''), 1, 10) = ?
+            GROUP BY source ORDER BY users DESC
+            """,
+            (today,),
+        ).fetchall()
+    return {
+        "period": db.signups_by_source(days),
+        "today": [dict(r) for r in today_rows],
+    }
+
+
 class AdminBroadcastBody(BaseModel):
     user_id: int
     text: str = ""
