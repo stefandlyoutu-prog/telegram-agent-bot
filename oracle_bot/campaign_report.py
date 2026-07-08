@@ -165,38 +165,67 @@ def sales_report() -> str:
     else:
         lines.append("Оплат сегодня не было.\n")
 
-    # Как отработала воронка возражений (реакции на первый вопрос)
+    # Как отработала воронка возражений (реакции на первый вопрос).
+    # Считаем и явные реакции (клики), и сам факт запуска лестницы за день.
     reasons = {"price": 0, "fit": 0, "later": 0, "bought": 0}
     for payload, cnt in obj_rows:
         # payload вида obj:price:exclusive_hvd
         parts = str(payload).split(":")
         if len(parts) >= 2 and parts[1] in reasons:
             reasons[parts[1]] += int(cnt)
-    if any(reasons.values()):
-        lines.append("<b>Воронка возражений (реакции):</b>")
-        lines.append(
-            f"• «дорого» {reasons['price']} · «не моё» {reasons['fit']} · "
-            f"«подумаю» {reasons['later']} · «уже купил» {reasons['bought']}"
-        )
-        lines.append("")
+    obj_reactions = sum(reasons.values())
 
-    # Выводы
-    lines.append("<b>Что учесть завтра:</b>")
-    if total_cnt == 0 and int(ad_sent) > 0:
+    with db._connect() as conn:
+        obj_pushes = conn.execute(
+            """
+            SELECT COUNT(*) FROM push_queue
+            WHERE push_type LIKE 'obj_%' AND sent_at IS NOT NULL
+              AND substr(sent_at, 1, 10) = ?
+            """,
+            (today,),
+        ).fetchone()[0]
+
+    lines.append("<b>Воронка возражений:</b>")
+    if obj_reactions or obj_pushes:
         lines.append(
-            "— В день старта покупок нет: воронка возражений добьёт −50%/даунсейлом "
-            "в ближайшие 1–2 суток. Если и дальше 0 — снизить входной чек или начать "
-            "с ХВД (599₽), а Ultra предлагать как апселл."
+            f"• Отправлено дожимов: {int(obj_pushes)} · получено ответов: {obj_reactions}"
         )
-    elif total_rub and int(ad_sent):
+        if obj_reactions:
+            lines.append(
+                f"• «дорого» {reasons['price']} · «не моё» {reasons['fit']} · "
+                f"«подумаю» {reasons['later']} · «уже купил» {reasons['bought']}"
+            )
+    else:
+        lines.append("• Не запускалась — сегодня не было рассылки оффера книг.")
+    lines.append("")
+
+    # Выводы — блок всегда содержательный, даже при полном нуле.
+    lines.append("<b>Что учесть завтра:</b>")
+    if int(ad_sent) == 0:
+        lines.append(
+            "— Сегодня рассылка оффера книг НЕ отправлялась (0 доставок), поэтому продаж и "
+            "возражений закономерно нет. Реклама в каналах — это другой канал (новые подписчики), "
+            "а книги продаются рассылкой по базе бота."
+        )
+        lines.append(
+            "— Действие: запустить рассылку варианта «entry» (вход 99₽) по активной базе — "
+            "это включит и воронку возражений автоматически."
+        )
+    elif total_cnt == 0:
+        lines.append(
+            "— Рассылка ушла, но покупок в день старта нет: воронка возражений добьёт "
+            "−50%/даунсейлом в ближайшие 1–2 суток. Если и дальше 0 — снизить входной чек "
+            "или начать с ХВД (599₽), Ultra предлагать апселлом."
+        )
+    else:
         lines.append(
             f"— Конверсия рассылки в оплату: {total_cnt / int(ad_sent) * 100:.1f}%. "
             "Повторить показ тем, кто открыл, но не купил; усилить крючки по дате рождения."
         )
-    if reasons["price"] > reasons["fit"]:
-        lines.append("— Основное возражение — цена. Двигать акцент на рассрочку смыслом: «−50% лично тебе».")
+    if reasons["price"] > reasons["fit"] and reasons["price"]:
+        lines.append("— Главное возражение — цена. Акцент на «−50% лично тебе» и рассрочку смыслом.")
     elif reasons["fit"] > 0:
-        lines.append("— Есть сомнения «моё ли это» — усилить персонализацию оффера (имя, дата, черты).")
+        lines.append("— Сомнения «моё ли это» — усилить персонализацию оффера (имя, дата, черты).")
     return "\n".join(lines)
 
 
