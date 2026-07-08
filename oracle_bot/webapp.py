@@ -269,6 +269,41 @@ def api_admin_sources(user_id: int = Query(...), days: int = Query(30)):
     }
 
 
+@app.post("/api/admin/backfill-sources")
+def api_admin_backfill_sources(body: AdminBroadcastBody):
+    """Восстановить signup_source из событий return_visit с payload src_*.
+
+    Нужен из-за бага: middleware создавал юзера раньше /start, из-за чего
+    is_new всегда был False и метка src_ не сохранялась.
+    """
+    if body.user_id <= 0 or not is_admin_user(body.user_id):
+        raise HTTPException(403, "Нет доступа")
+    fixed = []
+    with db._connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT user_id, payload, MIN(created_at) AS first_seen
+            FROM events
+            WHERE event_type = 'return_visit' AND payload LIKE 'src\\_%' ESCAPE '\\'
+            GROUP BY user_id
+            """
+        ).fetchall()
+        for r in rows:
+            src = (r["payload"] or "")[4:].strip().lower()[:64]
+            if not src:
+                continue
+            cur = conn.execute(
+                """
+                UPDATE user_meta SET signup_source = ?
+                WHERE user_id = ? AND COALESCE(signup_source, '') = ''
+                """,
+                (src, r["user_id"]),
+            )
+            if cur.rowcount:
+                fixed.append({"user_id": r["user_id"], "source": src})
+    return {"fixed": len(fixed), "users": fixed}
+
+
 class AdminBroadcastBody(BaseModel):
     user_id: int
     text: str = ""

@@ -101,6 +101,9 @@ class _ActivityMiddleware(BaseMiddleware):
     ) -> Any:
         user = getattr(event, "from_user", None)
         if user:
+            # ensure_user до touch_user: иначе /start никогда не узнает,
+            # что пользователь новый (touch_user сам создаёт запись).
+            data["is_new_user"] = db.ensure_user(user.id)
             db.touch_user(
                 user.id,
                 username=user.username,
@@ -739,14 +742,23 @@ def _profile_ctx(uid: int) -> dict:
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext, command: CommandObject) -> None:
+async def cmd_start(
+    message: Message,
+    state: FSMContext,
+    command: CommandObject,
+    is_new_user: bool = False,
+) -> None:
     await state.clear()
     uid = message.from_user.id if message.from_user else 0
-    is_new = db.ensure_user(uid)
+    is_new = db.ensure_user(uid) or is_new_user
     welcome_bonus = False
     notify_referrer: int | None = None
 
     args = (command.args or "").strip()
+    # Атрибуция first-touch для любого src_* — независимо от is_new
+    # (set_signup_source не перезаписывает уже существующую метку).
+    if args.lower().startswith("src_"):
+        db.set_signup_source(uid, args[4:].lower())
     try:
         from oracle_bot.free_day import is_free_day_active, track_visit
 
