@@ -124,8 +124,11 @@ services:
     plan: standard
     schedule: "0 6 * * *"   # 06:00 UTC = 09:00 МСК ежедневно
     buildCommand: pip install -r requirements-video.txt
+    # Отдельные прогоны на площадку, чтобы --limit не «съедался» одной из них
+    # (иначе YouTube забирает лимит и VK пропускается).
     startCommand: >-
-      python scripts/oracle_video_promo.py run --today-only --platforms vk,youtube --limit 2 &&
+      python scripts/oracle_video_promo.py run --today-only --platforms youtube --limit 1 &&
+      python scripts/oracle_video_promo.py run --today-only --platforms vk --limit 1 &&
       python scripts/tiktok_daily_dropoff.py
     envVars:
       - key: PYTHON_VERSION
