@@ -270,13 +270,13 @@ def api_admin_sources(user_id: int = Query(...), days: int = Query(30)):
 
 
 @app.post("/api/admin/backfill-sources")
-def api_admin_backfill_sources(body: AdminBroadcastBody):
+def api_admin_backfill_sources(user_id: int = Query(...)):
     """Восстановить signup_source из событий return_visit с payload src_*.
 
     Нужен из-за бага: middleware создавал юзера раньше /start, из-за чего
     is_new всегда был False и метка src_ не сохранялась.
     """
-    if body.user_id <= 0 or not is_admin_user(body.user_id):
+    if user_id <= 0 or not is_admin_user(user_id):
         raise HTTPException(403, "Нет доступа")
     fixed = []
     with db._connect() as conn:
