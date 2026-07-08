@@ -111,9 +111,31 @@ def _openai_tts(text: str, out_mp3: Path) -> bool:
     raise RuntimeError(f"OpenAI TTS после ретраев: {last_err}")
 
 
+def _edge_voice() -> str:
+    return os.getenv("VIDEO_TTS_EDGE_VOICE", "ru-RU-DmitryNeural").strip() or "ru-RU-DmitryNeural"
+
+
+def _edge_tts(polished: str, out_mp3: Path) -> Path:
+    synthesize_speech(
+        polished,
+        out_mp3,
+        voice=_edge_voice(),
+        rate=os.getenv("VIDEO_TTS_EDGE_RATE", "+2%"),
+        pitch=os.getenv("VIDEO_TTS_EDGE_PITCH", "-1Hz"),
+    )
+    return out_mp3
+
+
 async def synthesize_voice_mp3(text: str, out_mp3: Path) -> Path:
     out_mp3.parent.mkdir(parents=True, exist_ok=True)
     polished = await polish_voice_text(text)
+
+    # Движок озвучки выбирается через VIDEO_TTS_ENGINE:
+    #   "edge"   — сразу edge-tts (выбранный голос, бесплатно) без облачных вызовов
+    #   иначе    — OpenAI → GCP → edge (прежняя цепочка)
+    engine = os.getenv("VIDEO_TTS_ENGINE", "openai").strip().lower()
+    if engine == "edge":
+        return await asyncio.to_thread(_edge_tts, polished, out_mp3)
 
     # OpenAI TTS — приоритет: самое естественное и чистое русское произношение
     try:
@@ -136,15 +158,8 @@ async def synthesize_voice_mp3(text: str, out_mp3: Path) -> Path:
     except Exception as e:
         logger.info("GCP TTS fallback to edge: %s", e)
 
-    # edge-tts — Svetlana часто естественнее для продающих Shorts
-    synthesize_speech(
-        polished,
-        out_mp3,
-        voice="ru-RU-SvetlanaNeural",
-        rate="+2%",
-        pitch="-1Hz",
-    )
-    return out_mp3
+    # edge-tts — запасной вариант
+    return await asyncio.to_thread(_edge_tts, polished, out_mp3)
 
 
 def synthesize_voice_mp3_sync(text: str, out_mp3: Path) -> Path:
