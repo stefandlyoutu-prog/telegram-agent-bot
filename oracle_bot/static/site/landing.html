@@ -4,111 +4,158 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="google-site-verification" content="6crzNMOZv6pUvS6RNvsHyXUiLtNrDftAhAO_TaR4JcE" />
-  <title>Оракул — таро, гороскоп и матрица судьбы онлайн в Telegram</title>
-  <meta name="description" content="Персональные расклады таро, гороскоп по дате рождения, матрица судьбы и совместимость — онлайн в Telegram. Первый расклад бесплатно, полный ответ на вопрос — 99 ₽." />
+  <title>2 сценария твоей судьбы на 2 месяца — бесплатный расклад по дате рождения</title>
+  <meta name="description" content="Честный разбор по твоей дате рождения: что будет, если ничего не менять — и что изменится, если действовать. Первый расклад бесплатно, в Telegram за 30 секунд." />
   <link rel="canonical" href="https://moracul.onrender.com/landing" />
-  <meta property="og:title" content="Оракул — таро, гороскоп и матрица судьбы онлайн" />
-  <meta property="og:description" content="Персональные расклады по вашей дате рождения — в Telegram за 30 секунд. Первый расклад бесплатно." />
+  <meta property="og:title" content="2 сценария твоей судьбы — бесплатный расклад в Telegram" />
+  <meta property="og:description" content="Что будет через 2 месяца, если ничего не менять — и что, если действовать. Разбор по твоей дате рождения. Первый расклад бесплатно." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://moracul.onrender.com/landing" />
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"WebSite","name":"Оракул — таро и гороскопы в Telegram","url":"https://moracul.onrender.com/landing","inLanguage":"ru"}
   </script>
   <style>
-    :root { --bg:#0a0a12; --card:#14141f; --accent:#c9a227; --text:#eee; --muted:#999; }
+    :root { --bg:#0a0a12; --card:#14141f; --accent:#c9a227; --accent2:#e8c25a; --text:#f0f0f0; --muted:#9a9aa8; --red:#e05a5a; --green:#4fbf7d; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; padding-bottom: 88px; }
-    .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 48px; }
-    h1 { font-size: 2rem; margin: 12px 0; }
-    h2 { font-size: 1.2rem; margin: 32px 0 12px; color: var(--accent); }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; padding-bottom: 96px; }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 0 20px; }
+    h1 { font-size: 2rem; line-height: 1.2; margin: 14px 0; }
+    h2 { font-size: 1.35rem; margin: 40px 0 16px; }
     p { color: var(--muted); margin-bottom: 12px; }
-    .hero { text-align: center; padding: 40px 0 24px; }
-    .eyebrow { color: var(--accent); font-size: .85rem; letter-spacing: .12em; text-transform: uppercase; }
+    .accent { color: var(--accent2); }
+    .hero { text-align: center; padding: 44px 0 12px; }
+    .eyebrow { color: var(--accent); font-size: .8rem; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 8px; }
+    .lead { font-size: 1.08rem; color: #d5d5df; }
     a.btn {
       display: inline-block; cursor: pointer;
-      background: linear-gradient(135deg,#c9a227,#8b6914); color: #111 !important; font-weight: 700;
-      padding: 14px 28px; border-radius: 12px; text-decoration: none; margin: 8px 4px; font-size: 1rem;
-      border: none; text-align: center; min-width: 160px;
+      background: linear-gradient(135deg,#e8c25a,#b8860b); color:#111 !important; font-weight: 800;
+      padding: 16px 30px; border-radius: 14px; text-decoration: none; margin: 10px 4px; font-size: 1.06rem;
+      border: none; text-align: center; box-shadow: 0 6px 24px rgba(201,162,39,.28);
     }
-    a.btn:hover { filter: brightness(1.08); }
-    a.btn.ghost {
-      background: #1a1a28; border: 2px solid var(--accent); color: var(--accent) !important;
-    }
-    .grid { display: grid; gap: 12px; margin-top: 16px; }
-    .card { background: var(--card); border-radius: 12px; padding: 16px; border: 1px solid #333; }
-    .card .btn { display: block; width: 100%; margin: 12px 0 0; }
-    .price { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
-    footer { margin-top: 48px; font-size: .85rem; text-align: center; }
+    a.btn:hover { filter: brightness(1.07); transform: translateY(-1px); }
+    a.btn.ghost { background:#161624; border:1.5px solid #33334a; color: var(--accent2) !important; box-shadow:none; font-weight:700; }
+    .sub { font-size:.85rem; color: var(--muted); margin-top: 6px; }
+    .scenarios { display:grid; gap:14px; margin-top:16px; }
+    @media(min-width:560px){ .scenarios{ grid-template-columns:1fr 1fr; } }
+    .sc { border-radius:16px; padding:20px; border:1px solid #2a2a3a; }
+    .sc.red { background:linear-gradient(160deg,#1f1216,#14141f); border-color:#4a2530; }
+    .sc.green { background:linear-gradient(160deg,#101f17,#14141f); border-color:#255040; }
+    .sc .tag { font-size:.78rem; letter-spacing:.1em; text-transform:uppercase; font-weight:700; }
+    .sc.red .tag { color:var(--red); }
+    .sc.green .tag { color:var(--green); }
+    .sc h3 { font-size:1.05rem; margin:6px 0 8px; }
+    .sc p { font-size:.95rem; margin:0; }
+    .steps { display:grid; gap:12px; counter-reset:step; }
+    .step { background:var(--card); border-radius:14px; padding:16px 18px; border:1px solid #262636; display:flex; gap:14px; align-items:flex-start; }
+    .step .num { flex:0 0 34px; width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,#e8c25a,#b8860b); color:#111; font-weight:800; display:flex; align-items:center; justify-content:center; }
+    .step b { color:var(--text); }
+    .step span { color:var(--muted); font-size:.95rem; }
+    .proof { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:8px; }
+    .stat { background:var(--card); border:1px solid #262636; border-radius:12px; padding:12px 16px; text-align:center; flex:1; min-width:140px; }
+    .stat b { display:block; font-size:1.5rem; color:var(--accent2); }
+    .stat span { font-size:.8rem; color:var(--muted); }
+    .quotes { display:grid; gap:12px; }
+    .quote { background:var(--card); border-radius:14px; padding:16px 18px; border:1px solid #262636; }
+    .quote p { color:#dcdce4; font-style:italic; margin:0 0 8px; }
+    .quote .who { color:var(--muted); font-size:.85rem; font-style:normal; }
+    .faq details { background:var(--card); border:1px solid #262636; border-radius:12px; padding:14px 16px; margin-bottom:10px; }
+    .faq summary { cursor:pointer; font-weight:600; color:var(--text); }
+    .faq p { margin-top:10px; margin-bottom:0; }
+    .price-row { text-align:center; background:var(--card); border:1px solid #2a2a3a; border-radius:16px; padding:22px; margin-top:16px; }
+    .price-row .big { font-size:1.15rem; color:var(--text); }
+    .price-row .free { color:var(--green); font-weight:800; }
+    footer { margin-top:48px; font-size:.82rem; text-align:center; color:var(--muted); }
     footer a { color: var(--accent); }
-    .sticky {
-      position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-      background: rgba(10,10,18,.95); border-top: 1px solid #333;
-      padding: 12px 16px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
-    }
-    .sticky .btn { margin: 0; flex: 1; min-width: 140px; max-width: 220px; font-size: .95rem; padding: 12px 16px; }
+    .sticky { position: fixed; left:0; right:0; bottom:0; z-index:10; background: rgba(10,10,18,.96); border-top:1px solid #262636; padding:12px 16px; display:flex; justify-content:center; }
+    .sticky .btn { margin:0; width:100%; max-width:420px; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <section class="hero">
-      <p class="eyebrow">Telegram · Mini App</p>
-      <h1>🔮 m-Oracul</h1>
-      <p>Таро, гороскоп, натальная карта, сонник и 25+ практик — персонально, в чате с ботом.</p>
-      <a class="btn bot-link" data-start="" href="https://t.me/MOracul_bot">Открыть бота бесплатно</a>
-      <a class="btn ghost" href="https://moracul.onrender.com/">Открыть приложение</a>
+      <p class="eyebrow">Расклад по дате рождения · Telegram</p>
+      <h1>Через 2 месяца ты будешь <span class="accent">там же</span> — или уже <span class="accent">другим</span>?</h1>
+      <p class="lead">Честный разбор по твоей дате рождения покажет <b>два сценария</b>: что будет, если ничего не менять — и что изменится, если начать действовать.</p>
+      <a class="btn bot-link" data-start="src_site" href="https://t.me/MOracul_bot?start=src_site">🔮 Узнать оба сценария бесплатно</a>
+      <p class="sub">Первый расклад бесплатно · ответ за 30 секунд · без установки</p>
     </section>
 
+    <div class="scenarios">
+      <div class="sc red">
+        <div class="tag">🔴 Сценарий 1</div>
+        <h3>Если ничего не менять</h3>
+        <p>Те же деньги, те же ссоры, те же решения по кругу — и снова «почему опять больно?».</p>
+      </div>
+      <div class="sc green">
+        <div class="tag">🟢 Сценарий 2</div>
+        <h3>Если работать с картой</h3>
+        <p>Где твоя точка роста, что тормозит и какой первый шаг реально изменит ближайшие 2 месяца.</p>
+      </div>
+    </div>
+
+    <h2>Почему это не «гороскоп для всех»</h2>
+    <p>Обычные гороскопы пишут одно и то же на 1/12 населения планеты. Здесь — <b>4 коротких вопроса про твою жизнь</b> и разбор по твоей дате рождения. Ответ — под тебя, а не «для Овнов вообще».</p>
+
     <h2>Как это работает</h2>
-    <div class="grid">
-      <div class="card"><strong>1. Выбери раздел</strong><br>Таро, карьера, отношения, карта дня — в боте или приложении.</div>
-      <div class="card"><strong>2. Получи разбор</strong><br>Бесплатная часть сразу с конкретикой. Углубление — по желанию.</div>
-      <div class="card"><strong>3. Расти бесплатно</strong><br>Приглашай друзей — бонусные чтения и безлимит за 10 друзей.</div>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><div><b>Открой бота</b><br><span>Нажми кнопку — Telegram откроется сам, ничего ставить не нужно.</span></div></div>
+      <div class="step"><div class="num">2</div><div><b>Ответь на 4 вопроса</b><br><span>Про отношения, работу и то, что болит сейчас. Займёт минуту.</span></div></div>
+      <div class="step"><div class="num">3</div><div><b>Получи 2 сценария</b><br><span>Первая часть — бесплатно и сразу. Углубление — по желанию.</span></div></div>
     </div>
 
-    <h2>Тарифы</h2>
-    <div class="grid">
-      <div class="card">
-        <strong>Бесплатно</strong>
-        <p>2 чтения в день на каждый раздел</p>
-        <a class="btn bot-link" data-start="" href="https://t.me/MOracul_bot">Начать бесплатно</a>
-      </div>
-      <div class="card">
-        <strong>Приведи друга</strong>
-        <p>+2 бонусных чтения за каждого друга · 10 друзей = безлимит на год</p>
-        <a class="btn ghost bot-link" data-start="ref" href="https://t.me/MOracul_bot?start=ref">Получить реферальную ссылку</a>
-      </div>
-      <div class="card">
-        <strong>Премиум</strong>
-        <p class="price">299 ₽/мес</p>
-        <p>Безлимит всех разделов</p>
-        <a class="btn bot-link" data-start="premium" href="https://t.me/MOracul_bot?start=pay">Оформить за 299 ₽</a>
-      </div>
+    <h2>Людям заходит</h2>
+    <div class="proof">
+      <div class="stat"><b>25+</b><span>практик: таро, натальная, матрица</span></div>
+      <div class="stat"><b>30 сек</b><span>до первого ответа</span></div>
+      <div class="stat"><b>0 ₽</b><span>первый расклад</span></div>
+    </div>
+    <div class="quotes" style="margin-top:16px">
+      <div class="quote"><p>«Ожидала общие фразы, а получила прям про свою ситуацию с работой. Мурашки.»</p><span class="who">— Анна, по раскладу Таро</span></div>
+      <div class="quote"><p>«Сценарий 1 — это буквально то, как я живу последний год. Задумалась.»</p><span class="who">— Ирина, разбор по дате</span></div>
     </div>
 
-    <h2>Разделы</h2>
-    <p>Таро · Гороскоп · Натальная · Нумерология · Сонник · Совместимость · Руны · Хиромантия · Карма · И ещё 20+</p>
-    <p style="margin-top:16px">
-      <a class="btn bot-link" data-start="mod_tarot" href="https://t.me/MOracul_bot?start=mod_tarot">🔮 Таро</a>
+    <div class="price-row">
+      <p class="big"><span class="free">Первый расклад — бесплатно.</span></p>
+      <p style="margin:8px 0 0">Хочешь полный сценарий 2 с деталями и прогнозом — <b>от 49 ₽</b> в первый раз. Без подписок и автосписаний.</p>
+      <a class="btn bot-link" data-start="src_site" href="https://t.me/MOracul_bot?start=src_site">Начать бесплатно</a>
+    </div>
+
+    <h2>Частые вопросы</h2>
+    <div class="faq">
+      <details><summary>Это бесплатно?</summary><p>Да, первый расклад и бесплатная часть каждого раздела — 0 ₽. Платно только глубокое продолжение, если захочешь.</p></details>
+      <details><summary>Нужно что-то устанавливать?</summary><p>Нет. Всё работает прямо в Telegram — нажми кнопку и общайся с ботом в чате.</p></details>
+      <details><summary>Чем это отличается от обычного гороскопа?</summary><p>Ответ строится по твоей дате рождения и твоим 4 ответам про текущую ситуацию — это персонально, а не «для знака вообще».</p></details>
+      <details><summary>Меня не спишут деньги внезапно?</summary><p>Нет подписок и автосписаний. Платишь только за конкретный разбор, если сам решишь его открыть.</p></details>
+    </div>
+
+    <div style="text-align:center;margin-top:32px">
+      <a class="btn bot-link" data-start="src_site" href="https://t.me/MOracul_bot?start=src_site">🔮 Узнать свои 2 сценария</a>
+      <p class="sub">Бесплатно · в Telegram · прямо сейчас</p>
+    </div>
+
+    <h2>Другие разделы</h2>
+    <p>Таро · Гороскоп · Натальная карта · Матрица судьбы · Нумерология · Сонник · Совместимость · Руны · Хиромантия · Карма и ещё 15+.</p>
+    <p style="margin-top:8px">
+      <a class="btn ghost bot-link" data-start="mod_tarot" href="https://t.me/MOracul_bot?start=mod_tarot">🔮 Таро</a>
       <a class="btn ghost bot-link" data-start="mod_horo_today" href="https://t.me/MOracul_bot?start=mod_horo_today">🌅 Гороскоп</a>
     </p>
 
     <h2>Статьи</h2>
-    <div class="grid">
-      <div class="card"><a href="/blog/matrica-sudby-po-date-rozhdeniya" style="color:var(--text);text-decoration:none"><strong>Матрица судьбы по дате рождения</strong><br><span style="color:var(--muted)">Что это и как читать энергии</span></a></div>
-      <div class="card"><a href="/blog/rasklad-taro-online" style="color:var(--text);text-decoration:none"><strong>Расклад таро онлайн</strong><br><span style="color:var(--muted)">Как задать вопрос, чтобы получить точный ответ</span></a></div>
-      <div class="card"><a href="/blog" style="color:var(--accent);text-decoration:none"><strong>Все статьи блога →</strong></a></div>
+    <div class="steps">
+      <div class="step"><div><a href="/blog/matrica-sudby-po-date-rozhdeniya" style="color:var(--text);text-decoration:none"><b>Матрица судьбы по дате рождения</b><br><span>Что это и как читать энергии</span></a></div></div>
+      <div class="step"><div><a href="/blog/rasklad-taro-online" style="color:var(--text);text-decoration:none"><b>Расклад таро онлайн</b><br><span>Как задать вопрос, чтобы получить точный ответ</span></a></div></div>
+      <div class="step"><div><a href="/blog" style="color:var(--accent2);text-decoration:none"><b>Все статьи блога →</b></a></div></div>
     </div>
 
     <footer>
       <p><a href="/oferta">Публичная оферта</a> · <a href="https://t.me/MOracul_bot">@MOracul_bot</a></p>
       <p style="margin-top:8px">Самозанятый: Морозов Степан Юрьевич · ИНН 615108112390</p>
-      <p style="margin-top:8px">Информационно-консультативные услуги. Не замена врачу и юристу.</p>
+      <p style="margin-top:8px">Информационно-развлекательные услуги. Не является заменой консультации врача, психолога или юриста.</p>
     </footer>
   </div>
 
   <div class="sticky">
-    <a class="btn bot-link" data-start="" href="https://t.me/MOracul_bot">Открыть бота</a>
-    <a class="btn ghost" href="https://moracul.onrender.com/">Приложение</a>
+    <a class="btn bot-link" data-start="src_site" href="https://t.me/MOracul_bot?start=src_site">🔮 Узнать оба сценария — бесплатно</a>
   </div>
 
   <script>
@@ -116,8 +163,6 @@
     const p = new URLSearchParams(location.search);
     const src = p.get('src') || p.get('utm_source') || '';
     function botUrl(start) {
-      // Кнопка оплаты всегда ведёт на оплату в боте (касса открыта под бота),
-      // при этом сохраняем источник для атрибуции (/sources).
       if (start === 'premium') {
         return BOT + '?start=' + (src ? 'pay_' + encodeURIComponent(src) : 'pay');
       }
