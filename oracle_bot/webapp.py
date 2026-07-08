@@ -6,7 +6,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -49,8 +49,25 @@ def index():
     return FileResponse(STATIC / "index.html")
 
 
+def _log_web_visit(path: str, request: "Request | None" = None) -> None:
+    """Серверный счётчик посещений сайта (внешних, вне Telegram).
+
+    Ботов/пауков не считаем, чтобы цифры были честные.
+    """
+    try:
+        ua = ""
+        if request is not None:
+            ua = (request.headers.get("user-agent") or "").lower()
+        if any(b in ua for b in ("bot", "spider", "crawl", "preview", "monitor", "curl", "python-requests")):
+            return
+        db.log_event(0, "web_visit", path)
+    except Exception:
+        pass
+
+
 @app.get("/landing")
-def landing_page():
+def landing_page(request: Request):
+    _log_web_visit("/landing", request)
     return FileResponse(SITE / "landing.html")
 
 
@@ -65,17 +82,19 @@ def oferta_page():
 
 
 @app.get("/blog")
-def blog_index():
+def blog_index(request: Request):
+    _log_web_visit("/blog", request)
     return FileResponse(SITE / "blog" / "index.html")
 
 
 @app.get("/blog/{slug}")
-def blog_article(slug: str):
+def blog_article(slug: str, request: Request):
     # только [a-z0-9-] — защита от обхода пути
     safe = "".join(c for c in slug if c.isalnum() or c == "-")
     path = SITE / "blog" / f"{safe}.html"
     if not path.exists():
         raise HTTPException(404, "Статья не найдена")
+    _log_web_visit(f"/blog/{safe}", request)
     return FileResponse(path)
 
 
@@ -263,9 +282,34 @@ def api_admin_sources(user_id: int = Query(...), days: int = Query(30)):
             """,
             (today,),
         ).fetchall()
+    from datetime import timedelta
+
+    week = (date.today() - timedelta(days=7)).isoformat()
+    with db._connect() as conn:
+        web_today = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type='web_visit' AND substr(created_at,1,10)=?",
+            (today,),
+        ).fetchone()[0]
+        web_week = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type='web_visit' AND substr(created_at,1,10)>=?",
+            (week,),
+        ).fetchone()[0]
+        web_by_path = conn.execute(
+            """
+            SELECT payload AS path, COUNT(*) AS c FROM events
+            WHERE event_type='web_visit' AND substr(created_at,1,10)>=?
+            GROUP BY payload ORDER BY c DESC LIMIT 10
+            """,
+            (week,),
+        ).fetchall()
     return {
         "period": db.signups_by_source(days),
         "today": [dict(r) for r in today_rows],
+        "web_visits": {
+            "today": int(web_today),
+            "week": int(web_week),
+            "by_path_week": [dict(r) for r in web_by_path],
+        },
     }
 
 
