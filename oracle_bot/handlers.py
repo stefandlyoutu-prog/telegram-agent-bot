@@ -323,7 +323,11 @@ async def _send_reading(
     wait_msg: Message | None = None,
     user_text: str = "",
 ) -> None:
+    from oracle_bot.life_quiz import life_context_block
+
     premium = has_full_access(uid)
+    profile = db.get_profile(uid)
+    prompt = f"{prompt}{life_context_block(profile)}"
     wait = wait_msg or await message.answer(_WAIT.get(module, "🔮…"))
     try:
         if message.bot:
@@ -409,6 +413,7 @@ async def _instant(
     builder,
     *,
     need_profile: bool = False,
+    skip_quiz: bool = False,
 ) -> None:
     blocked = await _guard(uid, module)
     if blocked:
@@ -420,6 +425,16 @@ async def _instant(
             reply_markup=kb_profile(False),
         )
         return
+    if not skip_quiz:
+        from oracle_bot import life_quiz as lq
+
+        if lq.needs_quiz(uid):
+            lq.set_pending(
+                uid,
+                {"type": "instant", "module": module, "need_profile": need_profile},
+            )
+            await lq.start_quiz(msg, uid)
+            return
     result = builder(uid)
     if result is None:
         await msg.answer(
@@ -429,6 +444,55 @@ async def _instant(
         return
     prompt, header = result
     await _send_reading(msg, uid=uid, module=module, prompt=prompt, header=header)
+
+
+_INSTANT_BUILDERS: dict[str, tuple] = {}
+
+
+async def resume_after_life_quiz(
+    msg: Message,
+    uid: int,
+    pending: dict,
+    state: FSMContext | None = None,
+) -> None:
+    """Продолжить чтение после мини-опроса."""
+    t = pending.get("type")
+    if t == "instant":
+        mod = pending.get("module", "")
+        spec = _INSTANT_BUILDERS.get(mod)
+        if spec:
+            builder, need_profile = spec
+            await _instant(
+                msg, uid, mod, builder, need_profile=need_profile, skip_quiz=True
+            )
+            return
+    if t == "open_module":
+        mod = pending.get("mod", "tarot")
+        if state is None:
+            await msg.answer(
+                "🔮 Нажми <b>Таро</b> в меню — разбор уже будет персональным.",
+                reply_markup=kb_main(),
+            )
+            return
+        await _open_module(msg, state, uid, mod, skip_quiz=True)
+        return
+    await msg.answer("Выбери раздел в меню — разбор будет с учётом твоей ситуации.")
+
+
+_INSTANT_BUILDERS.update(
+    {
+        "karma": (mf.karma_prompt, True),
+        "akashic": (mf.akashic_prompt, True),
+        "chakra": (mf.chakra_prompt, False),
+        "aura": (mf.aura_prompt, True),
+        "spirit_guide": (mf.spirit_guide_prompt, False),
+        "moon": (mf.moon_prompt, False),
+        "crystal": (mf.crystal_prompt, False),
+        "shadow": (mf.shadow_prompt, True),
+        "biorhythm": (mf.biorhythm_prompt, True),
+        "transit": (mf.transit_prompt, True),
+    }
+)
 
 
 async def _send_premium_invoice(message: Message) -> None:
@@ -772,6 +836,28 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
         return
     if args.startswith("mod_"):
         await _open_module(message, state, uid, args[4:])
+        return
+    if args in {"awareness", "pain", "scenario", "razbor"} or args in {
+        "src_awareness", "src_pain", "src_scenario", "src_razbor",
+    }:
+        if args.startswith("src_"):
+            db.set_signup_source(uid, args[4:] or "awareness")
+        await message.answer(
+            "🔴 <b>Два сценария на 2 месяца</b>\n\n"
+            "Покажу честно: что будет, если ничего не менять — "
+            "и что изменится, если работать с картой.\n\n"
+            "Сначала 4 коротких вопроса про твою ситуацию 👇"
+        )
+        if not db.get_profile(uid).get("birth_date"):
+            await message.answer(
+                "Нужна дата рождения — укажи в 👤 Профиль, иначе карта не соберётся.",
+                reply_markup=kb_profile(False),
+            )
+            return
+        from oracle_bot import life_quiz as lq
+
+        lq.set_pending(uid, {"type": "open_module", "mod": "tarot"})
+        await lq.start_quiz(message, uid)
         return
 
     if is_new and args.lower().startswith("src_") and not args.startswith("mod_"):
@@ -1391,7 +1477,14 @@ async def pick_module(call: CallbackQuery, state: FSMContext) -> None:
     await _open_module(call.message, state, call.from_user.id, mod)
 
 
-async def _open_module(msg: Message, state: FSMContext, uid: int, mod: str) -> None:
+async def _open_module(
+    msg: Message,
+    state: FSMContext | None,
+    uid: int,
+    mod: str,
+    *,
+    skip_quiz: bool = False,
+) -> None:
     if not mod:
         await msg.answer("Выбери раздел в меню 👇", reply_markup=kb_main())
         return
@@ -1399,6 +1492,15 @@ async def _open_module(msg: Message, state: FSMContext, uid: int, mod: str) -> N
     if blocked:
         await msg.answer(blocked, reply_markup=kb_limit_reached(uid))
         return
+    if not skip_quiz and mod not in (
+        "profile", "premium", "referral", "exclusive_hvd", "ultra_plus",
+    ):
+        from oracle_bot import life_quiz as lq
+
+        if lq.needs_quiz(uid):
+            lq.set_pending(uid, {"type": "open_module", "mod": mod})
+            await lq.start_quiz(msg, uid)
+            return
 
     if mod == "horo_today":
         await msg.answer("🌅 Выбери знак для гороскопа на сегодня:", reply_markup=kb_zodiac("htoday"))
@@ -1569,9 +1671,17 @@ async def _profile_show(msg: Message, uid: int) -> None:
         f"Дата: {p.get('birth_date') or '—'}\n"
         f"Время: {p.get('birth_time') or '—'}\n"
         f"Место: {p.get('birth_place') or '—'}\n"
-        f"Знак: {zodiac_label(p['zodiac']) if p.get('zodiac') else '—'}\n\n"
-        "<i>Профиль усиливает натальную, карму и прошлые жизни.</i>"
+        f"Знак: {zodiac_label(p['zodiac']) if p.get('zodiac') else '—'}\n"
     )
+    if p.get("relationship_status"):
+        text += f"Отношения: {p['relationship_status']}\n"
+    if p.get("work_status"):
+        text += f"Работа: {p['work_status']}\n"
+    if p.get("pain_focus"):
+        text += f"Болит: {p['pain_focus']}\n"
+    if p.get("about_text"):
+        text += f"О себе: {p['about_text'][:120]}\n"
+    text += "\n<i>Профиль усиляет все разборы — чем точнее, тем персональнее ответ.</i>"
     await msg.answer(
         text,
         reply_markup=kb_profile(bool(p.get("birth_date"))),

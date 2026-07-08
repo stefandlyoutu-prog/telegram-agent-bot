@@ -302,6 +302,51 @@ def birthday_hooks_all(product: str = "hvd") -> list[str]:
     return [birthday_hook(n, product=product) for n in range(1, 10)]
 
 
+# --- Осознанность через боль (воронка как Selena / ProAstro) ---
+
+def kb_awareness() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔴 Узнать оба сценария бесплатно",
+                    url=f"https://t.me/{BOT}?start=src_awareness",
+                )
+            ],
+        ]
+    )
+
+
+def pain_awareness_channel(source: str = "") -> str:
+    src = f"?start=src_{source.lstrip('@').lower()}" if source else "?start=src_awareness"
+    return (
+        "🔴 <b>Через 2 месяца ты будешь там же — или уже другой?</b>\n\n"
+        "Большинство живёт «на автопилоте»: те же деньги, те же ссоры, "
+        "те же решения — и удивляются, почему снова больно.\n\n"
+        "В @MOracul_bot — <b>честный разбор по твоей дате</b>:\n"
+        "• 🔴 <b>Сценарий 1</b> — что будет, если ничего не менять\n"
+        "• 🟢 <b>Сценарий 2</b> — что изменится, если работать с картой\n\n"
+        "4 коротких вопроса про твою жизнь → ответ <b>под тебя</b>, не «для всех».\n"
+        "Первая часть бесплатно. Полный сценарий 2 — от <b>49₽</b> (первый раз).\n\n"
+        "📋 <b>Скопируй и отправь боту</b> (или жми кнопку):\n"
+        "<code>Разбор на 2 месяца: что будет если ничего не менять "
+        "и что если работать с картой. Дата: ДД.ММ.ГГГГ. Ситуация: ...</code>\n\n"
+        f'👉 <a href="https://t.me/{BOT}{src}">Открыть бота — 2 сценария</a>'
+    )
+
+
+def pain_awareness_admin_report() -> str:
+    return (
+        "✅ <b>Внедрено: воронка «осознанность через боль»</b>\n\n"
+        "• Мини-опрос (4 вопроса) перед первым разбором\n"
+        "• Формат 🔴 Сценарий 1 / 🟢 Сценарий 2 в бесплатных чтениях\n"
+        "• Paywall на Сценарий 2 (49₽ первый раз)\n"
+        "• Deeplink: <code>?start=src_awareness</code>\n\n"
+        "Рекламный пост отправлен в каналы. Можно лить трафик на "
+        f"<code>t.me/{BOT}?start=src_awareness</code>"
+    )
+
+
 EXTERNAL_CREATIVES: dict[str, "callable"] = {
     "hvd_1": hvd_creative_1,
     "hvd_2": hvd_creative_2,

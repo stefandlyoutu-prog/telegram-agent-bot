@@ -27,6 +27,7 @@ from oracle_bot.config import (
     cloud_webapp_url,
 )
 from oracle_bot.handlers import router
+from oracle_bot.life_quiz import router as life_quiz_router
 from oracle_bot.pushes import push_worker
 from oracle_bot import storage as db
 from oracle_bot.storage import init_db
@@ -88,6 +89,7 @@ async def start_cloud() -> None:
         logger.exception("handler error: %s", event.exception)
         return True
 
+    _dp.include_router(life_quiz_router)
     _dp.include_router(router)
     _dp.include_router(voice_router)
     me = await _bot.get_me()

@@ -23,6 +23,7 @@ from oracle_bot.config import (
 )
 from oracle_bot.daily_report import daily_report_worker
 from oracle_bot.handlers import router
+from oracle_bot.life_quiz import router as life_quiz_router
 from oracle_bot.voice import router as voice_router
 from oracle_bot.storage import init_db
 from oracle_bot.pushes import push_worker
@@ -65,6 +66,7 @@ async def main() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher(storage=MemoryStorage())
+    dp.include_router(life_quiz_router)
     dp.include_router(router)
     dp.include_router(voice_router)
     me = await bot.get_me()

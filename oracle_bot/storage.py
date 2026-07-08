@@ -170,7 +170,16 @@ def init_db() -> None:
             );
             """
         )
-        for table, col in (("profiles", "birth_time"), ("profiles", "birth_place"), ("client_sessions", "last_context")):
+        for table, col in (
+            ("profiles", "birth_time"),
+            ("profiles", "birth_place"),
+            ("profiles", "relationship_status"),
+            ("profiles", "work_status"),
+            ("profiles", "pain_focus"),
+            ("profiles", "about_text"),
+            ("profiles", "life_quiz_done"),
+            ("client_sessions", "last_context"),
+        ):
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
             except sqlite3.OperationalError:
@@ -465,7 +474,11 @@ def premium_until(user_id: int) -> Optional[str]:
 def get_profile(user_id: int) -> dict[str, Optional[str]]:
     with _connect() as conn:
         row = conn.execute(
-            "SELECT name, birth_date, zodiac, birth_time, birth_place FROM profiles WHERE user_id = ?",
+            """
+            SELECT name, birth_date, zodiac, birth_time, birth_place,
+                   relationship_status, work_status, pain_focus, about_text, life_quiz_done
+            FROM profiles WHERE user_id = ?
+            """,
             (user_id,),
         ).fetchone()
     if not row:
@@ -475,6 +488,11 @@ def get_profile(user_id: int) -> dict[str, Optional[str]]:
             "zodiac": None,
             "birth_time": None,
             "birth_place": None,
+            "relationship_status": None,
+            "work_status": None,
+            "pain_focus": None,
+            "about_text": None,
+            "life_quiz_done": None,
         }
     return {
         "name": row["name"],
@@ -482,6 +500,11 @@ def get_profile(user_id: int) -> dict[str, Optional[str]]:
         "zodiac": row["zodiac"],
         "birth_time": row["birth_time"],
         "birth_place": row["birth_place"],
+        "relationship_status": row["relationship_status"],
+        "work_status": row["work_status"],
+        "pain_focus": row["pain_focus"],
+        "about_text": row["about_text"],
+        "life_quiz_done": row["life_quiz_done"],
     }
 
 
@@ -493,6 +516,11 @@ def save_profile(
     zodiac: Optional[str] = None,
     birth_time: Optional[str] = None,
     birth_place: Optional[str] = None,
+    relationship_status: Optional[str] = None,
+    work_status: Optional[str] = None,
+    pain_focus: Optional[str] = None,
+    about_text: Optional[str] = None,
+    life_quiz_done: Optional[str] = None,
 ) -> None:
     cur = get_profile(user_id)
     if name is not None:
@@ -505,18 +533,36 @@ def save_profile(
         cur["birth_time"] = birth_time
     if birth_place is not None:
         cur["birth_place"] = birth_place
+    if relationship_status is not None:
+        cur["relationship_status"] = relationship_status
+    if work_status is not None:
+        cur["work_status"] = work_status
+    if pain_focus is not None:
+        cur["pain_focus"] = pain_focus
+    if about_text is not None:
+        cur["about_text"] = about_text
+    if life_quiz_done is not None:
+        cur["life_quiz_done"] = life_quiz_done
     now = datetime.now(timezone.utc).isoformat()
     with _connect() as conn:
         conn.execute(
             """
-            INSERT INTO profiles (user_id, name, birth_date, zodiac, birth_time, birth_place, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO profiles (
+                user_id, name, birth_date, zodiac, birth_time, birth_place,
+                relationship_status, work_status, pain_focus, about_text, life_quiz_done, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET
                 name = excluded.name,
                 birth_date = excluded.birth_date,
                 zodiac = excluded.zodiac,
                 birth_time = excluded.birth_time,
                 birth_place = excluded.birth_place,
+                relationship_status = excluded.relationship_status,
+                work_status = excluded.work_status,
+                pain_focus = excluded.pain_focus,
+                about_text = excluded.about_text,
+                life_quiz_done = excluded.life_quiz_done,
                 updated_at = excluded.updated_at
             """,
             (
@@ -526,6 +572,11 @@ def save_profile(
                 cur["zodiac"],
                 cur["birth_time"],
                 cur["birth_place"],
+                cur["relationship_status"],
+                cur["work_status"],
+                cur["pain_focus"],
+                cur["about_text"],
+                cur["life_quiz_done"],
                 now,
             ),
         )

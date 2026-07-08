@@ -17,12 +17,16 @@ def parse_split(raw: str) -> tuple[str, str]:
 
 
 def format_teaser(teaser: str) -> str:
+    from oracle_bot.config import ORACLE_DEEP_FIRST_PRICE_RUB, ORACLE_DEEP_PRICE_RUB
+
+    first = ORACLE_DEEP_FIRST_PRICE_RUB
+    regular = ORACLE_DEEP_PRICE_RUB
+    price_hint = f"{first}₽ (первый раз)" if first < regular else f"{regular}₽"
     return (
         f"{teaser}\n\n"
         "────────────\n"
-        "<b>Углубление</b>\n"
-        "Персональные периоды, прогноз на месяцы и второй слой разбора.\n\n"
-        f"🔓 {ORACLE_DEEP_STARS}⭐ · ⭐ Премиум {ORACLE_PREMIUM_STARS}⭐ / 30 д"
+        "🔒 <b>Сценарий 2</b> — что изменится и конкретные шаги, если работать с картой.\n"
+        f"Открой за <b>{price_hint}</b> · ⭐ Премиум {ORACLE_PREMIUM_STARS}⭐ / 30 д"
     )
 
 
