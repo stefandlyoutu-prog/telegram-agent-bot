@@ -48,8 +48,16 @@ _HASHTAGS = [
 ]
 
 
+_BOT_LINK = "https://t.me/MOracul_bot?start=src_instagram"
+
+
 def _caption(topic: str, idx: int) -> str:
-    return f"{topic} 🌙 Бесплатный расклад — бот в шапке профиля {_HASHTAGS[idx % len(_HASHTAGS)]}"
+    return (
+        f"{topic} 🌙\n"
+        f"2 сценария судьбы — бесплатно 👇\n"
+        f"{_BOT_LINK}\n"
+        f"{_HASHTAGS[idx % len(_HASHTAGS)]}"
+    )
 
 
 def _ensure_items(plan: list, day: date) -> list:

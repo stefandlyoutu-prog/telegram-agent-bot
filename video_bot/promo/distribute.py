@@ -217,7 +217,16 @@ def post_uploadpost(item: PromoItem, *, platforms: list[str] | None = None,
     plats = platforms or uploadpost_platforms()
     import requests
 
-    caption = _caption(item, with_link=False)[:2000] + " Бот — в шапке профиля"
+    caption_base = f"🔮 {item.topic}"
+    if "instagram" in plats:
+        caption = (
+            f"{caption_base}\n\n"
+            "2 сценария судьбы на 2 месяца — бесплатно 👇\n"
+            "https://t.me/MOracul_bot?start=src_instagram\n\n"
+            "#таро #гороскоп #эзотерика #предсказания"
+        )[:2100]
+    else:
+        caption = _caption(item, with_link=False)[:2000] + " Бот — в шапке профиля"
     data: list[tuple[str, str]] = [
         ("user", profile),
         ("title", caption[:2100]),

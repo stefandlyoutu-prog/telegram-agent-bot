@@ -121,6 +121,55 @@ def forecast_report(variant: str = "combo") -> str:
     )
 
 
+def _web_stats_block(today: str) -> list[str]:
+    """Посещения сайта и клики по кнопкам за день."""
+    from datetime import timedelta
+
+    week = (date.today() - timedelta(days=7)).isoformat()
+    with db._connect() as conn:
+        visits_today = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type='web_visit' AND substr(created_at,1,10)=?",
+            (today,),
+        ).fetchone()[0]
+        visits_week = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type='web_visit' AND substr(created_at,1,10)>=?",
+            (week,),
+        ).fetchone()[0]
+        actions_today = conn.execute(
+            """
+            SELECT payload, COUNT(*) AS c FROM events
+            WHERE event_type='web_action' AND substr(created_at,1,10)=?
+            GROUP BY payload ORDER BY c DESC LIMIT 8
+            """,
+            (today,),
+        ).fetchall()
+        by_path = conn.execute(
+            """
+            SELECT payload AS path, COUNT(*) AS c FROM events
+            WHERE event_type='web_visit' AND substr(created_at,1,10)=?
+            GROUP BY payload ORDER BY c DESC
+            """,
+            (today,),
+        ).fetchall()
+    lines = [
+        "<b>🌐 Сайт moracul.ru (сегодня):</b>",
+        f"• Просмотры страниц: <b>{int(visits_today)}</b> (за 7д: {int(visits_week)})",
+    ]
+    if by_path:
+        lines.append(
+            "• Страницы: "
+            + " · ".join(f"{r['path']} {r['c']}" for r in by_path)
+        )
+    if actions_today:
+        lines.append("• Переходы/клики:")
+        for r in actions_today:
+            lines.append(f"  — {r['payload']}: {r['c']}")
+    else:
+        lines.append("• Переходы в бота с сайта: пока нет кликов")
+    lines.append("")
+    return lines
+
+
 def sales_report() -> str:
     """Итог за день: продажи по продуктам, выручка, работа воронки, выводы."""
     today = _today_msk()
@@ -226,6 +275,7 @@ def sales_report() -> str:
         lines.append("— Главное возражение — цена. Акцент на «−50% лично тебе» и рассрочку смыслом.")
     elif reasons["fit"] > 0:
         lines.append("— Сомнения «моё ли это» — усилить персонализацию оффера (имя, дата, черты).")
+    lines.extend(_web_stats_block(today))
     return "\n".join(lines)
 
 

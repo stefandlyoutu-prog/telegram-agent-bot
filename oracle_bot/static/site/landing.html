@@ -128,6 +128,23 @@
     document.querySelectorAll('.bot-link').forEach(a => {
       const start = a.getAttribute('data-start') || '';
       a.href = botUrl(start);
+      a.addEventListener('click', () => {
+        const action = start || (src ? 'src_' + src : 'open');
+        fetch('/api/track', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({path: location.pathname, action})
+        }).catch(() => {});
+      });
+    });
+    document.querySelectorAll('a[href="/blog"], a[href^="/blog/"]').forEach(a => {
+      a.addEventListener('click', () => {
+        fetch('/api/track', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({path: location.pathname, action: 'blog:' + a.getAttribute('href')})
+        }).catch(() => {});
+      });
     });
   </script>
 </body>
