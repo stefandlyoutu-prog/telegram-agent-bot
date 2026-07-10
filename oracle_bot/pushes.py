@@ -12,6 +12,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from oracle_bot import storage as db
 from oracle_bot.access import has_full_access
 from oracle_bot.config import (
+    ORACLE_DEEP_FIRST_PRICE_RUB,
+    ORACLE_DEEP_PRICE_RUB,
     ORACLE_DEEP_STARS,
     ORACLE_EXCLUSIVE_HVD_PRICE_RUB,
     ORACLE_PREMIUM_PRICE_RUB,
@@ -219,6 +221,31 @@ def _obj_kb(user_id: int, push_type: str, ctx: dict[str, Any]) -> InlineKeyboard
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏠 Меню", callback_data="nav:menu")]])
 
 
+def _deep_unlock_price(uid: int) -> tuple[int, int | None]:
+    """(цена в ₽, cont_id для первой покупки — override)."""
+    first = not db.has_paid(uid, "deep_unlock")
+    if first:
+        return ORACLE_DEEP_FIRST_PRICE_RUB, ORACLE_DEEP_FIRST_PRICE_RUB
+    return ORACLE_DEEP_PRICE_RUB, None
+
+
+def _deep_payment_url(uid: int, cont_id: int) -> str | None:
+    from oracle_bot.config import robokassa_configured
+
+    if not robokassa_configured() or uid <= 0:
+        return None
+    from oracle_bot.robokassa import build_payment_url
+
+    price, override = _deep_unlock_price(uid)
+    inv_id = db.create_invoice(uid, "deep_unlock", price, cont_id=cont_id)
+    return build_payment_url(
+        inv_id=inv_id,
+        out_sum=price,
+        description="Оракул — полный сценарий 2 / продолжение",
+        shp={"Shp_uid": str(uid), "Shp_kind": "deep_unlock"},
+    )
+
+
 def _kb_push(
     user_id: int,
     push_type: str,
@@ -231,16 +258,32 @@ def _kb_push(
     module = ctx.get("module", "")
 
     if push_type in ("unlock_tease", "limit_hit") and cont_id:
-        rows.append([
-            InlineKeyboardButton(
-                text=f"🔓 Продолжить ({ORACLE_DEEP_STARS}⭐)",
-                callback_data=f"deep:{cont_id}",
-            )
-        ])
+        price, _ = _deep_unlock_price(user_id)
+        url = _deep_payment_url(user_id, int(cont_id))
+        if url:
+            rows.append([
+                InlineKeyboardButton(
+                    text=f"🔓 Сценарий 2 · {price}₽",
+                    url=url,
+                )
+            ])
+        else:
+            rows.append([
+                InlineKeyboardButton(
+                    text=f"🔓 Продолжить ({ORACLE_DEEP_STARS}⭐)",
+                    callback_data=f"deep:{cont_id}",
+                )
+            ])
     elif push_type == "welcome_day1":
-        rows.append([InlineKeyboardButton(text="Гороскоп на сегодня", callback_data="mod:horo_today")])
+        rows.append([
+            InlineKeyboardButton(text="🔴🟢 2 сценария", callback_data="nav:awareness"),
+            InlineKeyboardButton(text="🌅 Гороскоп", callback_data="mod:horo_today"),
+        ])
     elif push_type == "welcome_day2":
-        rows.append([InlineKeyboardButton(text="Бесплатный расклад", callback_data="mod:tarot")])
+        rows.append([
+            InlineKeyboardButton(text="🔮 Таро", callback_data="mod:tarot"),
+            InlineKeyboardButton(text="💕 Пара", callback_data="mod:compat"),
+        ])
     elif push_type == "premium_expiring":
         return InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⭐ Продлить Премиум", callback_data="mod:premium")],
@@ -328,19 +371,20 @@ def build_push_message(user_id: int, push_type: str, ctx: dict[str, Any]) -> str
     sign = zodiac_label(profile["zodiac"]) if profile.get("zodiac") else ""
 
     if push_type == "unlock_tease":
+        price, _ = _deep_unlock_price(user_id)
         from oracle_bot.paywall import referral_primary
 
         if referral_primary():
             return (
-                f"🔮 <b>{label}</b> — карты ещё шепчут…\n\n"
-                "Ты видел(а) только начало. В скрытой части — конкретика и совет.\n\n"
-                f"🎁 Пригласи друга — +{ORACLE_REFERRAL_BONUS} бонуса и можно открыть 🔓."
+                f"🔮 <b>{label}</b> — ты видел(а) только 🔴 Сценарий 1.\n\n"
+                f"🟢 <b>Сценарий 2</b> — конкретные шаги и прогноз. "
+                f"Открыть за <b>{price}₽</b> (первый раз дешевле).\n\n"
+                f"🎁 Или пригласи друга — +{ORACLE_REFERRAL_BONUS} бонусных раскладов."
             )
         return (
-            f"🔮 <b>{label}</b> — карты ещё шепчут…\n\n"
-            "Ты видел(а) только начало. В скрытой части — конкретные даты, "
-            "совет и то, что звёзды не договаривают в бесплатном фрагменте.\n\n"
-            f"🔓 Открыть за {ORACLE_DEEP_STARS}⭐ или ⭐ Премиум — безлимит на 30 дней."
+            f"🔮 <b>{label}</b> — ты видел(а) только 🔴 Сценарий 1.\n\n"
+            f"🟢 <b>Сценарий 2</b> ждёт: что изменится и что делать на ближайшие 2 недели.\n\n"
+            f"🔓 Открыть за <b>{price}₽</b> — одним нажатием ниже."
         )
     if push_type == "limit_hit":
         from oracle_bot.paywall import referral_primary
@@ -353,9 +397,9 @@ def build_push_message(user_id: int, push_type: str, ctx: dict[str, Any]) -> str
             )
         return (
             f"🌙 Лимит на сегодня в «{label}» исчерпан — но судьба не ставит пауз.\n\n"
-            f"⭐ Премиум — все разделы без 🔒\n"
+            f"⭐ Премиум {ORACLE_PREMIUM_PRICE_RUB}₽ — все разделы без 🔒\n"
             f"🎁 Или пригласи друга — +{ORACLE_REFERRAL_BONUS} расклада бесплатно\n"
-            f"🔓 Или продолжи последнее чтение за {ORACLE_DEEP_STARS}⭐"
+            f"🔓 Или открой последнее продолжение от {ORACLE_DEEP_FIRST_PRICE_RUB}₽"
         )
     if push_type == "referral_nudge":
         return (
@@ -367,15 +411,15 @@ def build_push_message(user_id: int, push_type: str, ctx: dict[str, Any]) -> str
     if push_type == "welcome_day1":
         extra = f" для {sign}" if sign else ""
         return (
-            f"🌅 Привет! Звёзды сегодня особенно ясны{extra}.\n\n"
-            "Бесплатный гороскоп на день — один тап. "
-            "Потом можно уточнить голосом или текстом."
+            f"🌅 Привет{extra}! Пока ты думаешь — карта уже сложилась.\n\n"
+            "🔴🟢 <b>2 сценария на 2 месяца</b> — бесплатно, по твоей дате рождения. "
+            "Или гороскоп на сегодня — один тап 👇"
         )
     if push_type == "welcome_day2":
         return (
-            "🔮 Вчера ты заглянул(а) в Оракул — карты ещё ждут.\n\n"
-            "Попробуй <b>Таро</b>: три карты, конкретный ответ. "
-            "Первая часть бесплатно — продолжение по желанию."
+            "🔮 Вчера ты заглянул(а) — карты ещё ждут ответа.\n\n"
+            "Попробуй <b>Таро</b> или <b>совместимость</b>: первая часть бесплатно, "
+            f"полное продолжение от {ORACLE_DEEP_FIRST_PRICE_RUB}₽."
         )
     if push_type == "premium_expiring":
         return (

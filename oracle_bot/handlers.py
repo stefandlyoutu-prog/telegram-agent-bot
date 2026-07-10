@@ -251,39 +251,41 @@ async def _prompt_referral(
 
 def _start_text(user_id: int) -> str:
     from oracle_bot.config import (
+        ORACLE_DEEP_FIRST_PRICE_RUB,
+        ORACLE_FREE_PER_DAY,
         ORACLE_PREMIUM_PRICE_RUB,
         ORACLE_REFERRAL_UNLIMITED_AT,
         oferta_url,
-        self_employed_requisites_html,
+        site_public_url,
     )
     from oracle_bot.free_day import is_free_day_active
     from oracle_bot.streak import get_streak
 
     p = db.get_profile(user_id)
     streak = get_streak(user_id)
+    name = (p.get("name") or "").strip()
+    greet = f", {name}" if name else ""
     lines = [
-        "<b>m-Oracul</b>",
+        f"<b>Оракул</b> — разборы под тебя{greet}",
         "",
+        "🔴🟢 <b>2 сценария на 2 месяца</b> — что будет, если ничего не менять, "
+        "и что изменится, если действовать.",
+        "",
+        "Популярное: Таро · гороскоп · совместимость · число судьбы.",
+        "Первая часть — бесплатно, с конкретикой. Углубление от "
+        f"<b>{ORACLE_DEEP_FIRST_PRICE_RUB}₽</b> (первый раз).",
     ]
     if is_free_day_active():
-        lines.append("🎁 <b>Сегодня до конца дня — все разделы бесплатно!</b>")
-        lines.append("")
-    lines.extend(
-        [
-            "Личные разборы: таро, карта рождения, отношения, карьера.",
-            "Бесплатная часть — уже с конкретикой и советом. Углубление — по желанию.",
-            "",
-            f"📋 <a href=\"{oferta_url()}\">Публичная оферта</a> — условия сервиса",
-            "",
-            self_employed_requisites_html(),
-        ]
-    )
-    if not is_free_day_active():
-        lines.append(
-            f"💎 Тарифы: {ORACLE_FREE_PER_DAY} бесплатно/день · "
-            f"{ORACLE_REFERRAL_UNLIMITED_AT} друзей = безлимит · "
-            f"Премиум {ORACLE_PREMIUM_PRICE_RUB} ₽/мес"
-        )
+        lines.insert(2, "🎁 <b>Сегодня до конца дня — все разделы бесплатно!</b>")
+        lines.insert(3, "")
+    site = site_public_url()
+    if site:
+        lines.extend(["", f"🌐 Сайт: <a href=\"{site}\">{site.replace('https://', '')}</a>"])
+    lines.extend([
+        "",
+        f"📋 <a href=\"{oferta_url()}\">Оферта</a> · "
+        f"{ORACLE_FREE_PER_DAY} бесплатно/день · Премиум {ORACLE_PREMIUM_PRICE_RUB}₽/мес",
+    ])
     if p.get("zodiac"):
         lines.append(f"Знак: {zodiac_label(p['zodiac'])}")
     if streak > 1:
@@ -1228,6 +1230,34 @@ async def cb_menu(call: CallbackQuery, state: FSMContext) -> None:
     uid = call.from_user.id
     if call.message:
         await call.message.answer(_start_text(uid), reply_markup=kb_main())
+
+
+@router.callback_query(F.data == "nav:awareness")
+async def cb_nav_awareness(call: CallbackQuery, state: FSMContext) -> None:
+    await call.answer()
+    uid = call.from_user.id if call.from_user else 0
+    msg = call.message
+    if not msg:
+        return
+    await msg.answer(
+        "🔴 <b>Два сценария на 2 месяца</b>\n\n"
+        "Покажу честно: что будет, если ничего не менять — "
+        "и что изменится, если работать с картой.\n\n"
+        "Сначала 4 коротких вопроса про твою ситуацию 👇"
+    )
+    from oracle_bot import life_quiz as lq
+
+    lq.set_pending(uid, {"type": "awareness_scenario"})
+    if not db.get_profile(uid).get("birth_date"):
+        await state.set_state(Flow.prof_birth)
+        await msg.answer(
+            "📅 Напиши дату рождения:\n<i>ДД.ММ.ГГГГ</i> (можно с именем)"
+        )
+        return
+    if lq.needs_quiz(uid):
+        await lq.start_quiz(msg, uid)
+        return
+    await resume_after_life_quiz(msg, uid, {"type": "awareness_scenario"}, state)
 
 
 @router.callback_query(F.data == "nav:mystic")

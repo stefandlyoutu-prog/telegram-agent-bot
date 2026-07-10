@@ -5,6 +5,7 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from oracle_bot.config import (
+    ORACLE_DEEP_FIRST_PRICE_RUB,
     ORACLE_DEEP_PRICE_RUB,
     ORACLE_DEEP_STARS,
     ORACLE_EXCLUSIVE_HVD_PRICE_RUB,
@@ -34,32 +35,25 @@ def kb_main() -> InlineKeyboardMarkup:
         rows.append(wa)
     rows.extend([
         [
-            InlineKeyboardButton(text="Сегодня", callback_data="mod:horo_today"),
-            InlineKeyboardButton(text="Таро", callback_data="mod:tarot"),
+            InlineKeyboardButton(
+                text="🔴🟢 2 сценария — бесплатно",
+                callback_data="nav:awareness",
+            ),
+        ],
+        [
+            InlineKeyboardButton(text="🔮 Таро", callback_data="mod:tarot"),
+            InlineKeyboardButton(text="🌅 Сегодня", callback_data="mod:horo_today"),
+        ],
+        [
+            InlineKeyboardButton(text="💕 Пара", callback_data="mod:compat"),
+            InlineKeyboardButton(text="🔢 Число судьбы", callback_data="mod:numerology"),
         ],
         [
             InlineKeyboardButton(text="Карта дня", callback_data="mod:card_day"),
-            InlineKeyboardButton(text="Натальная", callback_data="mod:natal"),
-        ],
-        [
-            InlineKeyboardButton(text="Пара", callback_data="mod:compat"),
-            InlineKeyboardButton(text="Ладонь", callback_data="mod:palm"),
-        ],
-        [
             InlineKeyboardButton(text="Ещё разделы", callback_data="nav:mystic"),
-            InlineKeyboardButton(text="Профиль", callback_data="mod:profile"),
         ],
         [
-            InlineKeyboardButton(
-                text=f"🔮 ХВД курс — {ORACLE_EXCLUSIVE_HVD_PRICE_RUB}₽",
-                callback_data="mod:exclusive_hvd",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text=f"📖 Ultra Plus — {ORACLE_ULTRA_PLUS_PRICE_RUB}₽",
-                callback_data="mod:ultra_plus",
-            ),
+            InlineKeyboardButton(text="👤 Профиль", callback_data="mod:profile"),
         ],
     ])
     if referral_primary():
@@ -210,20 +204,16 @@ def kb_after_reading(
 
     rows: list[list[InlineKeyboardButton]] = []
     if cont_id and not has_full_access(user_id):
-        if stars_enabled():
-            rows.append([
-                InlineKeyboardButton(
-                    text=f"🔓 Полная версия · {ORACLE_DEEP_PRICE_RUB}₽",
-                    callback_data=f"deep:{cont_id}",
-                )
-            ])
-        else:
-            rows.append([
-                InlineKeyboardButton(
-                    text="🔓 Полная версия · бонус или друг",
-                    callback_data=f"deep:{cont_id}",
-                )
-            ])
+        from oracle_bot import storage as _db
+        from oracle_bot.config import ORACLE_DEEP_FIRST_PRICE_RUB, ORACLE_DEEP_PRICE_RUB
+
+        price = ORACLE_DEEP_FIRST_PRICE_RUB if not _db.has_paid(user_id, "deep_unlock") else ORACLE_DEEP_PRICE_RUB
+        rows.append([
+            InlineKeyboardButton(
+                text=f"🔓 Сценарий 2 · {price}₽",
+                callback_data=f"deep:{cont_id}",
+            ),
+        ])
     rows.append([
         InlineKeyboardButton(text="💬 Спросить по разбору", callback_data="ask:start"),
     ])
