@@ -106,7 +106,8 @@ ROBOKASSA_HASH = os.getenv("ROBOKASSA_HASH", "md5").strip().lower()
 ORACLE_DEEP_PRICE_RUB = int(os.getenv("ORACLE_DEEP_PRICE_RUB", "99"))
 # Цена ПЕРВОЙ разблокировки (разбить печать первой покупки: холодному юзеру -50%).
 # После первой любой оплаты действует обычный ORACLE_DEEP_PRICE_RUB.
-ORACLE_DEEP_FIRST_PRICE_RUB = int(os.getenv("ORACLE_DEEP_FIRST_PRICE_RUB", "49"))
+# Flash 24ч (до ~2026-07-11): первая разблокировка 29₽. Потом вернуть 49.
+ORACLE_DEEP_FIRST_PRICE_RUB = int(os.getenv("ORACLE_DEEP_FIRST_PRICE_RUB", "29"))
 ORACLE_EXCLUSIVE_HVD_PRICE_RUB = int(os.getenv("ORACLE_EXCLUSIVE_HVD_PRICE_RUB", "599"))
 ORACLE_ULTRA_PLUS_PRICE_RUB = int(os.getenv("ORACLE_ULTRA_PLUS_PRICE_RUB", "1499"))
 # PDF-довыгрузка: ХВД в книге PDF (+200₽), любой обычный расклад в PDF (+99₽)

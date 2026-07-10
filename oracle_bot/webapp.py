@@ -511,8 +511,13 @@ async def api_admin_broadcast(body: AdminBroadcastBody):
 
 
 @app.post("/api/admin/hot-recovery")
-async def api_admin_hot_recovery(user_id: int = Query(...), limit: int = Query(30)):
-    """Дожим лидов с payment_intent / lock=1 — прямая ссылка Robokassa."""
+async def api_admin_hot_recovery(
+    user_id: int = Query(...),
+    limit: int = Query(30),
+    intent_only: int = Query(0),
+    flash_price: int | None = Query(None),
+):
+    """Дожим лидов. intent_only=1 — только payment_intent; flash_price=29 — спеццена."""
     if user_id <= 0 or not is_admin_user(user_id):
         raise HTTPException(403, "Нет доступа")
     from oracle_bot.cloud import _bot
@@ -520,12 +525,24 @@ async def api_admin_hot_recovery(user_id: int = Query(...), limit: int = Query(3
 
     if not _bot:
         raise HTTPException(503, "Бот не инициализирован")
-    result = await run_hot_recovery(_bot, limit=min(limit, 50))
+    fp = flash_price if flash_price and flash_price > 0 else None
+    result = await run_hot_recovery(
+        _bot,
+        limit=min(limit, 50),
+        intent_only=bool(intent_only),
+        flash_price=fp,
+        hours=168 if intent_only else 72,
+    )
     try:
         from oracle_bot.admin_notify import notify_admins
 
-        summary = f"sent={result['sent']} skip={result['skip']} fail={result['fail']}"
-        await notify_admins(_bot, f"🔥 Hot recovery: {summary}\n" + "\n".join(result.get("details", [])[:15]))
+        tag = f" flash={fp}₽" if fp else ""
+        mode = " intent-only" if intent_only else ""
+        summary = f"sent={result['sent']} skip={result['skip']} fail={result['fail']}{mode}{tag}"
+        await notify_admins(
+            _bot,
+            f"⚡ Flash recovery: {summary}\n" + "\n".join(result.get("details", [])[:15]),
+        )
     except Exception:
         pass
     return result
@@ -549,6 +566,7 @@ def api_admin_pay_config(user_id: int = Query(...)):
         "prices_rub": {
             "premium": cfg.ORACLE_PREMIUM_PRICE_RUB,
             "deep": cfg.ORACLE_DEEP_PRICE_RUB,
+            "deep_first": cfg.ORACLE_DEEP_FIRST_PRICE_RUB,
             "hvd": cfg.ORACLE_EXCLUSIVE_HVD_PRICE_RUB,
             "ultra_plus": cfg.ORACLE_ULTRA_PLUS_PRICE_RUB,
             "pdf_hvd": cfg.ORACLE_PDF_HVD_PRICE_RUB,

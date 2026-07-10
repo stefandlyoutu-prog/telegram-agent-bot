@@ -777,6 +777,26 @@ def hot_lead_user_ids(*, hours: int = 72) -> list[int]:
     return [int(r[0]) for r in rows]
 
 
+def payment_intent_lead_ids(*, hours: int = 168) -> list[int]:
+    """Только те, кто открывал счёт deep:* и ещё не оплатил deep_unlock."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT e.user_id FROM events e
+            WHERE e.user_id > 0
+              AND e.event_type = 'payment_intent'
+              AND e.payload LIKE 'deep:%'
+              AND e.created_at >= datetime('now', ?)
+              AND e.user_id NOT IN (
+                SELECT user_id FROM payments WHERE kind = 'deep_unlock'
+              )
+            ORDER BY e.created_at DESC
+            """,
+            (f"-{hours} hours",),
+        ).fetchall()
+    return [int(r[0]) for r in rows]
+
+
 def latest_deep_intent_cont(user_id: int) -> int | None:
     with _connect() as conn:
         row = conn.execute(
