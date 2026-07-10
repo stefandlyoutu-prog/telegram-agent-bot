@@ -510,6 +510,27 @@ async def api_admin_broadcast(body: AdminBroadcastBody):
     return await broadcast_text(_bot, text)
 
 
+@app.post("/api/admin/hot-recovery")
+async def api_admin_hot_recovery(user_id: int = Query(...), limit: int = Query(30)):
+    """Дожим лидов с payment_intent / lock=1 — прямая ссылка Robokassa."""
+    if user_id <= 0 or not is_admin_user(user_id):
+        raise HTTPException(403, "Нет доступа")
+    from oracle_bot.cloud import _bot
+    from oracle_bot.hot_recovery import run_hot_recovery
+
+    if not _bot:
+        raise HTTPException(503, "Бот не инициализирован")
+    result = await run_hot_recovery(_bot, limit=min(limit, 50))
+    try:
+        from oracle_bot.admin_notify import notify_admins
+
+        summary = f"sent={result['sent']} skip={result['skip']} fail={result['fail']}"
+        await notify_admins(_bot, f"🔥 Hot recovery: {summary}\n" + "\n".join(result.get("details", [])[:15]))
+    except Exception:
+        pass
+    return result
+
+
 @app.get("/api/admin/pay-config")
 def api_admin_pay_config(user_id: int = Query(...)):
     """Санити-проверка платёжного контура: режим, пароли, цены (без секретов)."""

@@ -755,6 +755,60 @@ def has_any_payment(user_id: int) -> bool:
     return bool(row)
 
 
+def hot_lead_user_ids(*, hours: int = 72) -> list[int]:
+    """Юзеры с intent deep или lock=1 без оплаты deep_unlock."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT e.user_id FROM events e
+            WHERE e.user_id > 0
+              AND (
+                (e.event_type = 'payment_intent' AND e.payload LIKE 'deep:%')
+                OR (e.event_type = 'reading' AND e.payload LIKE '%lock=1%')
+              )
+              AND e.created_at >= datetime('now', ?)
+              AND e.user_id NOT IN (
+                SELECT user_id FROM payments WHERE kind = 'deep_unlock'
+              )
+            ORDER BY e.user_id
+            """,
+            (f"-{hours} hours",),
+        ).fetchall()
+    return [int(r[0]) for r in rows]
+
+
+def latest_deep_intent_cont(user_id: int) -> int | None:
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT payload FROM events
+            WHERE user_id = ? AND event_type = 'payment_intent'
+              AND payload LIKE 'deep:%'
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (user_id,),
+        ).fetchone()
+    if not row:
+        return None
+    import re
+
+    m = re.search(r"deep:(\d+)", row[0] or "")
+    return int(m.group(1)) if m else None
+
+
+def latest_locked_continuation(user_id: int) -> int | None:
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id FROM continuations
+            WHERE user_id = ? AND unlocked = 0
+            ORDER BY id DESC LIMIT 1
+            """,
+            (user_id,),
+        ).fetchone()
+    return int(row[0]) if row else None
+
+
 def create_invoice(
     user_id: int,
     kind: str,

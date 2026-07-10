@@ -146,7 +146,16 @@ def schedule_after_teaser(user_id: int, module: str, cont_id: int) -> None:
     if has_full_access(user_id):
         return
     ctx = json.dumps({"module": module, "cont_id": cont_id}, ensure_ascii=False)
-    db.schedule_push(user_id, "unlock_tease", delay_hours=2, context=ctx)
+    db.schedule_push(user_id, "unlock_tease", delay_hours=0.25, context=ctx)
+
+
+def schedule_payment_recovery(user_id: int, cont_id: int) -> None:
+    """Если открыл оплату, но не заплатил — напоминание через 20 мин."""
+    if has_full_access(user_id) or db.has_paid(user_id, "deep_unlock"):
+        return
+    ctx = json.dumps({"cont_id": cont_id}, ensure_ascii=False)
+    db.cancel_pushes(user_id, ["pay_recovery"])
+    db.schedule_push(user_id, "pay_recovery", delay_hours=0.33, context=ctx)
 
 
 def schedule_welcome_series(user_id: int) -> None:
@@ -257,7 +266,7 @@ def _kb_push(
     cont_id = ctx.get("cont_id")
     module = ctx.get("module", "")
 
-    if push_type in ("unlock_tease", "limit_hit") and cont_id:
+    if push_type in ("unlock_tease", "limit_hit", "pay_recovery") and cont_id:
         price, _ = _deep_unlock_price(user_id)
         url = _deep_payment_url(user_id, int(cont_id))
         if url:
@@ -370,6 +379,14 @@ def build_push_message(user_id: int, push_type: str, ctx: dict[str, Any]) -> str
     profile = db.get_profile(user_id)
     sign = zodiac_label(profile["zodiac"]) if profile.get("zodiac") else ""
 
+    if push_type == "pay_recovery":
+        price, _ = _deep_unlock_price(user_id)
+        return (
+            "⏳ <b>Ты открывал(а) оплату, но не завершил(а)</b>\n\n"
+            "🟢 Сценарий 2 уже собран под твой запрос — "
+            "осталось одно нажатие.\n\n"
+            f"💳 Открыть за <b>{price}₽</b> (карта или СБП) 👇"
+        )
     if push_type == "unlock_tease":
         price, _ = _deep_unlock_price(user_id)
         from oracle_bot.paywall import referral_primary

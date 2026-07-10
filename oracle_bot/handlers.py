@@ -717,7 +717,7 @@ async def _offer_deep(message: Message, uid: int, cont_id: int) -> None:
         await message.answer("Чтение устарело — запроси новое из меню.", reply_markup=kb_main())
         return
     # Первая покупка — «разбить печать»: холодному юзеру спеццена на первую разблокировку.
-    first_buy = uid > 0 and not db.has_any_payment(uid)
+    first_buy = uid > 0 and not db.has_paid(uid, "deep_unlock")
     price = ORACLE_DEEP_FIRST_PRICE_RUB if first_buy else ORACLE_DEEP_PRICE_RUB
     override = ORACLE_DEEP_FIRST_PRICE_RUB if first_buy else None
     url = _robokassa_url(uid, "deep_unlock", cont_id=cont_id, override_amount=override)
@@ -726,6 +726,9 @@ async def _offer_deep(message: Message, uid: int, cont_id: int) -> None:
         return
     if uid:
         analytics_mod.track_payment_intent(uid, f"deep:{cont_id}")
+        from oracle_bot.pushes import schedule_payment_recovery
+
+        schedule_payment_recovery(uid, cont_id)
     btn = (
         f"💳 Открыть за {price}₽ (первый раз −50%)" if first_buy
         else f"💳 Картой/СБП — {price}₽"
