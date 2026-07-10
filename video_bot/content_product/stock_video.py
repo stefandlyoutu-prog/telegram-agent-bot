@@ -221,16 +221,20 @@ def resolve_broll(
         return fb, "video"
 
     photos = photo_paths or ensure_stock_cache(cache_dir / "photos")
-    for attempt in range(len(photos)):
-        idx = (photo_idx + attempt) % len(photos)
-        p = photos[idx]
+    for attempt in range(max(len(photos), 1) * 2):
+        idx = (photo_idx + attempt) % max(len(photos), 1)
+        p = photos[idx] if photos else ensure_stock_cache(cache_dir / "photos")[0]
         key = f"stock_photo:{p.name}"
         if registry and registry.is_used(key):
             continue
         if registry:
             registry.must_claim(key)
         return p, "photo"
-    raise RuntimeError("Нет уникальных stock-фото для сцены")
+    # Все фото «заняты» — синтетический кадр, но ролик не падает
+    from video_bot.broll import _synthetic_photo
+
+    syn = _synthetic_photo(cache_dir / "photos")
+    return syn, "photo"
 
 
 def trim_video_native(

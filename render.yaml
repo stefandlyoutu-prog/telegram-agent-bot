@@ -128,7 +128,7 @@ services:
     # (иначе YouTube забирает лимит и VK пропускается).
     startCommand: >-
       python scripts/oracle_video_promo.py run --today-only --platforms youtube --limit 1 &&
-      python scripts/oracle_video_promo.py run --today-only --platforms vk --limit 1 &&
+      python scripts/oracle_video_promo.py run --platforms vk --limit 2 &&
       python scripts/tiktok_daily_dropoff.py
     envVars:
       - key: PYTHON_VERSION

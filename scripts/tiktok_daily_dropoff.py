@@ -139,9 +139,13 @@ def main() -> None:
 
     # ── Автопостинг через upload-post.com (если настроен ключ) ──
     if os.getenv("UPLOAD_POST_API_KEY", "").strip():
-        from video_bot.promo.distribute import post_uploadpost, uploadpost_platforms  # noqa: E402
+        from video_bot.promo.distribute import post_uploadpost, uploadpost_platforms
+        from video_bot.promo.tiktok_guard import tiktok_posting_disabled
 
         plats = uploadpost_platforms()
+        if tiktok_posting_disabled() and "tiktok" in plats:
+            plats = [p for p in plats if p != "tiktok"]
+            print("TikTok отключён (spam_risk) — постим только:", plats)
         label = "+".join(p.upper() for p in plats)
         slots_h = [9, 12, 15, 18, 21]  # время выхода по Москве
         posted = failed = 0
@@ -152,7 +156,7 @@ def main() -> None:
                 report.append(f"✖ {it.topic[:40]} — рендер не удался")
                 continue
             when = f"{target.isoformat()}T{slots_h[idx % len(slots_h)]:02d}:00:00"
-            res = post_uploadpost(it, scheduled_iso=when)
+            res = post_uploadpost(it, platforms=plats or None, scheduled_iso=when)
             if res.ok:
                 posted += 1
                 it.status = "posted"

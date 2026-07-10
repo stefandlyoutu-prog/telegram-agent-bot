@@ -44,9 +44,83 @@ from oracle_bot.cloud import router_cloud  # noqa: E402
 app.include_router(router_cloud)
 
 
+def site_base_url() -> str:
+    from oracle_bot.config import site_public_url
+
+    return site_public_url()
+
+
+def miniapp_url() -> str:
+    """Telegram Mini App — отдельно от маркeting-сайта."""
+    base = cloud_webapp_url()
+    if not base:
+        return ""
+    if base.endswith("/app"):
+        return base
+    return f"{base}/app"
+
+
+SITE_PAGES: dict[str, str] = {
+    "": "index.html",
+    "2-scenariya": "2-scenariya.html",
+    "taro": "taro.html",
+    "goroskop": "goroskop.html",
+    "sovmestimost": "sovmestimost.html",
+    "numerologiya": "numerologiya.html",
+}
+
+
+def _inject_metrika(html: str) -> str:
+    import os
+
+    cid = os.getenv("ORACLE_YANDEX_METRIKA_ID", "").strip()
+    if not cid.isdigit():
+        return html
+    snippet = f"""
+<!-- Yandex.Metrika counter -->
+<script type="text/javascript">
+   (function(m,e,t,r,i,k,a){{m[i]=m[i]||function(){{(m[i].a=m[i].a||[]).push(arguments)}};
+   m[i].l=1*new Date();
+   for (var j = 0; j < document.scripts.length; j++) {{if (document.scripts[j].src === r) {{ return; }} }}
+   k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)}}
+   )(window, document,'script','https://mc.yandex.ru/metrika/tag.js', 'ym');
+   ym({cid}, 'init', {{clickmap:true, trackLinks:true, accurateTrackBounce:true, webvisor:true}});
+</script>
+<noscript><div><img src="https://mc.yandex.ru/watch/{cid}" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+"""
+    return html.replace("</head>", snippet + "\n</head>")
+
+
+def _serve_site(slug: str, request: Request | None = None):
+    from fastapi.responses import HTMLResponse, RedirectResponse
+
+    fname = SITE_PAGES.get(slug)
+    if not fname:
+        raise HTTPException(404, "Страница не найдена")
+    path = f"/{slug}" if slug else "/"
+    if request is not None:
+        _log_web_visit(path, request)
+    html = (SITE / fname).read_text(encoding="utf-8")
+    html = html.replace("{{BASE}}", site_base_url())
+    html = _inject_metrika(html)
+    return HTMLResponse(html)
+
+
 @app.get("/")
-def index():
+def site_index(request: Request):
+    return _serve_site("", request)
+
+
+@app.get("/app")
+def miniapp_index():
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/landing")
+def landing_redirect():
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse("/", status_code=301)
 
 
 def _log_web_visit(path: str, request: "Request | None" = None) -> None:
@@ -65,28 +139,41 @@ def _log_web_visit(path: str, request: "Request | None" = None) -> None:
         pass
 
 
-@app.get("/landing")
-def landing_page(request: Request):
-    _log_web_visit("/landing", request)
+@app.get("/2-scenariya")
+def page_2_scenariya(request: Request):
+    return _serve_site("2-scenariya", request)
+
+
+@app.get("/taro")
+def page_taro(request: Request):
+    return _serve_site("taro", request)
+
+
+@app.get("/goroskop")
+def page_goroskop(request: Request):
+    return _serve_site("goroskop", request)
+
+
+@app.get("/sovmestimost")
+def page_sovmestimost(request: Request):
+    return _serve_site("sovmestimost", request)
+
+
+@app.get("/numerologiya")
+def page_numerologiya(request: Request):
+    return _serve_site("numerologiya", request)
+
+
+@app.get("/landing-legacy")
+def landing_page_legacy(request: Request):
+    """Старый лендинг (архив) — основной сайт на /."""
+    _log_web_visit("/landing-legacy", request)
     import os
 
     html = (SITE / "landing.html").read_text(encoding="utf-8")
-    cid = os.getenv("ORACLE_YANDEX_METRIKA_ID", "").strip()
-    if cid.isdigit():
-        snippet = f"""
-<!-- Yandex.Metrika counter -->
-<script type="text/javascript">
-   (function(m,e,t,r,i,k,a){{m[i]=m[i]||function(){{(m[i].a=m[i].a||[]).push(arguments)}};
-   m[i].l=1*new Date();
-   for (var j = 0; j < document.scripts.length; j++) {{if (document.scripts[j].src === r) {{ return; }} }}
-   k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)}}
-   )(window, document,'script','https://mc.yandex.ru/metrika/tag.js', 'ym');
-   ym({cid}, 'init', {{clickmap:true, trackLinks:true, accurateTrackBounce:true, webvisor:true}});
-</script>
-<noscript><div><img src="https://mc.yandex.ru/watch/{cid}" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
-<!-- /Yandex.Metrika counter -->
-"""
-        html = html.replace("</head>", snippet + "\n</head>")
+    html = html.replace("https://moracul.onrender.com/landing", site_base_url())
+    html = html.replace("{{BASE}}", site_base_url())
+    html = _inject_metrika(html)
     from fastapi.responses import HTMLResponse
 
     return HTMLResponse(html)
@@ -140,9 +227,9 @@ def blog_article(slug: str, request: Request):
 def robots_txt():
     from fastapi.responses import PlainTextResponse
 
-    base = cloud_webapp_url() or "https://moracul.onrender.com"
+    base = site_base_url()
     return PlainTextResponse(
-        "User-agent: *\nAllow: /landing\nAllow: /oferta\nAllow: /blog\n"
+        "User-agent: *\nAllow: /\nAllow: /blog\nAllow: /oferta\n"
         f"Sitemap: {base}/sitemap.xml\n"
     )
 
@@ -151,7 +238,14 @@ def robots_txt():
 def sitemap_xml():
     from fastapi.responses import Response
 
-    base = cloud_webapp_url() or "https://moracul.onrender.com"
+    base = site_base_url()
+    pages = list(SITE_PAGES.keys())
+    page_urls = "\n".join(
+        f"  <url><loc>{base}/{p}</loc><priority>{'1.0' if p == '' else '0.9'}</priority></url>"
+        for p in pages
+        if p
+    )
+    home = f"  <url><loc>{base}/</loc><priority>1.0</priority></url>\n"
     blog_dir = SITE / "blog"
     blog_urls = ""
     if blog_dir.exists():
@@ -161,12 +255,15 @@ def sitemap_xml():
         )
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>{base}/landing</loc><priority>1.0</priority></url>
+{home}{page_urls}
   <url><loc>{base}/blog</loc><priority>0.9</priority></url>
 {blog_urls}
   <url><loc>{base}/oferta</loc><priority>0.5</priority></url>
 </urlset>"""
     return Response(content=xml, media_type="application/xml")
+
+
+app.mount("/assets", StaticFiles(directory=SITE / "assets"), name="site_assets")
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")

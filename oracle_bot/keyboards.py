@@ -4,16 +4,27 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
-from oracle_bot.config import ORACLE_DEEP_PRICE_RUB, ORACLE_DEEP_STARS, ORACLE_EXCLUSIVE_HVD_PRICE_RUB, ORACLE_PDF_HVD_PRICE_RUB, ORACLE_PDF_READING_PRICE_RUB, ORACLE_PREMIUM_STARS, ORACLE_REFERRAL_BONUS, ORACLE_ULTRA_PLUS_PRICE_RUB, ORACLE_WEBAPP_URL
+from oracle_bot.config import (
+    ORACLE_DEEP_PRICE_RUB,
+    ORACLE_DEEP_STARS,
+    ORACLE_EXCLUSIVE_HVD_PRICE_RUB,
+    ORACLE_PDF_HVD_PRICE_RUB,
+    ORACLE_PDF_READING_PRICE_RUB,
+    ORACLE_PREMIUM_STARS,
+    ORACLE_REFERRAL_BONUS,
+    ORACLE_ULTRA_PLUS_PRICE_RUB,
+    miniapp_entry_url,
+)
 from oracle_bot.mystic_data import ZODIAC_SIGNS
 from oracle_bot.paywall import referral_primary, stars_enabled
 from oracle_bot.prompts import CROSS_SELL
 
 
 def _webapp_row() -> list[InlineKeyboardButton] | None:
-    if not ORACLE_WEBAPP_URL:
+    url = miniapp_entry_url()
+    if not url:
         return None
-    return [InlineKeyboardButton(text="Открыть приложение", web_app=WebAppInfo(url=ORACLE_WEBAPP_URL))]
+    return [InlineKeyboardButton(text="Открыть приложение", web_app=WebAppInfo(url=url))]
 
 
 def kb_main() -> InlineKeyboardMarkup:

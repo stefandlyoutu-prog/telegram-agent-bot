@@ -83,9 +83,18 @@ def main() -> None:
     if banned:
         text += (
             "\n\n⚠️ TikTok временно забанил аккаунт на публикации (spam risk). "
-            "Обычно проходит за 24-72 ч. Если не пройдёт — нужен другой TikTok-аккаунт."
+            "Обычно проходит за 24-72 ч. Instagram продолжит выходить автоматически."
         )
-    _notify(text)
+        try:
+            from video_bot.promo.tiktok_guard import mark_tiktok_banned
+
+            mark_tiktok_banned(hours=72)
+        except Exception:
+            pass
+    try:
+        _notify(text)
+    except Exception as e:
+        print(f"notify fail: {e}")
     print(f"ok={len(ok_lines)} fail={len(fail_lines)}")
 
 

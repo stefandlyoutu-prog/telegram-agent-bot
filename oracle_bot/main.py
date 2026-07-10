@@ -19,7 +19,7 @@ from oracle_bot.config import (
     ORACLE_DAILY_REPORT_HOUR_MSK,
     ORACLE_PUSH_ENABLED,
     ORACLE_PUSH_INTERVAL_SEC,
-    ORACLE_WEBAPP_URL,
+    miniapp_entry_url,
 )
 from oracle_bot.daily_report import daily_report_worker
 from oracle_bot.handlers import router
@@ -71,17 +71,18 @@ async def main() -> None:
     dp.include_router(voice_router)
     me = await bot.get_me()
     logger.info("Оракул @%s запущен", me.username)
-    if ORACLE_WEBAPP_URL:
+    app_url = miniapp_entry_url()
+    if app_url:
         from aiogram.types import MenuButtonWebApp, WebAppInfo
 
         try:
             await bot.set_chat_menu_button(
                 menu_button=MenuButtonWebApp(
                     text="Приложение",
-                    web_app=WebAppInfo(url=ORACLE_WEBAPP_URL),
+                    web_app=WebAppInfo(url=app_url),
                 )
             )
-            logger.info("WebApp: %s", ORACLE_WEBAPP_URL)
+            logger.info("WebApp: %s", app_url)
         except Exception as e:
             logger.warning("WebApp menu: %s", e)
     if ORACLE_PUSH_ENABLED:

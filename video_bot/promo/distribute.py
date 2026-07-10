@@ -212,9 +212,18 @@ def post_uploadpost(item: PromoItem, *, platforms: list[str] | None = None,
     scheduled_iso — ISO-8601 время отложенной публикации (интерпретируется
     в Europe/Moscow); пусто = опубликовать сразу.
     """
+    from video_bot.promo.tiktok_guard import tiktok_posting_disabled
+
     api_key = os.getenv("UPLOAD_POST_API_KEY", "").strip()
     profile = os.getenv("UPLOAD_POST_USER", "oracle").strip()
-    plats = platforms or uploadpost_platforms()
+    plats = list(platforms or uploadpost_platforms())
+    if tiktok_posting_disabled() and "tiktok" in plats:
+        plats = [p for p in plats if p != "tiktok"]
+        if not plats:
+            return UploadResult(
+                False, "tiktok", "manual",
+                error="TikTok временно заблокирован (spam_risk); Instagram — отдельно",
+            )
     import requests
 
     caption_base = f"🔮 {item.topic}"
@@ -261,7 +270,11 @@ def post_uploadpost(item: PromoItem, *, platforms: list[str] | None = None,
             status = "scheduled" if scheduled_iso else "posted"
             fallback_urls = {"tiktok": "https://www.tiktok.com/", "instagram": "https://instagram.com/moracul_taro"}
             return UploadResult(True, label, status, url=url or fallback_urls.get(plats[0] if plats else "", ""))
-        return UploadResult(False, label, "failed", error=f"upload-post {r.status_code}: {str(resp)[:200]}")
+        err_text = f"upload-post {r.status_code}: {str(resp)[:200]}"
+        from video_bot.promo.tiktok_guard import note_uploadpost_errors
+
+        note_uploadpost_errors([err_text])
+        return UploadResult(False, label, "failed", error=err_text)
     except Exception as e:  # noqa: BLE001
         return UploadResult(False, label, "failed", error=str(e)[:200])
 

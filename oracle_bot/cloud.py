@@ -25,6 +25,7 @@ from oracle_bot.config import (
     ORACLE_PUSH_INTERVAL_SEC,
     ORACLE_WEBAPP_URL,
     cloud_webapp_url,
+    miniapp_entry_url,
 )
 from oracle_bot.handlers import router
 from oracle_bot.life_quiz import router as life_quiz_router
@@ -96,7 +97,7 @@ async def start_cloud() -> None:
     logger.info("Облако: @%s webhook (sync feed_update)", me.username)
     print(f"m-Oracul cloud ready: @{me.username}", flush=True)
 
-    webapp_url = cloud_webapp_url()
+    webapp_url = miniapp_entry_url()
     if webapp_url:
         try:
             await _bot.set_chat_menu_button(
@@ -235,7 +236,7 @@ async def health():
         "mode": "webhook_sync",
         "bot_ready": _bot is not None and _dp is not None,
         "bot": bot_user,
-        "webapp": ORACLE_WEBAPP_URL or cloud_webapp_url(),
+        "webapp": miniapp_entry_url() or ORACLE_WEBAPP_URL or cloud_webapp_url(),
         "version": commit or "local",
         "routes": ["/landing", "/oferta", "/admin"],
     }

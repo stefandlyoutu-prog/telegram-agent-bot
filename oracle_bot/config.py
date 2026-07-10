@@ -129,11 +129,29 @@ def public_base_url() -> str:
 
 
 def cloud_webapp_url() -> str:
-    """HTTPS URL Mini App: явный ORACLE_WEBAPP_URL или Render."""
+    """HTTPS URL сервиса: явный ORACLE_WEBAPP_URL или Render."""
     if ORACLE_WEBAPP_URL:
         return ORACLE_WEBAPP_URL
     base = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
     return base
+
+
+def miniapp_entry_url() -> str:
+    """URL Telegram Mini App (отдельно от маркeting-сайта на /)."""
+    base = cloud_webapp_url()
+    if not base:
+        return ""
+    if base.endswith("/app"):
+        return base
+    return f"{base}/app"
+
+
+def site_public_url() -> str:
+    """Публичный URL SEO-сайта."""
+    explicit = os.getenv("ORACLE_SITE_URL", "").strip().rstrip("/")
+    if explicit:
+        return explicit
+    return cloud_webapp_url() or "https://moracul.ru"
 
 
 def oferta_url() -> str:
