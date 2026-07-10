@@ -82,6 +82,16 @@ def set_pending(user_id: int, pending: dict) -> None:
     db.kv_set(_KV.format(uid=user_id), json.dumps(pending, ensure_ascii=False))
 
 
+def peek_pending(user_id: int) -> dict | None:
+    raw = db.kv_get(_KV.format(uid=user_id))
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
 def pop_pending(user_id: int) -> dict | None:
     raw = db.kv_get(_KV.format(uid=user_id))
     db.kv_set(_KV.format(uid=user_id), "")

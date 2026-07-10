@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env")
 
-from oracle_bot.ads import pain_awareness_admin_report, pain_awareness_channel
+from oracle_bot.ads import pain_awareness_admin_report, pain_awareness_channel_v2
 from oracle_bot.config import ORACLE_PROMO_CHANNELS
 
 
@@ -66,12 +66,12 @@ def main() -> None:
     _send(token, admin_id, pain_awareness_admin_report())
 
     print("Отправка рекламного поста админу…")
-    preview = pain_awareness_channel("preview")
+    preview = pain_awareness_channel_v2("preview")
     _send(token, admin_id, preview)
 
     ok = fail = 0
     for ch in channels:
-        text = pain_awareness_channel(ch)
+        text = pain_awareness_channel_v2(ch)
         try:
             _api(
                 token,

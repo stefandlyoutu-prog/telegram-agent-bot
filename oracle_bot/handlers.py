@@ -469,6 +469,31 @@ async def resume_after_life_quiz(
                 msg, uid, mod, builder, need_profile=need_profile, skip_quiz=True
             )
             return
+    if t == "awareness_scenario":
+        p = db.get_profile(uid)
+        birth = p.get("birth_date") or ""
+        name = (p.get("name") or "").strip()
+        pain = (p.get("pain_focus") or "").strip()
+        about = (p.get("about_text") or "").strip()
+        prompt = (
+            "Персональный разбор на ближайшие 2 месяца по дате рождения.\n"
+            f"Имя: {name or 'не указано'}\n"
+            f"Дата рождения: {birth}\n"
+            f"Главный фокус: {pain or 'из опроса'}\n"
+            f"Ситуация: {about or 'контекст из мини-опроса'}\n\n"
+            "Покажи два честных сценария: что будет если ничего не менять, "
+            "и что изменится если работать с картой осознанно. "
+            "Конкретика по деньгам, отношениям и энергии."
+        )
+        await _send_reading(
+            msg,
+            uid=uid,
+            module="tarot",
+            prompt=prompt,
+            header=reading_header("Два сценария", "2 месяца"),
+            temperature=0.85,
+        )
+        return
     if t == "open_module":
         mod = pending.get("mod", "tarot")
         if state is None:
@@ -741,6 +766,47 @@ def _profile_ctx(uid: int) -> dict:
     return {"name": name, "birth": birth, "sign": sign_label, "sign_key": sign}
 
 
+_AWARENESS_ALIASES = frozenset({"awareness", "pain", "scenario", "razbor"})
+
+
+def _is_awareness_start(args: str) -> bool:
+    """Рекламные deeplink → воронка «2 сценария + 4 вопроса» (как в посте)."""
+    a = (args or "").strip().lower()
+    if a in _AWARENESS_ALIASES:
+        return True
+    return a.startswith("src_")
+
+
+async def _enter_awareness_funnel(
+    message: Message,
+    state: FSMContext,
+    uid: int,
+) -> None:
+    """Обещание рекламы: дата рождения → 4 вопроса → 🔴/🟢 сценарии на 2 месяца."""
+    from oracle_bot import life_quiz as lq
+
+    await message.answer(
+        "🔴 <b>Два сценария на 2 месяца</b>\n\n"
+        "Покажу честно: что будет, если ничего не менять — "
+        "и что изменится, если работать с картой.\n\n"
+        "Сначала 4 коротких вопроса про твою ситуацию 👇"
+    )
+    lq.set_pending(uid, {"type": "awareness_scenario"})
+    if not db.get_profile(uid).get("birth_date"):
+        await state.set_state(Flow.prof_birth)
+        await message.answer(
+            "📅 Для разбора по <b>дате рождения</b> напиши одним сообщением:\n"
+            "<i>ДД.ММ.ГГГГ</i> (можно с именем: <i>15.03.1990 Анна</i>)"
+        )
+        return
+    if lq.needs_quiz(uid):
+        await lq.start_quiz(message, uid)
+        return
+    await resume_after_life_quiz(
+        message, uid, {"type": "awareness_scenario"}, state
+    )
+
+
 @router.message(CommandStart())
 async def cmd_start(
     message: Message,
@@ -849,34 +915,8 @@ async def cmd_start(
     if args.startswith("mod_"):
         await _open_module(message, state, uid, args[4:])
         return
-    if args in {"awareness", "pain", "scenario", "razbor"} or args in {
-        "src_awareness", "src_pain", "src_scenario", "src_razbor",
-    }:
-        if args.startswith("src_"):
-            db.set_signup_source(uid, args[4:] or "awareness")
-        await message.answer(
-            "🔴 <b>Два сценария на 2 месяца</b>\n\n"
-            "Покажу честно: что будет, если ничего не менять — "
-            "и что изменится, если работать с картой.\n\n"
-            "Сначала 4 коротких вопроса про твою ситуацию 👇"
-        )
-        if not db.get_profile(uid).get("birth_date"):
-            await message.answer(
-                "Нужна дата рождения — укажи в 👤 Профиль, иначе карта не соберётся.",
-                reply_markup=kb_profile(False),
-            )
-            return
-        from oracle_bot import life_quiz as lq
-
-        lq.set_pending(uid, {"type": "open_module", "mod": "tarot"})
-        await lq.start_quiz(message, uid)
-        return
-
-    if is_new and args.lower().startswith("src_") and not args.startswith("mod_"):
-        await message.answer(
-            "👇 Сейчас открою <b>Таро</b> — задай один вопрос, первая часть бесплатно."
-        )
-        await _open_module(message, state, uid, "tarot")
+    if _is_awareness_start(args):
+        await _enter_awareness_funnel(message, state, uid)
         return
 
     if welcome_bonus:
@@ -1827,16 +1867,47 @@ async def cb_prof_horo(call: CallbackQuery) -> None:
         )
 
 
+async def _continue_awareness_after_birth(
+    message: Message,
+    uid: int,
+    state: FSMContext,
+) -> bool:
+    """После ввода даты — продолжить рекламную воронку, если ждали её."""
+    from oracle_bot import life_quiz as lq
+
+    pending = lq.peek_pending(uid)
+    if not pending or pending.get("type") != "awareness_scenario":
+        return False
+    if lq.needs_quiz(uid):
+        await lq.start_quiz(message, uid)
+    else:
+        await resume_after_life_quiz(
+            message, uid, {"type": "awareness_scenario"}, state
+        )
+    return True
+
+
 @router.message(Flow.prof_birth)
 async def prof_birth_flow(message: Message, state: FSMContext) -> None:
     uid = message.from_user.id if message.from_user else 0
-    bd = parse_birth_date(message.text or "")
+    text = (message.text or "").strip()
+    bd = parse_birth_date(text)
     if not bd:
         await message.answer("Формат: 15.03.1990")
         return
     sign = zodiac_from_date(bd)
-    db.save_profile(uid, birth_date=bd.strftime("%d.%m.%Y"), zodiac=sign)
+    name = text.replace(bd.strftime("%d.%m.%Y"), "").replace(
+        bd.strftime("%d.%m.%y"), ""
+    ).strip()[:40]
+    db.save_profile(
+        uid,
+        birth_date=bd.strftime("%d.%m.%Y"),
+        zodiac=sign,
+        name=name if len(name) >= 2 else None,
+    )
     await state.clear()
+    if await _continue_awareness_after_birth(message, uid, state):
+        return
     await message.answer(
         f"✅ Сохранено: {bd.strftime('%d.%m.%Y')} · {zodiac_label(sign)}",
         reply_markup=kb_profile(True),
