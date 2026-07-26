@@ -72,6 +72,10 @@ services:
         value: "99"
       - key: ORACLE_ADMIN_IDS
         value: "5845195049"
+      - key: BESTPAINTS_USER
+        value: bestpaints
+      - key: BESTPAINTS_PASSWORD
+        value: "ZamerBp2026!"
       - key: ROBOKASSA_HASH
         value: "md5"       # как в кабинете Робокассы (Технические настройки)
       - key: ORACLE_STARS_ENABLED

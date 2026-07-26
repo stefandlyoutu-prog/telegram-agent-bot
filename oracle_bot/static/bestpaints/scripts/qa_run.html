@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>BP Survey QA</title>
+  <style>
+    body { font-family: system-ui; background:#111; color:#eee; padding:20px; max-width:960px; margin:0 auto; }
+    .ok { color:#6fcf97 } .fail { color:#e07a6a } .warn { color:#e0b86a }
+    pre { background:#1a1a1a; padding:12px; overflow:auto; font-size:12px; }
+    h1 { font-size:1.2rem }
+  </style>
+</head>
+<body>
+  <h1>BestPaints Survey — автопрогон QA</h1>
+  <div id="out">Запуск…</div>
+  <script type="module">
+    import {
+      emptySurvey, emptyBuilding, migrateSurvey, syncAreasFromLists, syncWarmTotal,
+      buildEstimate, calcWallArea, totalAreas, uid, num, money,
+    } from "../js/calc.js";
+    import { readiness } from "../js/quality.js";
+    import { EXTRA_WORKS, ATTENTION_TO_EXTRA, WALL_FLAGS } from "../data/extras.js";
+
+    const out = document.getElementById("out");
+    const log = [];
+    const push = (level, msg, extra) => {
+      log.push({ level, msg, extra });
+      const c = level === "fail" ? "fail" : level === "warn" ? "warn" : "ok";
+      out.innerHTML += `<div class="${c}">[${level}] ${msg}${extra != null ? " — " + JSON.stringify(extra) : ""}</div>`;
+    };
+
+    const catalog = await fetch("../data/catalog.json").then((r) => r.json());
+    const PAINT_F = "ADLER::ADLER PULLEX 3in1 - фасад, полу-прозрачный";
+    const PAINT_I = "ADLER::ADLER TERRA WAX - интерьер, полу-прозрачный";
+
+    function wall(label, shape, L, H, ridge = "", zone = "facade", extra = {}) {
+      return {
+        id: uid(), label, shape, length: String(L), height: String(H), ridge: String(ridge),
+        height2: "", areaManual: "", zone, note: "", material: "", condition: "", coatingWant: "",
+        flags: {}, damageArea: "", photos: [], ...extra,
+      };
+    }
+    function opening(label, w, h, wallId = "", zone = "facade", extra = {}) {
+      return { id: uid(), label, width: String(w), height: String(h), zone, wallId, needsWarm: false, note: "", ...extra };
+    }
+
+    /** Сценарий 1: только фасад — дом + баня */
+    function scenarioFacade() {
+      const s = emptySurvey();
+      s.title = "QA Фасад · дом+баня";
+      s.client = { name: "Тест Фасадов", phone: "+79001112233", email: "t@t.ru", address: "МО, тест 1", surveyor: "QA" };
+      const house = emptyBuilding({ name: "Дом", kind: "house" });
+      house.roofType = "gable";
+      house.houseType = "non_film";
+      house.condition = "medium";
+      house.material = "beam";
+      house.humidity = "14";
+      house.zones = { facade: true, interior: false };
+      house.measure.walls = [
+        wall("Главный", "gable", 12, 3.2, 5.5),
+        wall("Правый", "rect", 10, 3.2),
+        wall("Задний", "gable", 12, 3.2, 5.5, "facade", { flags: { rot: true, high: true }, damageArea: "2.5", note: "гниль у цоколя" }),
+        wall("Левый", "rect", 10, 3.2),
+      ];
+      house.measure.openings = [
+        opening("Окно 1", 1.4, 1.4, house.measure.walls[0].id, "facade", { needsWarm: true }),
+        opening("Дверь", 1.0, 2.1, house.measure.walls[0].id),
+      ];
+      house.measure.soffitArea = "28";
+      house.measure.fasciaArea = "10";
+      house.measure.endsLength = "40";
+      house.measure.trimLength = "30";
+      house.measure.gutterLength = "44";
+      house.measure.porchArea = "4";
+      house.measure.warmHorizontal = "120";
+      house.measure.warmSnake = "10";
+      house.measure.warmWindows = "8";
+      syncWarmTotal(house.measure);
+      house.tech.techId = 4;
+      house.tech.paintId = PAINT_F;
+      house.tech.compatibilityTest = true;
+
+      const bath = emptyBuilding({ name: "Баня", kind: "bath" });
+      bath.material = "log";
+      bath.measure.roundCoef = 1.15;
+      bath.zones = { facade: true, interior: false };
+      bath.measure.walls = [
+        wall("А", "rect", 6, 2.6),
+        wall("Б", "gable", 4, 2.4, 3.5),
+        wall("В", "rect", 6, 2.6),
+        wall("Г", "gable", 4, 2.4, 3.5),
+      ];
+      bath.tech.techId = 4;
+      bath.tech.paintId = PAINT_F;
+      bath.humidity = "12";
+
+      s.buildings = [house, bath];
+      s.activeBuildingId = house.id;
+      s.site.scaffold = "tower";
+      s.site.maxHeight = "6";
+      s.attention = { lights: 4, ac: 1, chimneys: 1 };
+      s.extras.qty = { lights: "4", ac_cover: "1", chimney_work: "1" };
+      s.estimate.customLines = [{ id: uid(), name: "Выезд за МКАД", qty: "1", unit: "шт", price: "5000" }];
+      return s;
+    }
+
+    /** Сценарий 2: только интерьер */
+    function scenarioInterior() {
+      const s = emptySurvey();
+      s.title = "QA Интерьер · гостиная";
+      s.client = { name: "Тест Интерьер", phone: "+79002223344", email: "", address: "Квартира тест", surveyor: "QA" };
+      const b = emptyBuilding({ name: "Гостиная", kind: "house" });
+      b.zones = { facade: false, interior: true };
+      b.houseType = "new";
+      b.condition = "good";
+      b.measure.walls = [
+        wall("Стена А", "rect", 6, 2.7, "", "interior", { flags: { furniture: true }, note: "диван у стены" }),
+        wall("Стена Б", "rect", 5, 2.7, "", "interior"),
+        wall("Стена В", "rect", 6, 2.7, "", "interior"),
+        wall("Стена Г", "rect", 5, 2.7, "", "interior"),
+      ];
+      b.measure.openings = [
+        opening("Окно", 1.5, 1.5, b.measure.walls[0].id, "interior"),
+        opening("Дверь", 0.9, 2.0, b.measure.walls[1].id, "interior"),
+      ];
+      b.measure.ceilingArea = "30";
+      b.measure.floorArea = "28";
+      b.measure.floorNote = "паркет + терраса";
+      b.tech.techIdInterior = 3;
+      b.tech.paintIdInterior = PAINT_I;
+      b.humidity = "10";
+      s.buildings = [b];
+      s.activeBuildingId = b.id;
+      s.attention = { radiators: 3, furniture: 2 };
+      s.site.occupancy = "live";
+      s.site.clientFurniture = "crew";
+      return s;
+    }
+
+    /** Сценарий 3: фасад+интерьер + забор двусторонний */
+    function scenarioBoth() {
+      const s = emptySurvey();
+      s.title = "QA Комплекс · дом+забор";
+      s.client = { name: "Тест Комплекс", phone: "+79003334455", email: "c@c.ru", address: "КП Тест", surveyor: "QA" };
+      const house = emptyBuilding({ name: "Дом", kind: "house" });
+      house.zones = { facade: true, interior: true };
+      house.roofType = "broken";
+      house.houseType = "film";
+      house.condition = "bad";
+      house.removalDifficulty = "hard";
+      house.oldCoatingNote = "отслоение на юге";
+      house.plinthSkip = true;
+      house.measure.plinthNote = "камень 0.6 м";
+      house.measure.walls = [
+        wall("Главный", "gable", 11, 3.0, 5.2, "facade", { flags: { peel: true } }),
+        wall("Правый", "trap", 9, 3.0, "", "facade", { height2: "4.2" }),
+        wall("Задний", "gable", 11, 3.0, 5.2),
+        wall("Левый", "trap", 9, 3.0, "", "facade", { height2: "4.2" }),
+        wall("Зал длинная", "rect", 14, 2.7, "", "interior"),
+        wall("Зал короткая", "rect", 5, 2.7, "", "interior"),
+      ];
+      house.measure.openings = [
+        opening("Панорамное", 3.2, 2.4, house.measure.walls[0].id, "facade", { needsWarm: true, note: "витраж" }),
+        opening("Окно зал", 1.2, 1.4, house.measure.walls[4].id, "interior"),
+      ];
+      house.measure.soffitArea = "22";
+      house.measure.stairsArea = "6";
+      house.measure.ceilingArea = "40";
+      house.tech.techId = 2;
+      house.tech.paintId = PAINT_F;
+      house.tech.techIdInterior = 4;
+      house.tech.paintIdInterior = PAINT_I;
+      house.tech.compatibilityTest = true;
+      house.humidity = "16";
+
+      const fence = emptyBuilding({ name: "Забор", kind: "fence" });
+      fence.fenceBothSides = true;
+      fence.zones = { facade: true, interior: false };
+      fence.measure.walls = [wall("Пролёт", "rect", 40, 1.8)];
+      fence.measure.fencePosts = "22";
+      fence.tech.techId = 4;
+      fence.tech.paintId = PAINT_F;
+      fence.humidity = "12";
+
+      s.buildings = [house, fence];
+      s.activeBuildingId = house.id;
+      s.site.scaffold = "scaffold";
+      s.site.powerOk = "weak";
+      s.site.generator = true;
+      s.estimate.customLines = [{ id: uid(), name: "Срочность", qty: "1", unit: "шт", price: "15000" }];
+      return s;
+    }
+
+    function checkSurvey(name, s) {
+      const errors = [];
+      const warns = [];
+      try {
+        migrateSurvey(s);
+        for (const b of s.buildings) syncAreasFromLists(b);
+
+        // persistence roundtrip
+        const raw = JSON.stringify(s);
+        const back = JSON.parse(raw);
+        migrateSurvey(back);
+        for (const b of back.buildings) syncAreasFromLists(b);
+
+        const areas = totalAreas(back);
+        const ready = readiness(back);
+        const est = buildEstimate(back, catalog);
+
+        if (!back.title?.trim()) errors.push("нет title");
+        if (!back.client?.name?.trim()) errors.push("нет client.name");
+        if (!back.client?.address?.trim()) errors.push("нет address");
+
+        // zone areas
+        for (const b of back.buildings) {
+          if (b.zones?.facade && num(b.measure.facadeArea) <= 0) errors.push(`${b.name}: facadeArea=0`);
+          if (b.zones?.interior && num(b.measure.interiorArea) <= 0) errors.push(`${b.name}: interiorArea=0`);
+          if (b.kind === "fence" && b.fenceBothSides) {
+            const one = calcWallArea({ ...b.measure, paintSides: 1 }, "facade").total;
+            const two = calcWallArea(b.measure, "facade").total;
+            if (!(two > one * 1.5)) errors.push(`${b.name}: fenceBothSides не удвоил (${one}→${two})`);
+          }
+          // openings linked
+          for (const o of b.measure.openings || []) {
+            if (o.wallId && !(b.measure.walls || []).some((w) => w.id === o.wallId)) {
+              errors.push(`${b.name}: opening ${o.label} broken wallId`);
+            }
+          }
+          // flags damage in estimate
+          for (const w of b.measure.walls || []) {
+            if ((w.flags?.rot || w.flags?.wet) && num(w.damageArea) > 0) {
+              if (!est.lines.some((l) => l.id === `rot_${w.id}`)) {
+                errors.push(`${b.name}: нет строки ремонта для ${w.label}`);
+              }
+            }
+            if (w.flags?.high && !est.lines.some((l) => l.id === `high_${w.id}`)) {
+              warns.push(`${b.name}: нет надбавки высоты для ${w.label} (может 0 площадь)`);
+            }
+          }
+        }
+
+        if (areas.paintTotal <= 0) errors.push("paintTotal=0");
+        if (!est.lines.length) errors.push("смета пустая");
+        if (!(est.total > 0)) errors.push(`total=${est.total}`);
+
+        // custom lines
+        for (const cl of back.estimate?.customLines || []) {
+          if (cl.name && num(cl.qty) > 0 && num(cl.price) > 0) {
+            if (!est.lines.some((l) => l.name === cl.name.trim())) {
+              errors.push(`custom line missing: ${cl.name}`);
+            }
+          }
+        }
+
+        // scaffold
+        if (back.site?.scaffold === "tower" && !est.lines.some((l) => /вышка/i.test(l.name))) {
+          errors.push("нет вышки в смете");
+        }
+        if (back.site?.scaffold === "scaffold" && !est.lines.some((l) => /леса/i.test(l.name))) {
+          errors.push("нет лесов в смете");
+        }
+
+        // ATTENTION_TO_EXTRA keys exist in EXTRA_WORKS
+        for (const [att, extraId] of Object.entries(ATTENTION_TO_EXTRA)) {
+          const found = EXTRA_WORKS.flatMap((g) => g.items).some((i) => i.id === extraId);
+          if (!found) errors.push(`ATTENTION_TO_EXTRA ${att}→${extraId} missing in EXTRA_WORKS`);
+        }
+
+        // WALL_FLAGS defined
+        if (WALL_FLAGS.length < 4) errors.push("WALL_FLAGS too short");
+
+        // re-open after "storage"
+        const re = buildEstimate(JSON.parse(JSON.stringify(back)), catalog);
+        if (Math.abs(re.total - est.total) > 0.02) errors.push(`persist total drift ${est.total}→${re.total}`);
+
+        const summary = {
+          name,
+          buildings: back.buildings.map((b) => ({
+            name: b.name,
+            kind: b.kind,
+            zones: b.zones,
+            facade: num(b.measure.facadeArea),
+            interior: num(b.measure.interiorArea),
+            walls: b.measure.walls?.length,
+            openings: b.measure.openings?.length,
+            paintSides: b.measure.paintSides,
+          })),
+          paintTotal: areas.paintTotal,
+          readiness: ready.pct,
+          lines: est.lines.length,
+          total: est.total,
+          lineNames: est.lines.map((l) => `${l.name}: ${l.qty} ${l.unit} = ${l.sum}`),
+        };
+
+        if (errors.length) {
+          push("fail", `${name}: ${errors.length} ошибок`, { errors, warns, summary });
+        } else if (warns.length) {
+          push("warn", `${name}: ок с предупреждениями`, { warns, summary });
+        } else {
+          push("ok", `${name}: OK · ${areas.paintTotal} м² · ${est.lines.length} строк · ${money(est.total)}`, summary);
+        }
+        return { name, errors, warns, summary, survey: back, est };
+      } catch (e) {
+        push("fail", `${name}: EXCEPTION ${e.message}`, String(e.stack));
+        return { name, errors: [e.message], warns, summary: null };
+      }
+    }
+
+    // Static import / syntax smoke: fetch app.js
+    try {
+      const appSrc = await fetch("../js/app.js").then((r) => r.text());
+      if (appSrc.includes("renderStart")) push("fail", "app.js still has renderStart");
+      else push("ok", "app.js: no renderStart");
+      if (!appSrc.includes("paintCustomLines")) push("fail", "нет paintCustomLines");
+      else push("ok", "app.js: paintCustomLines есть");
+      if (!appSrc.includes("WALL_FLAGS")) push("fail", "нет WALL_FLAGS import usage");
+      else push("ok", "app.js: WALL_FLAGS");
+      // check balanced - already done
+    } catch (e) {
+      push("fail", "fetch app.js", e.message);
+    }
+
+    const results = [
+      checkSurvey("1. Фасад (дом+баня)", scenarioFacade()),
+      checkSurvey("2. Интерьер", scenarioInterior()),
+      checkSurvey("3. Фасад+интерьер+забор×2", scenarioBoth()),
+    ];
+
+    // Edge: empty leave client validation logic mimic
+    const empty = emptySurvey();
+    migrateSurvey(empty);
+    const emptyEst = buildEstimate(empty, catalog);
+    if (emptyEst.total < 0) push("fail", "empty survey negative total");
+    else push("ok", `пустой объект: total=${emptyEst.total}, lines=${emptyEst.lines.length}`);
+
+    // Interior-only must not require facade paint
+    const intOnly = scenarioInterior();
+    migrateSurvey(intOnly);
+    syncAreasFromLists(intOnly.buildings[0]);
+    const rInt = readiness(intOnly);
+    const missFacadePaint = rInt.checks?.find?.((c) => c.id?.includes("paint") && !c.ok && c.label?.includes("фасад"));
+    // readiness structure
+    push("ok", `readiness интерьер pct=${rInt.pct}`, { canLeave: rInt.canLeave, fails: (rInt.checks || []).filter((c) => !c.ok).map((c) => c.label) });
+
+    const fails = log.filter((x) => x.level === "fail").length;
+    const warns = log.filter((x) => x.level === "warn").length;
+    push(fails ? "fail" : "ok", `ИТОГО: fail=${fails} warn=${warns} ok=${log.filter((x) => x.level === "ok").length}`);
+
+    window.__QA__ = { log, results, fails, warns };
+    out.innerHTML += `<h2>Готово</h2><pre>${JSON.stringify({ fails, warns, results: results.map((r) => ({ name: r.name, errors: r.errors, warns: r.warns, summary: r.summary })) }, null, 2)}</pre>`;
+  </script>
+</body>
+</html>

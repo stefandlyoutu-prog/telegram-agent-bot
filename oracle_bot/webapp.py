@@ -230,6 +230,7 @@ def robots_txt():
     base = site_base_url()
     return PlainTextResponse(
         "User-agent: *\nAllow: /\nAllow: /blog\nAllow: /oferta\n"
+        "Disallow: /bestpaints\nDisallow: /bestpaints/\nDisallow: /admin\n"
         f"Sitemap: {base}/sitemap.xml\n"
     )
 
@@ -264,6 +265,72 @@ def sitemap_xml():
 
 
 app.mount("/assets", StaticFiles(directory=SITE / "assets"), name="site_assets")
+
+
+# ── BestPaints Survey (закрытый раздел) ─────────────────────────────
+from fastapi.responses import RedirectResponse  # noqa: E402
+from oracle_bot.bestpaints_gate import (  # noqa: E402
+    bestpaints_dir,
+    credentials_ok,
+    is_authenticated,
+    login_redirect_ok,
+    logout_response,
+)
+
+BP_STATIC = bestpaints_dir()
+
+
+def _bp_safe_file(rel: str) -> Path:
+    base = BP_STATIC.resolve()
+    target = (base / rel).resolve()
+    if base != target and base not in target.parents:
+        raise HTTPException(404, "Not found")
+    if not target.is_file():
+        raise HTTPException(404, "Not found")
+    return target
+
+
+@app.get("/bestpaints/login")
+async def bestpaints_login_page(request: Request):
+    if is_authenticated(request):
+        return RedirectResponse("/bestpaints/", status_code=303)
+    return FileResponse(BP_STATIC / "login.html")
+
+
+@app.post("/bestpaints/login")
+async def bestpaints_login_submit(request: Request):
+    form = await request.form()
+    username = str(form.get("username") or "")
+    password = str(form.get("password") or "")
+    if not credentials_ok(username, password):
+        return RedirectResponse("/bestpaints/login?e=1", status_code=303)
+    return login_redirect_ok()
+
+
+@app.get("/bestpaints/logout")
+async def bestpaints_logout():
+    return logout_response()
+
+
+@app.get("/bestpaints")
+@app.get("/bestpaints/")
+async def bestpaints_index(request: Request):
+    if not is_authenticated(request):
+        return RedirectResponse("/bestpaints/login", status_code=303)
+    return FileResponse(BP_STATIC / "index.html")
+
+
+@app.get("/bestpaints/{file_path:path}")
+async def bestpaints_files(file_path: str, request: Request):
+    if file_path in ("login", "login.html"):
+        return RedirectResponse("/bestpaints/login", status_code=303)
+    if not is_authenticated(request):
+        return RedirectResponse("/bestpaints/login", status_code=303)
+    # default document
+    if not file_path or file_path.endswith("/"):
+        return FileResponse(BP_STATIC / "index.html")
+    path = _bp_safe_file(file_path)
+    return FileResponse(path)
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")

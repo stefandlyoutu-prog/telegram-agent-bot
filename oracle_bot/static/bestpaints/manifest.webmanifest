@@ -1,0 +1,19 @@
+{
+  "name": "BestPaints Survey",
+  "short_name": "BP Survey",
+  "description": "Замерщик покраски деревянных домов",
+  "start_url": "/bestpaints/",
+  "scope": "/bestpaints/",
+  "display": "standalone",
+  "background_color": "#0f1412",
+  "theme_color": "#0f1412",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
