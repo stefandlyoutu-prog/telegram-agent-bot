@@ -147,20 +147,40 @@ def miniapp_entry_url() -> str:
     return f"{base}/app"
 
 
+def reeldesk_setting(key: str, default: str = "") -> str:
+    """Читает настройку публикации из кабинета ReelDesk (Выводы → «Внести
+    изменения»), напрямую из его SQLite — без импорта video_studio (лишние
+    зависимости для бота). Best-effort: любая ошибка → default, бот не падает."""
+    try:
+        import sqlite3
+
+        db_path = Path(__file__).resolve().parents[1] / "video_studio" / "data" / "reeldesk.db"
+        if not db_path.exists():
+            return default
+        conn = sqlite3.connect(str(db_path), timeout=2)
+        try:
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        finally:
+            conn.close()
+        return row[0] if row and row[0] != "" else default
+    except Exception:  # noqa: BLE001
+        return default
+
+
 def site_public_url() -> str:
-    """Публичный URL SEO-сайта."""
+    """Публичный URL SEO-сайта (канон = moracul.ru, не onrender)."""
     explicit = os.getenv("ORACLE_SITE_URL", "").strip().rstrip("/")
     if explicit:
         return explicit
-    return cloud_webapp_url() or "https://moracul.ru"
+    # Не подставляем Render-URL: иначе canonical/sitemap уезжают на onrender.com
+    return "https://moracul.ru"
 
 
 def oferta_url() -> str:
     explicit = os.getenv("ORACLE_OFERTA_URL", "").strip()
     if explicit:
         return explicit
-    base = cloud_webapp_url()
-    return f"{base}/oferta" if base else "https://moracul.onrender.com/oferta"
+    return f"{site_public_url()}/oferta"
 
 
 LOCK_MARKER = "---LOCK---"

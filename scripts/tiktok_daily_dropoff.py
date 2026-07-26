@@ -48,7 +48,7 @@ _HASHTAGS = [
 ]
 
 
-_BOT_LINK = "https://t.me/MOracul_bot?start=src_instagram"
+_BOT_LINK = "https://t.me/MOracul_bot?start=src_tiktok"
 
 
 def _caption(topic: str, idx: int) -> str:
@@ -146,25 +146,40 @@ def main() -> None:
         if tiktok_posting_disabled() and "tiktok" in plats:
             plats = [p for p in plats if p != "tiktok"]
             print("TikTok отключён (spam_risk) — постим только:", plats)
-        label = "+".join(p.upper() for p in plats)
-        slots_h = [9, 12, 15, 18, 21]  # время выхода по Москве
-        posted = failed = 0
-        report: list[str] = []
-        for idx, it in enumerate(items):
-            if not it.file or not Path(it.file).exists():
-                failed += 1
-                report.append(f"✖ {it.topic[:40]} — рендер не удался")
-                continue
-            when = f"{target.isoformat()}T{slots_h[idx % len(slots_h)]:02d}:00:00"
-            res = post_uploadpost(it, platforms=plats or None, scheduled_iso=when)
-            if res.ok:
-                posted += 1
-                it.status = "posted"
-                report.append(f"✔ {slots_h[idx % len(slots_h)]:02d}:00 — {it.topic[:40]}")
-            else:
-                failed += 1
-                report.append(f"✖ {it.topic[:40]} — {res.error[:80]}")
-            op.save_plan(plan)
+        if not plats:
+            print("Нет живых площадок Upload-Post (TikTok/IG) — только файлы в Downloads")
+            label = "MANUAL"
+            posted = failed = 0
+            report = ["нет площадок для автопостинга — залейте вручную из Downloads"]
+        else:
+            label = "+".join(p.upper() for p in plats)
+            slots_h = [9, 12, 15, 18, 21]  # время выхода по Москве
+            posted = failed = 0
+            report: list[str] = []
+            for idx, it in enumerate(items):
+                if not it.file or not Path(it.file).exists():
+                    failed += 1
+                    report.append(f"✖ {it.topic[:40]} — рендер не удался")
+                    continue
+                when = f"{target.isoformat()}T{slots_h[idx % len(slots_h)]:02d}:00:00"
+                account = None
+                try:
+                    from video_studio import storage as vstore
+
+                    account = vstore.pick_channel_account("moracul", "tiktok", it.slot)
+                except Exception:  # noqa: BLE001
+                    account = None
+                res = post_uploadpost(it, platforms=plats or None, scheduled_iso=when, account=account)
+                if res.ok:
+                    posted += 1
+                    it.status = "posted"
+                    it.note = (res.url or res.error)[:200]
+                    report.append(f"✔ {slots_h[idx % len(slots_h)]:02d}:00 — {it.topic[:40]}")
+                else:
+                    failed += 1
+                    it.note = res.error[:200]
+                    report.append(f"✖ {it.topic[:40]} — {res.error[:80]}")
+                op.save_plan(plan)
         print(f"Автопостинг {label}: {posted} запланировано, {failed} ошибок")
         _notify(
             f"🤖 <b>{label} на {target.strftime('%d.%m')}: {posted}/{PER_DAY} роликов запланировано автоматически</b>\n"

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Догон промо при логине и каждые 3 часа.
+  Если Mac был выключен в слот 8:00 / 10:30 / 17:00 — при включении выгрузит пропуски.
+
+  Установка:
+    cp scripts/com.oracle.promo-catchup.plist ~/Library/LaunchAgents/
+    launchctl unload ~/Library/LaunchAgents/com.oracle.promo-catchup.plist 2>/dev/null || true
+    launchctl load ~/Library/LaunchAgents/com.oracle.promo-catchup.plist
+
+  Разово:
+    launchctl start com.oracle.promo-catchup
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.oracle.promo-catchup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/polzovatel/Projects/telegram-agent-bot/scripts/promo_catchup_on_login.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/polzovatel/Projects/telegram-agent-bot</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>10800</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/polzovatel/Projects/telegram-agent-bot/data/video_bot/promo/logs/catchup_launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/polzovatel/Projects/telegram-agent-bot/data/video_bot/promo/logs/catchup_launchd.err.log</string>
+</dict>
+</plist>

@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "oracle_bot" / "static" / "site" / "blog"
-BASE = "https://moracul.onrender.com"
+BASE = "https://moracul.ru"
 BOT = "https://t.me/MOracul_bot"
 
 # ─────────────────────────── статьи ───────────────────────────

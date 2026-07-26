@@ -12,14 +12,14 @@ PY="$ROOT/.venv/bin/python"
 [ -x "$PY" ] || PY="python3"
 
 # Прокси 127.0.0.1:10808 часто выключен — ломает LLM/TTS
-if ! curl -s --connect-timeout 2 -x "${HTTP_PROXY:-http://127.0.0.1:10808}" https://api.openai.com >/dev/null 2>&1; then
-  unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
-fi
+unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
+export VIDEO_TTS_ENGINE="${VIDEO_TTS_ENGINE:-edge}"
+export VIDEO_TTS_POLISH=0
 
 {
   echo "=== $(date) oracle promo daily ==="
   # YouTube — только сегодня; VK — догоняем backlog (без --today-only)
   "$PY" scripts/oracle_video_promo.py run --platforms youtube --today-only --limit 2 "$@"
-  "$PY" scripts/oracle_video_promo.py run --platforms vk --limit 2 "$@"
+  "$PY" scripts/oracle_video_promo.py run --platforms vk --limit 4 "$@"
   echo "=== done $(date) ==="
 } >> "$LOG" 2>&1
