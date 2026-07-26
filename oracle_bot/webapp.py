@@ -299,9 +299,29 @@ async def bestpaints_login_page(request: Request):
 
 @app.post("/bestpaints/login")
 async def bestpaints_login_submit(request: Request):
-    form = await request.form()
-    username = str(form.get("username") or "")
-    password = str(form.get("password") or "")
+    username = ""
+    password = ""
+    ctype = (request.headers.get("content-type") or "").lower()
+    try:
+        if "application/json" in ctype:
+            data = await request.json()
+            username = str(data.get("username") or "")
+            password = str(data.get("password") or "")
+        else:
+            # Prefer Starlette form (needs python-multipart); fallback to raw body.
+            try:
+                form = await request.form()
+                username = str(form.get("username") or "")
+                password = str(form.get("password") or "")
+            except Exception:
+                from urllib.parse import parse_qs
+
+                raw = (await request.body()).decode("utf-8", errors="ignore")
+                parsed = parse_qs(raw, keep_blank_values=True)
+                username = (parsed.get("username") or [""])[0]
+                password = (parsed.get("password") or [""])[0]
+    except Exception:
+        return RedirectResponse("/bestpaints/login?e=1", status_code=303)
     if not credentials_ok(username, password):
         return RedirectResponse("/bestpaints/login?e=1", status_code=303)
     return login_redirect_ok()
