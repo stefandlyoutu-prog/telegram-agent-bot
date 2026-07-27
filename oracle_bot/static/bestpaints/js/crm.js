@@ -51,6 +51,15 @@ export async function doAction(id, action, extra = {}) {
   });
 }
 
+export async function fetchSchedule(date) {
+  const q = date ? `?date=${encodeURIComponent(date)}` : "";
+  return api(`/schedule${q}`);
+}
+
+export async function setSchedule(payload) {
+  return api("/schedule", { method: "POST", body: JSON.stringify(payload) });
+}
+
 /** Кнопки следующего шага по статусу */
 const NEXT_ACTIONS = {
   created: [
@@ -282,6 +291,32 @@ export function detailHtml(obj, events, meta) {
   <p class="footer-note"><a href="/bestpaints/logout">Выйти</a></p>`;
 }
 
+export function schedulePanelHtml(meta) {
+  const today = meta?.today || "";
+  const items = meta?.schedule_today || [];
+  const surv = (meta?.on_duty_surveyors || []).map((s) => s.name).join(", ") || "никого";
+  const mgr = (meta?.on_duty_managers || []).map((m) => m.name).join(", ") || "никого";
+  const list =
+    items
+      .map((r) => `<li>${esc(r.role)}: <strong>${esc(r.person_name || r.person_id)}</strong></li>`)
+      .join("") || "<li class='hint'>Пусто — сделки не назначатся</li>";
+  return `
+  <section class="crm-schedule" id="crm-schedule">
+    <div class="crm-board-head">
+      <h2 class="subhead">График смен · ${esc(today)}</h2>
+    </div>
+    <p class="hint">Замерщики: <strong>${esc(surv)}</strong> · Менеджеры: <strong>${esc(mgr)}</strong></p>
+    <ul class="crm-schedule-list">${list}</ul>
+    <div class="crm-schedule-actions">
+      <label>Дата <input type="date" id="crm-sch-date" value="${esc(today)}" /></label>
+      <button type="button" class="btn primary" id="crm-sch-fill">Поставить всех в график</button>
+      <button type="button" class="btn ghost" id="crm-sch-clear">Очистить день</button>
+      <button type="button" class="btn ghost" id="crm-sch-reload">Обновить</button>
+    </div>
+    <p class="hint">То же в боте: <code>/grafik_fill</code> · без графика /zamer оставит сделку «Создана»</p>
+  </section>`;
+}
+
 export function homeCrmSectionHtml(objects) {
   return `
   <section class="crm-board">
@@ -289,7 +324,8 @@ export function homeCrmSectionHtml(objects) {
       <h2 class="subhead">CRM · сделки замеров</h2>
       <button type="button" class="btn primary" id="crm-toggle-create">+ Сделка</button>
     </div>
-    <p class="hint crm-board-hint">Лидоруб создаёт в Telegram (/zamer). Здесь статусы, замер и чек-листы.</p>
+    <p class="hint crm-board-hint">Лидоруб: Telegram /zamer · График ниже или /grafik_fill · статусы здесь</p>
+    <div id="crm-schedule-host"></div>
     <div id="crm-create-wrap" class="crm-create-wrap" hidden></div>
     ${boardHtml(objects)}
   </section>`;
@@ -298,8 +334,10 @@ export function homeCrmSectionHtml(objects) {
 export async function mountHomeCrm(ctx) {
   const { root, toast, onOpenDetail, getMeta } = ctx;
   let objects = [];
+  let meta = null;
   try {
     objects = await fetchObjects();
+    meta = await getMeta();
   } catch (e) {
     const el = root.querySelector(".crm-board");
     if (el) {
@@ -312,6 +350,51 @@ export async function mountHomeCrm(ctx) {
   }
   const listHost = root.querySelector(".crm-board");
   if (!listHost) return;
+
+  const schHost = root.querySelector("#crm-schedule-host");
+  if (schHost) {
+    schHost.innerHTML = schedulePanelHtml(meta);
+    const reloadSch = async () => {
+      const day = root.querySelector("#crm-sch-date")?.value || meta.today;
+      const pack = await fetchSchedule(day);
+      const fakeMeta = {
+        ...meta,
+        today: day,
+        schedule_today: pack.items || [],
+        on_duty_surveyors: pack.on_duty_surveyors || [],
+        on_duty_managers: pack.on_duty_managers || [],
+      };
+      schHost.innerHTML = schedulePanelHtml(fakeMeta);
+      bindSch();
+    };
+    const bindSch = () => {
+      root.querySelector("#crm-sch-reload")?.addEventListener("click", () => reloadSch().catch((e) => toast(String(e.message || e))));
+      root.querySelector("#crm-sch-fill")?.addEventListener("click", async () => {
+        const day = root.querySelector("#crm-sch-date")?.value || meta.today;
+        try {
+          await setSchedule({ fill_all: true, work_date: day });
+          toast(`График на ${day} заполнен`);
+          await reloadSch();
+        } catch (err) {
+          toast(String(err.message || err));
+        }
+      });
+      root.querySelector("#crm-sch-clear")?.addEventListener("click", async () => {
+        const day = root.querySelector("#crm-sch-date")?.value || meta.today;
+        if (!confirm(`Очистить график на ${day}?`)) return;
+        try {
+          await setSchedule({ clear: true, work_date: day });
+          toast(`График ${day} очищен`);
+          await reloadSch();
+        } catch (err) {
+          toast(String(err.message || err));
+        }
+      });
+      root.querySelector("#crm-sch-date")?.addEventListener("change", () => reloadSch().catch((e) => toast(String(e.message || e))));
+    };
+    bindSch();
+  }
+
   const oldList = listHost.querySelector(".crm-list, .crm-empty");
   const tmp = document.createElement("div");
   tmp.innerHTML = boardHtml(objects);
@@ -333,8 +416,8 @@ export async function mountHomeCrm(ctx) {
         wrap.hidden = true;
         return;
       }
-      const meta = await getMeta();
-      wrap.innerHTML = createFormHtml(meta);
+      const m = await getMeta();
+      wrap.innerHTML = createFormHtml(m);
       wrap.hidden = false;
       const form = wrap.querySelector("#crm-create-form");
       form.onsubmit = async (e) => {

@@ -516,6 +516,7 @@ function renderHome() {
 
     <p class="footer-note">Установить на iPhone: Safari → Поделиться → На экран «Домой».
       · <a href="/bestpaints/docs/BestPaints_Obuchenie_v4.pdf?v=20260728" target="_blank" rel="noopener">Обучение (PDF)</a>
+      · <a href="/bestpaints/docs/TOMORROW_PLAYBOOK.html" target="_blank" rel="noopener">Шпаргалка разбора</a>
       · <a href="/bestpaints/logout">Выйти</a></p>
   `;
   $("#btn-new").onclick = () => newSurvey();

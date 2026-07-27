@@ -364,6 +364,13 @@ async def _init_bestpaints_bot() -> None:
     _bp_dp.include_router(bestpaints_router)
     me = await _bp_bot.get_me()
     logger.info("BestPaints bot: @%s", me.username)
+    try:
+        from oracle_bot.bestpaints_bot import setup_bot_commands
+
+        await setup_bot_commands(_bp_bot)
+        logger.info("BestPaints bot: commands menu set")
+    except Exception:
+        logger.exception("BestPaints bot: set_my_commands failed")
     webhook_base = os.getenv("ORACLE_WEBHOOK_URL", "").strip() or os.getenv("RENDER_EXTERNAL_URL", "")
     if webhook_base:
         url = webhook_base.rstrip("/") + "/webhook/bestpaints"

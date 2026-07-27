@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BestPaints — шпаргалка на завтра</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; font: 16px/1.45 system-ui, sans-serif;
+      background: #0f1412; color: #e8f0ea; padding: 24px 16px 64px;
+      max-width: 720px; margin-inline: auto;
+    }
+    h1 { font-size: 1.4rem; color: #8fbf7a; }
+    h2 { font-size: 1.1rem; margin-top: 1.6rem; color: #c4a35a; }
+    a { color: #7ec8ff; }
+    code, .box {
+      background: #1a221e; border: 1px solid #334038; border-radius: 8px;
+      padding: 2px 6px; font-family: ui-monospace, monospace; font-size: 0.92em;
+    }
+    .box { display: block; padding: 12px 14px; margin: 10px 0; white-space: pre-wrap; }
+    ol, ul { padding-left: 1.2rem; }
+    li { margin: 6px 0; }
+    .warn { color: #e07a6a; font-weight: 700; }
+    .ok { color: #6fcf97; }
+  </style>
+</head>
+<body>
+  <h1>BestPaints — разбор функционала (завтра без разработчика)</h1>
+  <p>Кабинет, бот, график, сделка, статусы. Делайте по порядку.</p>
+
+  <h2>1. Ссылки и вход</h2>
+  <ul>
+    <li>Сайт: <a href="https://moracul.ru/bestpaints/">https://moracul.ru/bestpaints/</a></li>
+    <li>Зеркало: <a href="https://moracul.onrender.com/bestpaints/">https://moracul.onrender.com/bestpaints/</a></li>
+    <li>Логин: <code>bestpaints</code> · Пароль: <code>ZamerBp2026!</code></li>
+    <li>Бот: <a href="https://t.me/BestPaints_Zamerbot">@BestPaints_Zamerbot</a></li>
+    <li>PDF: <a href="https://moracul.ru/bestpaints/docs/BestPaints_Obuchenie_v4.pdf?v=20260728">обучение v4</a></li>
+  </ul>
+
+  <h2>2. Бот — сразу /start</h2>
+  <p>В личке боту напишите <code>/start</code> — придёт вся шпаргалка команд.</p>
+  <div class="box">/start          — команды и настройка
+/grafik_fill    — поставить ВСЕХ в график на сегодня (кнопки)
+/grafik         — кто сегодня в графике
+/bp_staff       — ID замерщиков/менеджеров
+/zamer          — новая сделка (Лидоруб)
+/chatid         — в группе Ops / Подписанные</div>
+
+  <h2>3. Как заполнить календарь (график)</h2>
+  <p class="warn">Без графика сделка НЕ назначается замерщику (статус «Создана»).</p>
+  <ol>
+    <li><b>В боте:</b> <code>/grafik_fill</code> → кнопка «Всех на дату».</li>
+    <li>На завтра: <code>/grafik_fill 2026-07-29</code> (подставьте нужную дату).</li>
+    <li><b>В кабинете:</b> блок «График смен» → дата → «Поставить всех в график».</li>
+    <li>Проверка: <code>/grafik</code> или обновить блок в кабинете.</li>
+  </ol>
+  <p>Справочник сейчас тестовый: Замерщик 1/2 (<code>sv_1</code>/<code>sv_2</code>), Менеджер 1/2 (<code>mg_1</code>/<code>mg_2</code>). Зоны: Серебрянка/север → sv_1, Коммунарка/юг → sv_2.</p>
+
+  <h2>4. Полный цикл за 10 минут</h2>
+  <ol>
+    <li><code>/grafik_fill</code> на дату замера.</li>
+    <li><code>/zamer</code> → название → квалификация → адрес → дата → клиент → аудио или «готово».</li>
+    <li>Должно стать <span class="ok">«Замер назначен»</span> + имя замерщика. Ссылка в ответ.</li>
+    <li>Откройте кабинет по ссылке (или список CRM).</li>
+    <li>Кнопки по порядку: <b>Взял в работу</b> → <b>Выезд подтверждён</b> → <b>На адресе</b> → конструктор.</li>
+    <li><b>Заключил</b> → сообщение в группу «BP Подписанные» · чек-лист ссылок.</li>
+    <li><b>Не заключил</b> → автоматически менеджер из графика (защита ТЗ).</li>
+  </ol>
+
+  <h2>5. Группы (3 человека)</h2>
+  <ul>
+    <li><b>BP Ops</b> — лента статусов / алерты (график пуст, назначения).</li>
+    <li><b>BP Подписанные</b> — только договоры.</li>
+    <li>Если бот молчит в группе: в группе напишите <code>/chatid</code>.</li>
+  </ul>
+
+  <h2>6. Если что-то «сломалось»</h2>
+  <ul>
+    <li>Сделка «Создана» без замерщика → график на <b>дату замера</b> пуст → <code>/grafik_fill ДАТА</code> → в карточке «Назначить из графика».</li>
+    <li>Старый PDF / UI → жёсткое обновление (Cmd+Shift+R) или зеркало onrender.</li>
+    <li>Не та кнопка → в карточке «Исправить статус / удалить».</li>
+    <li>SMS пока stub (шлюз не подключен) — пуши идут в Telegram Ops.</li>
+  </ul>
+
+  <h2>7. Чек-лист перед разбором</h2>
+  <ul>
+    <li>□ Войти в кабинет</li>
+    <li>□ /start в боте — видна шпаргалка</li>
+    <li>□ /grafik_fill — график не пустой</li>
+    <li>□ /zamer тестовая сделка → назначен замерщик</li>
+    <li>□ Пройти статусы до «на адресе»</li>
+    <li>□ Открыть конструктор ЛКМ</li>
+    <li>□ Заключил / не заключил → проверить Ops и Подписанные</li>
+  </ul>
+</body>
+</html>

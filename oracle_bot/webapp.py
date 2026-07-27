@@ -403,6 +403,21 @@ async def bp_api_schedule(request: Request, date: str | None = None):
 async def bp_api_schedule_set(request: Request):
     _bp_api_auth(request)
     data = await request.json()
+    if (data or {}).get("clear"):
+        day = str(data.get("work_date") or bp_crm.today_str())
+        n = bp_crm.clear_schedule(day, str(data["role"]) if data.get("role") else None)
+        return {"ok": True, "cleared": n, "work_date": day}
+    if (data or {}).get("fill_all"):
+        day = str(data.get("work_date") or bp_crm.today_str())
+        staff = bp_crm.load_staff()
+        added = []
+        for s in staff.get("surveyors") or []:
+            bp_crm.set_schedule("surveyor", s["id"], day, "fill_all")
+            added.append({"role": "surveyor", "person_id": s["id"], "name": s.get("name")})
+        for m in staff.get("managers") or []:
+            bp_crm.set_schedule("manager", m["id"], day, "fill_all")
+            added.append({"role": "manager", "person_id": m["id"], "name": m.get("name")})
+        return {"ok": True, "work_date": day, "added": added}
     try:
         return bp_crm.set_schedule(
             str(data.get("role") or ""),

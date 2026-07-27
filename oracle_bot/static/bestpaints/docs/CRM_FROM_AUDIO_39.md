@@ -19,5 +19,10 @@
 
 ## Команды бота
 
+- `/start` / `/help` — полная шпаргалка (ссылки, график, цикл)
 - `/zamer` — Лидоруб
-- `/grafik`, `/grafik_add`, `/grafik_clear`, `/bp_staff` — админ
+- `/grafik_fill` — поставить всех в график на день (кнопки)
+- `/grafik`, `/grafik_add`, `/grafik_clear`, `/bp_staff` — график
+- `/chatid` — привязка групп Ops / Подписанные
+
+Шпаргалка на разбор: `/bestpaints/docs/TOMORROW_PLAYBOOK.html`
