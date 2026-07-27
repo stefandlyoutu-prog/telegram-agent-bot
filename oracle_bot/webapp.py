@@ -416,6 +416,9 @@ async def bp_api_schedule_set(request: Request):
 
 @app.get("/bestpaints/{file_path:path}")
 async def bestpaints_files(file_path: str, request: Request):
+    # Bust stale cached training PDF
+    if file_path in ("docs/BestPaints_Obuchenie.pdf", "docs/BestPaints_Obuchenie.pdf/"):
+        return RedirectResponse("/bestpaints/docs/BestPaints_Obuchenie_v3.pdf?v=20260727", status_code=302)
     if file_path.startswith("api/"):
         raise HTTPException(404, "Not found")
     if file_path in ("login", "login.html"):
@@ -426,7 +429,18 @@ async def bestpaints_files(file_path: str, request: Request):
     if not file_path or file_path.endswith("/"):
         return FileResponse(BP_STATIC / "index.html")
     path = _bp_safe_file(file_path)
-    return FileResponse(path)
+    headers = {}
+    low = file_path.lower()
+    if low.endswith(".pdf") or low.startswith("docs/") or low.endswith("sw.js"):
+        headers = {
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+    media = None
+    if low.endswith(".pdf"):
+        media = "application/pdf"
+    return FileResponse(path, media_type=media, headers=headers)
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")

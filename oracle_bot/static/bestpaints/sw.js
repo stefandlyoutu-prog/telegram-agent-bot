@@ -1,4 +1,4 @@
-const CACHE = "bp-survey-v23";
+const CACHE = "bp-survey-v24";
 const ASSETS = [
   "./",
   "./index.html",
@@ -13,8 +13,8 @@ const ASSETS = [
   "./js/photos.js",
   "./js/keypad.js",
   "./js/scale.js",
-  "./js/trash.js,
-  "./js/crm.js"",
+  "./js/trash.js",
+  "./js/crm.js",
   "./data/catalog.json",
   "./data/tech-matrix.js",
   "./data/extras.js",
@@ -32,23 +32,48 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
+
+function shouldBypassCache(url) {
+  const path = url.pathname || "";
+  if (path.includes("/api/")) return true;
+  if (path.includes("/docs/")) return true;
+  if (/\.pdf$/i.test(path)) return true;
+  if (path.endsWith("/login") || path.endsWith("/logout")) return true;
+  if (path.endsWith("/sw.js")) return true;
+  return false;
+}
 
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
+  let url;
+  try {
+    url = new URL(req.url);
+  } catch (err) {
+    return;
+  }
+  if (url.origin !== self.location.origin) return;
+
+  if (shouldBypassCache(url)) {
+    e.respondWith(fetch(req, { cache: "no-store" }).catch(() => caches.match(req)));
+    return;
+  }
+
   e.respondWith(
-    caches.match(req).then((cached) =>
-      cached ||
-      fetch(req)
-        .then((res) => {
+    fetch(req)
+      .then((res) => {
+        if (res && res.ok) {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
-          return res;
-        })
-        .catch(() => cached)
-    )
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        }
+        return res;
+      })
+      .catch(() => caches.match(req))
   );
 });
