@@ -274,6 +274,7 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
         "discount_pct": "REAL NOT NULL DEFAULT 0",
         "amount_total": "REAL NOT NULL DEFAULT 0",
         "area_m2": "REAL NOT NULL DEFAULT 0",
+        "signed_place": "TEXT NOT NULL DEFAULT ''",
     }
     for name, decl in alters.items():
         if name not in cols:
@@ -385,6 +386,7 @@ def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
     d["discount_pct"] = float(d.get("discount_pct") or 0)
     d["amount_total"] = float(d.get("amount_total") or 0)
     d["area_m2"] = float(d.get("area_m2") or 0)
+    d["signed_place"] = (d.get("signed_place") or "").strip()
     return d
 
 
@@ -1183,8 +1185,16 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         updates["contract_at"] = now
         updates["checklist_json"] = json.dumps({i["id"]: False for i in CHECKLIST_SIGNED}, ensure_ascii=False)
         _apply_money(updates, obj, payload)
-        message = "Договор заключён на адресе"
-        chat = resolve_chat("signed")
+        place_raw = str(payload.get("signed_place") or "").strip().lower()
+        from_office = obj.get("status") in ("manager_assigned", "manager_accepted")
+        if place_raw in ("office", "офис", "from_office"):
+            place = "office"
+        elif place_raw in ("on_site", "address", "на_адресе", "site"):
+            place = "on_site"
+        else:
+            place = "office" if from_office else "on_site"
+        updates["signed_place"] = place
+        message = "Договор заключён из офиса" if place == "office" else "Договор заключён на адресе"
         chat = resolve_chat("signed")
         signed_msg = format_contract_signed(
             title=obj.get("title") or "",
@@ -1192,13 +1202,15 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
             client=f"{obj.get('client_name') or ''} {obj.get('client_phone') or ''}".strip(),
             surveyor=obj.get("surveyor_name") or "",
         )
+        if place == "office":
+            signed_msg = _msg_lines(signed_msg, "Место: офис (мотивация 1%)")
         surveyor_p = _person_from_obj(obj, "surveyor")
         mention = _mention_of(surveyor_p)
         notify_all(
             _msg_lines(mention or f"→ {obj.get('surveyor_name') or 'замерщик'}", signed_msg),
             telegram_chat=chat,
         )
-        _broadcast_status(obj, "Договор заключён")
+        _broadcast_status({**obj, **updates, "id": oid}, "Договор заключён" + (" · офис" if place == "office" else " · на адресе"))
 
     elif action in ("decline_contract", "decline_on_site"):
         updates["status"] = "contract_declined"
@@ -1261,6 +1273,18 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         if target not in VALID_STATUSES:
             raise ValueError(f"unknown status: {target}")
         updates["status"] = target
+        if target in WON_STATUSES and not (obj.get("signed_place") or "").strip():
+            place_raw = str(payload.get("signed_place") or "").strip().lower()
+            if place_raw in ("office", "офис", "from_office"):
+                updates["signed_place"] = "office"
+            elif place_raw in ("on_site", "address", "site", "на_адресе"):
+                updates["signed_place"] = "on_site"
+            elif obj.get("status") in ("manager_assigned", "manager_accepted"):
+                updates["signed_place"] = "office"
+            else:
+                updates["signed_place"] = "on_site"
+        if target in WON_STATUSES and not obj.get("contract_at"):
+            updates["contract_at"] = now
         message = f"Статус вручную: {STATUS_MAP[target]['label']}"
         _broadcast_status(obj, STATUS_MAP[target]["label"])
 
@@ -1439,6 +1463,158 @@ WON_STATUSES = {"contract_signed", "closed"}
 LOST_STATUSES = {"contract_declined"}
 # manager_* after decline still "not signed" pipeline — count separately as open_lost
 
+PAYROLL_RULES = [
+    {"id": "onsite_0", "place": "on_site", "discount_min": 0, "discount_max": 0, "rate_pct": 5, "label": "На адресе · скидка 0% → 5%"},
+    {"id": "onsite_1_5", "place": "on_site", "discount_min": 1, "discount_max": 5, "rate_pct": 3, "label": "На адресе · скидка 1–5% → 3%"},
+    {"id": "onsite_6_10", "place": "on_site", "discount_min": 6, "discount_max": 10, "rate_pct": 2, "label": "На адресе · скидка 6–10% → 2%"},
+    {"id": "onsite_over_10", "place": "on_site", "discount_min": 10.0001, "discount_max": 100, "rate_pct": 2, "label": "На адресе · скидка >10% → 2%"},
+    {"id": "office", "place": "office", "discount_min": 0, "discount_max": 100, "rate_pct": 1, "label": "Из офиса → 1%"},
+]
+
+
+def _infer_signed_place(obj: dict[str, Any]) -> str:
+    """on_site | office — из поля или эвристики по воронке."""
+    raw = (obj.get("signed_place") or "").strip().lower()
+    if raw in ("office", "офис", "from_office"):
+        return "office"
+    if raw in ("on_site", "address", "site", "на_адресе"):
+        return "on_site"
+    # эвристика для старых сделок без поля
+    if obj.get("manager_id") or obj.get("manager_name"):
+        # менеджер появился обычно после отказа на адресе → офис
+        if obj.get("status") in WON_STATUSES:
+            return "office"
+    if obj.get("on_site_at"):
+        return "on_site"
+    return "on_site"
+
+
+def calc_surveyor_commission(
+    *,
+    amount_total: float,
+    discount_pct: float,
+    signed_place: str,
+) -> dict[str, Any]:
+    """Мотивация замерщика с заключённого договора."""
+    total = max(0.0, float(amount_total or 0))
+    disc = max(0.0, float(discount_pct or 0))
+    place = "office" if (signed_place or "").strip().lower() in ("office", "офис", "from_office") else "on_site"
+    if place == "office":
+        rate = 1.0
+        rule = "Из офиса → 1%"
+        rule_id = "office"
+    elif disc <= 0:
+        rate = 5.0
+        rule = "На адресе · скидка 0% → 5%"
+        rule_id = "onsite_0"
+    elif disc <= 5:
+        rate = 3.0
+        rule = "На адресе · скидка 1–5% → 3%"
+        rule_id = "onsite_1_5"
+    elif disc <= 10:
+        rate = 2.0
+        rule = "На адресе · скидка 6–10% → 2%"
+        rule_id = "onsite_6_10"
+    else:
+        rate = 2.0
+        rule = "На адресе · скидка >10% → 2%"
+        rule_id = "onsite_over_10"
+    commission = round(total * rate / 100.0, 2)
+    return {
+        "signed_place": place,
+        "place_label": "Из офиса" if place == "office" else "На адресе",
+        "rate_pct": rate,
+        "commission": commission,
+        "rule": rule,
+        "rule_id": rule_id,
+        "discount_pct": disc,
+        "amount_total": total,
+    }
+
+
+def payroll(*, period: str = "30d", date_from: str | None = None, date_to: str | None = None) -> dict[str, Any]:
+    """ЗП замерщиков: сумма мотивации и кликабельная история сделок."""
+    init_db()
+    ts_from, ts_to, label_from, label_to = _period_bounds(period, date_from, date_to)
+    objs = list_objects(include_deleted=False)
+
+    def in_period(ts: float | None) -> bool:
+        if ts is None:
+            return ts_from is None
+        if ts_from is not None and ts < ts_from:
+            return False
+        if ts_to is not None and ts > ts_to:
+            return False
+        return True
+
+    def outcome_ts(o: dict[str, Any]) -> float | None:
+        return o.get("contract_at") or o.get("updated_at")
+
+    won = [o for o in objs if o.get("status") in WON_STATUSES and in_period(outcome_ts(o))]
+    buckets: dict[str, dict[str, Any]] = {}
+    grand = 0.0
+    for o in won:
+        total = float(o.get("amount_total") or 0)
+        if total <= 0:
+            continue
+        place = _infer_signed_place(o)
+        calc = calc_surveyor_commission(
+            amount_total=total,
+            discount_pct=float(o.get("discount_pct") or 0),
+            signed_place=place,
+        )
+        name = o.get("surveyor_name") or "Без замерщика"
+        sid = o.get("surveyor_id") or ""
+        key = sid or name
+        b = buckets.setdefault(
+            key,
+            {
+                "surveyor_id": sid,
+                "name": name,
+                "deals_count": 0,
+                "sum_contracts": 0.0,
+                "sum_payroll": 0.0,
+                "deals": [],
+            },
+        )
+        b["deals_count"] += 1
+        b["sum_contracts"] += total
+        b["sum_payroll"] += calc["commission"]
+        grand += calc["commission"]
+        b["deals"].append(
+            {
+                "id": o["id"],
+                "title": o.get("title") or "",
+                "address": o.get("address") or "",
+                "measure_date": o.get("measure_date") or "",
+                "status": o.get("status"),
+                "status_label": o.get("status_label") or "",
+                "amount_total": total,
+                "discount_pct": float(o.get("discount_pct") or 0),
+                "signed_place": calc["signed_place"],
+                "place_label": calc["place_label"],
+                "rate_pct": calc["rate_pct"],
+                "commission": calc["commission"],
+                "rule": calc["rule"],
+                "contract_at": o.get("contract_at"),
+            }
+        )
+
+    by_surveyor = sorted(buckets.values(), key=lambda x: (-x["sum_payroll"], -x["deals_count"]))
+    for b in by_surveyor:
+        b["sum_contracts"] = round(b["sum_contracts"], 2)
+        b["sum_payroll"] = round(b["sum_payroll"], 2)
+        b["deals"].sort(key=lambda d: -(d.get("contract_at") or 0))
+
+    return {
+        "period": period or "custom",
+        "from": label_from,
+        "to": label_to,
+        "rules": PAYROLL_RULES,
+        "total_payroll": round(grand, 2),
+        "by_surveyor": by_surveyor,
+    }
+
 
 def analytics(*, period: str = "30d", date_from: str | None = None, date_to: str | None = None) -> dict[str, Any]:
     init_db()
@@ -1574,5 +1750,6 @@ def meta() -> dict[str, Any]:
         "tg_ops": resolve_chat("ops"),
         "tg_signed": resolve_chat("signed"),
         "roles_hint": "Лидоруб создаёт сделку в ТГ; админ заполняет график; замерщик/менеджер ведут статусы в веб.",
-        "analytics_hint": "Вкладка «Аналитика»: суммы, конверсия, скидки за период.",
+        "analytics_hint": "Вкладки «Аналитика» и «ЗП»: суммы, конверсия, мотивация замерщика.",
+        "payroll_rules": PAYROLL_RULES,
     }

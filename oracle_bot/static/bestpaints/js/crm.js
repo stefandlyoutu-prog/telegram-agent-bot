@@ -72,6 +72,10 @@ export async function fetchAnalytics(period = "30d") {
   return api(`/analytics?period=${encodeURIComponent(period)}`);
 }
 
+export async function fetchPayroll(period = "30d") {
+  return api(`/payroll?period=${encodeURIComponent(period)}`);
+}
+
 function moneyFmt(n) {
   const v = Math.round(Number(n) || 0);
   return v.toLocaleString("ru-RU") + " ₽";
@@ -304,6 +308,7 @@ export function homeCrmSectionHtml() {
     <nav class="crm-tabs" role="tablist">
       <button type="button" class="crm-tab active" data-tab="deals">Сделки</button>
       <button type="button" class="crm-tab" data-tab="analytics">Аналитика</button>
+      <button type="button" class="crm-tab" data-tab="payroll">ЗП</button>
       <button type="button" class="crm-tab" data-tab="schedule">График</button>
       <button type="button" class="crm-tab" data-tab="team">Команда</button>
     </nav>
@@ -321,6 +326,7 @@ export function homeCrmSectionHtml() {
         <div id="crm-deals-list"></div>
       </div>
       <div class="crm-tab-panel" id="crm-panel-analytics" data-panel="analytics" hidden></div>
+      <div class="crm-tab-panel" id="crm-panel-payroll" data-panel="payroll" hidden></div>
       <div class="crm-tab-panel" id="crm-panel-schedule" data-panel="schedule" hidden></div>
       <div class="crm-tab-panel" id="crm-panel-team" data-panel="team" hidden></div>
     </div>
@@ -430,6 +436,95 @@ function analyticsHtml(data, period) {
   </div>`;
 }
 
+function payrollHtml(data, period) {
+  const people = data.by_surveyor || [];
+  return `
+  <div class="crm-panel-inner an-root zp-root">
+    <div class="crm-panel-head">
+      <div>
+        <h3>ЗП замерщиков</h3>
+        <p class="hint">${esc(data.from || "…")} → ${esc(data.to || "…")} · нажмите сделку — откроется объект</p>
+      </div>
+    </div>
+    <div class="an-periods" id="zp-periods">
+      ${[
+        ["7d", "7 дней"],
+        ["30d", "30 дней"],
+        ["month", "Месяц"],
+        ["all", "Всё"],
+      ]
+        .map(
+          ([id, label]) =>
+            `<button type="button" class="an-period ${period === id ? "on" : ""}" data-zp-period="${id}">${label}</button>`
+        )
+        .join("")}
+    </div>
+    <div class="an-hero">
+      <div class="an-hero-card win zp-total-card">
+        <span>Всего мотивация</span>
+        <strong>${esc(moneyFmt(data.total_payroll || 0))}</strong>
+        <em>${esc(String(people.length))} замерщиков</em>
+      </div>
+    </div>
+    <details class="an-more">
+      <summary>Правила мотивации</summary>
+      <ul class="zp-rules">
+        <li>На адресе, скидка <b>0%</b> → <b>5%</b> от суммы договора</li>
+        <li>На адресе, скидка <b>1–5%</b> → <b>3%</b></li>
+        <li>На адресе, скидка <b>6–10%</b> (и выше) → <b>2%</b></li>
+        <li>Не на адресе, а <b>из офиса</b> → <b>1%</b></li>
+      </ul>
+    </details>
+    <div class="zp-people">
+      ${
+        people
+          .map((p) => {
+            const deals = p.deals || [];
+            return `
+        <details class="zp-person el-card">
+          <summary>
+            <span>
+              <strong>${esc(p.name)}</strong>
+              <em>${esc(String(p.deals_count || 0))} дог. · обороты ${esc(moneyFmt(p.sum_contracts || 0))}</em>
+            </span>
+            <b class="zp-sum">${esc(moneyFmt(p.sum_payroll || 0))}</b>
+          </summary>
+          <div class="el-card-body zp-deals">
+            ${
+              deals.length
+                ? deals
+                    .map(
+                      (d) => `
+              <button type="button" class="zp-deal" data-crm-open="${esc(d.id)}">
+                <div class="zp-deal-top">
+                  <strong>${esc(d.title || "Без названия")}</strong>
+                  <b>${esc(moneyFmt(d.commission))}</b>
+                </div>
+                <div class="zp-deal-meta">
+                  ${esc(d.address || "—")}
+                  ${d.measure_date ? ` · ${esc(d.measure_date)}` : ""}
+                </div>
+                <div class="zp-deal-meta">
+                  Договор ${esc(moneyFmt(d.amount_total))}
+                  · скидка ${esc(String(d.discount_pct || 0))}%
+                  · ${esc(d.place_label || "")}
+                  · ставка ${esc(String(d.rate_pct))}%
+                </div>
+                <div class="zp-deal-rule">${esc(d.rule || "")} →</div>
+              </button>`
+                    )
+                    .join("")
+                : `<p class="hint">Нет заключённых с суммой за период</p>`
+            }
+          </div>
+        </details>`;
+          })
+          .join("") || `<p class="hint" style="padding:8px">Пока нет ЗП за период — нужны заключённые договоры с суммой.</p>`
+      }
+    </div>
+  </div>`;
+}
+
 export async function mountHomeCrm(ctx) {
   const { root, toast, onOpenDetail, getMeta } = ctx;
   const shell = root.querySelector("#crm-shell");
@@ -536,6 +631,7 @@ export async function mountHomeCrm(ctx) {
       if (tab.dataset.tab === "schedule") await renderSchedule();
       if (tab.dataset.tab === "team") await renderTeam();
       if (tab.dataset.tab === "analytics") await renderAnalytics("30d");
+      if (tab.dataset.tab === "payroll") await renderPayroll("30d");
     };
   });
 
@@ -543,6 +639,27 @@ export async function mountHomeCrm(ctx) {
     meta = await getMeta();
     const d = (meta.on_duty_surveyors || []).map((s) => s.name).join(", ") || "никого — откройте «График»";
     if (dutyEl) dutyEl.textContent = `На смене сегодня: ${d}`;
+  }
+
+  async function renderPayroll(period) {
+    const panel = root.querySelector("#crm-panel-payroll");
+    if (!panel) return;
+    panel.innerHTML = `<p class="hint" style="padding:12px">Считаем ЗП…</p>`;
+    try {
+      const data = await fetchPayroll(period);
+      panel.innerHTML = payrollHtml(data, period);
+      panel.querySelectorAll("[data-zp-period]").forEach((btn) => {
+        btn.onclick = () => renderPayroll(btn.getAttribute("data-zp-period"));
+      });
+      panel.querySelectorAll("[data-crm-open]").forEach((btn) => {
+        btn.onclick = (ev) => {
+          ev.preventDefault();
+          onOpenDetail(btn.getAttribute("data-crm-open"));
+        };
+      });
+    } catch (err) {
+      panel.innerHTML = `<div class="callout danger">${esc(err.message || err)}</div>`;
+    }
   }
 
   async function renderAnalytics(period) {

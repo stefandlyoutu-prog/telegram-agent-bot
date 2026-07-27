@@ -486,6 +486,20 @@ async def bp_api_analytics(
         raise HTTPException(400, str(e)) from e
 
 
+@app.get("/bestpaints/api/payroll")
+async def bp_api_payroll(
+    request: Request,
+    period: str = "30d",
+    date_from: str | None = None,
+    date_to: str | None = None,
+):
+    _bp_api_auth(request)
+    try:
+        return bp_crm.payroll(period=period, date_from=date_from, date_to=date_to)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.get("/bestpaints/{file_path:path}")
 async def bestpaints_files(file_path: str, request: Request):
     # Bust stale cached training PDF
