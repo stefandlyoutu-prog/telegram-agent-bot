@@ -1023,16 +1023,30 @@ h3 .pct-pill { margin-left: 8px; vertical-align: middle; }
 .crm-chip-nick { font-size: 0.75rem; opacity: 0.85; }
 .crm-row-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .crm-team-add {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+  align-items: stretch;
+  min-width: 0;
 }
-.crm-team-add select, .crm-team-add input {
+.crm-team-add select,
+.crm-team-add input {
   border: 1px solid var(--line); background: var(--bg2); border-radius: 12px;
   padding: 10px 12px; color: var(--text);
+  min-width: 0; width: 100%; box-sizing: border-box;
 }
-.crm-team-add button { grid-column: 1 / -1; }
-@media (min-width: 640px) {
-  .crm-team-add { grid-template-columns: 120px 1fr 1fr 1fr auto; }
-  .crm-team-add button { grid-column: auto; }
+.crm-team-add button {
+  grid-column: 1 / -1;
+  white-space: nowrap;
+  justify-self: stretch;
+}
+@media (min-width: 720px) {
+  .crm-team-add {
+    grid-template-columns: minmax(104px, 0.85fr) minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.05fr);
+  }
+  /* кнопка на всю ширину снизу — не обрезается */
+  .crm-team-add button { grid-column: 1 / -1; }
 }
 .crm-team-group { margin-bottom: 14px; }
 .crm-team-row {

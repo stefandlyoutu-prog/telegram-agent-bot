@@ -653,23 +653,122 @@ def _person_label(person: dict[str, Any] | None) -> str:
     return f"{name} (@{u})" if u else name
 
 
-def notify_person(text: str, person: dict[str, Any] | None) -> list[str]:
-    """SMS stub + TG DM if tg_id + ops broadcast with @mention."""
+def _mention_of(person: dict[str, Any] | None) -> str:
+    if not person:
+        return ""
+    u = _normalize_username(person.get("tg_username"))
+    return f"@{u}" if u else ""
+
+
+def _person_from_obj(obj: dict[str, Any], role: str) -> dict[str, str] | None:
+    """Собрать человека из сделки + справочника (для @тега)."""
+    if role == "surveyor":
+        pid = (obj.get("surveyor_id") or "").strip()
+        base = _person_by_id("surveyor", pid) if pid else None
+        name = (base or {}).get("name") or obj.get("surveyor_name") or ""
+        phone = (base or {}).get("phone") or obj.get("surveyor_phone") or ""
+        if not name and not phone:
+            return None
+        return {
+            "id": pid or (base or {}).get("id") or "",
+            "name": name,
+            "phone": phone,
+            "tg_username": (base or {}).get("tg_username") or "",
+            "tg_id": (base or {}).get("tg_id") or "",
+        }
+    if role == "manager":
+        pid = (obj.get("manager_id") or "").strip()
+        base = _person_by_id("manager", pid) if pid else None
+        name = (base or {}).get("name") or obj.get("manager_name") or ""
+        phone = (base or {}).get("phone") or obj.get("manager_phone") or ""
+        if not name and not phone:
+            return None
+        return {
+            "id": pid or (base or {}).get("id") or "",
+            "name": name,
+            "phone": phone,
+            "tg_username": (base or {}).get("tg_username") or "",
+            "tg_id": (base or {}).get("tg_id") or "",
+        }
+    if role == "lidarub":
+        name = obj.get("lidarub_name") or obj.get("ledorub_name") or ""
+        phone = obj.get("lidarub_phone") or obj.get("ledorub_phone") or ""
+        tg_id = str(obj.get("lidarub_tg_id") or "")
+        # найти в справочнике по имени/телефону/tg_id
+        base = None
+        for p in load_staff().get("lidarubs") or []:
+            if tg_id and str(p.get("tg_id") or "") == tg_id:
+                base = p
+                break
+            if phone and (p.get("phone") or "") == phone:
+                base = p
+                break
+            if name and (p.get("name") or "") == name:
+                base = p
+                break
+        if base:
+            return {
+                "id": base.get("id") or "",
+                "name": base.get("name") or name,
+                "phone": base.get("phone") or phone,
+                "tg_username": base.get("tg_username") or "",
+                "tg_id": str(base.get("tg_id") or tg_id or ""),
+            }
+        if not name and not phone and not tg_id:
+            return None
+        return {"id": "", "name": name, "phone": phone, "tg_username": "", "tg_id": tg_id}
+    return None
+
+
+def notify_person_direct(text: str, person: dict[str, Any] | None) -> list[str]:
+    """SMS + личка TG, без дубля в Ops. Всегда с @тегом адресата."""
     notes: list[str] = []
     if not person:
-        return notify_all(text)
+        return notes
+    mention = _mention_of(person)
+    who = person.get("name") or mention or person.get("id") or "сотрудник"
+    body = _msg_lines(mention or f"→ {who}", text)
     phone = (person.get("phone") or "").strip()
-    mention = ""
-    u = _normalize_username(person.get("tg_username"))
-    if u:
-        mention = f"@{u}"
-    body = _msg_lines(mention, text) if mention else text
     if phone:
         notes.extend(notify_all(body, phone=phone, skip_tg=True))
     tg_id = str(person.get("tg_id") or "").strip()
     if tg_id:
         notes.append(_send_telegram(tg_id, body))
+    return notes
+
+
+def notify_person(text: str, person: dict[str, Any] | None) -> list[str]:
+    """SMS + DM + одно сообщение в Ops с @тегом человека."""
+    notes: list[str] = []
+    if not person:
+        return notify_all(text)
+    mention = _mention_of(person)
+    who = person.get("name") or mention or person.get("id") or "сотрудник"
+    body = _msg_lines(mention or f"→ {who}", text)
+    notes.extend(notify_person_direct(text, person))
     notes.extend(notify_all(body, phone="", skip_tg=False))
+    return notes
+
+
+def notify_tagged_stakeholders(text: str, people: list[dict[str, Any] | None], *, ops: bool = True) -> list[str]:
+    """Каждому — своё SMS/DM с тегом; в Ops — одно сообщение со всеми @."""
+    notes: list[str] = []
+    uniq: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for p in people:
+        if not p:
+            continue
+        key = str(p.get("id") or "") + "|" + str(p.get("phone") or "") + "|" + _normalize_username(p.get("tg_username"))
+        if key in seen or key == "||":
+            continue
+        seen.add(key)
+        uniq.append(p)
+        notes.extend(notify_person_direct(text, p))
+    if ops:
+        mentions = " ".join(_mention_of(p) for p in uniq if _mention_of(p))
+        names = ", ".join((p.get("name") or "?") for p in uniq) or "команда"
+        head = mentions if mentions else f"→ {names}"
+        notes.extend(notify_all(_msg_lines(head, text), phone="", skip_tg=False))
     return notes
 
 
@@ -949,7 +1048,13 @@ def escalate_overdue() -> int:
                 phone=d.get("surveyor_phone") or "",
                 hours=hours,
             )
-            notes = notify_phones(msg, [d.get("ledorub_phone") or ""])
+            notes = notify_tagged_stakeholders(
+                msg,
+                [
+                    _person_from_obj(d, "lidarub"),
+                    _person_from_obj(d, "surveyor"),
+                ],
+            )
             conn.execute(
                 "INSERT INTO events(object_id, kind, message, created_at) VALUES (?,?,?,?)",
                 (d["id"], "escalation", msg.replace("\n", " | ") + " | " + "; ".join(notes), _now()),
@@ -981,7 +1086,7 @@ def send_visit_reminders() -> int:
             )
             link = f"https://moracul.ru/bestpaints/?crm={d['id']}"
             msg = format_visit_reminder(title=d["title"], address=d.get("address") or "", link=link)
-            notes = notify_phones(msg, [d.get("surveyor_phone") or ""])
+            notes = notify_tagged_stakeholders(msg, [_person_from_obj(d, "surveyor")])
             conn.execute(
                 "INSERT INTO events(object_id, kind, message, created_at) VALUES (?,?,?,?)",
                 (d["id"], "visit_reminder", msg.replace("\n", " | ") + " | " + "; ".join(notes), _now()),
@@ -998,13 +1103,14 @@ def _broadcast_status(obj: dict[str, Any], label: str) -> list[str]:
         address=obj.get("address") or "",
         link=link,
     )
-    # client SMS optional — skip client by default to avoid spam; include staff only
-    phones = [
-        obj.get("surveyor_phone") or "",
-        obj.get("lidarub_phone") or obj.get("ledorub_phone") or "",
-        obj.get("manager_phone") or "",
-    ]
-    return notify_phones(msg, phones)
+    return notify_tagged_stakeholders(
+        msg,
+        [
+            _person_from_obj(obj, "surveyor"),
+            _person_from_obj(obj, "lidarub"),
+            _person_from_obj(obj, "manager"),
+        ],
+    )
 
 
 def soft_delete(oid: str) -> dict[str, Any]:
@@ -1079,13 +1185,17 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         _apply_money(updates, obj, payload)
         message = "Договор заключён на адресе"
         chat = resolve_chat("signed")
+        chat = resolve_chat("signed")
+        signed_msg = format_contract_signed(
+            title=obj.get("title") or "",
+            address=obj.get("address") or "",
+            client=f"{obj.get('client_name') or ''} {obj.get('client_phone') or ''}".strip(),
+            surveyor=obj.get("surveyor_name") or "",
+        )
+        surveyor_p = _person_from_obj(obj, "surveyor")
+        mention = _mention_of(surveyor_p)
         notify_all(
-            format_contract_signed(
-                title=obj.get("title") or "",
-                address=obj.get("address") or "",
-                client=f"{obj.get('client_name') or ''} {obj.get('client_phone') or ''}".strip(),
-                surveyor=obj.get("surveyor_name") or "",
-            ),
+            _msg_lines(mention or f"→ {obj.get('surveyor_name') or 'замерщик'}", signed_msg),
             telegram_chat=chat,
         )
         _broadcast_status(obj, "Договор заключён")
