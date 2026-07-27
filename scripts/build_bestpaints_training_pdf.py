@@ -169,10 +169,10 @@ def build_pdf():
         paths.append(path)
         print("slide", path.name)
 
-    pdf = FPDF(orientation="L", unit="mm", format=(297, 167.0625))
+    pdf = FPDF(orientation="P", unit="mm", format=(297.0, 297.0 * 9 / 16))
     for sp in paths:
         pdf.add_page()
-        pdf.image(str(sp), x=0, y=0, w=297, h=167.0625)
+        pdf.image(str(sp), x=0, y=0, w=297.0, h=297.0 * 9 / 16)
     OUT_PDF.parent.mkdir(parents=True, exist_ok=True)
     pdf.output(str(OUT_PDF))
     print("PDF", OUT_PDF, OUT_PDF.stat().st_size)
