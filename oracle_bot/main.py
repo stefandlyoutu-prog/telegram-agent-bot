@@ -25,6 +25,7 @@ from oracle_bot.daily_report import daily_report_worker
 from oracle_bot.handlers import router
 from oracle_bot.life_quiz import router as life_quiz_router
 from oracle_bot.voice import router as voice_router
+from oracle_bot.bestpaints_bot import router as bestpaints_router
 from oracle_bot.storage import init_db
 from oracle_bot.pushes import push_worker
 from oracle_bot.channel_queue import channel_post_worker, seed_week_queue
@@ -69,6 +70,7 @@ async def main() -> None:
     dp.include_router(life_quiz_router)
     dp.include_router(router)
     dp.include_router(voice_router)
+    dp.include_router(bestpaints_router)
     me = await bot.get_me()
     logger.info("Оракул @%s запущен", me.username)
     app_url = miniapp_entry_url()

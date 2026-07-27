@@ -912,3 +912,25 @@ h3 .pct-pill { margin-left: 8px; vertical-align: middle; }
 .crm-events li { padding: 8px 0; border-bottom: 1px solid rgba(154,173,162,.15); font-size: 13px; color: #d7e4db; }
 .crm-detail p { margin: 6px 0; color: #d7e4db; }
 .crm-empty { margin: 8px 0 16px; }
+
+.crm-board-hint { margin: -4px 0 12px; padding: 0 2px; }
+.crm-create textarea, .crm-checklist textarea, .crm-admin select {
+  display: block; width: 100%; margin-top: 4px;
+  padding: 10px 12px; border-radius: 10px;
+  border: 1px solid rgba(154,173,162,.35);
+  background: #0f1412; color: #e8f0ea; font: inherit;
+}
+.crm-admin {
+  margin: 8px 4px 16px; padding: 12px 14px; border-radius: 14px;
+  background: rgba(20,28,24,.9); border: 1px solid rgba(154,173,162,.25);
+}
+.crm-admin summary { cursor: pointer; font-weight: 700; color: #c4a35a; }
+.crm-audio { margin: 8px 4px 12px; padding: 12px; border-radius: 12px; background: rgba(20,28,24,.85); }
+.crm-audio ul { margin: 6px 0; padding-left: 18px; color: #d7e4db; font-size: 13px; }
+.crm-checklist label { display: block; margin: 8px 0; font-size: 13px; color: #9aada2; }
+.crm-checklist input[type="text"], .crm-checklist input:not([type]), .crm-checklist input[data-upload] {
+  display: block; width: 100%; margin-top: 4px;
+  padding: 10px 12px; border-radius: 10px;
+  border: 1px solid rgba(154,173,162,.35);
+  background: #0f1412; color: #e8f0ea; font: inherit;
+}

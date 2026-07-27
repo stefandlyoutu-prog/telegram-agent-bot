@@ -33,6 +33,7 @@ from oracle_bot.pushes import push_worker
 from oracle_bot import storage as db
 from oracle_bot.storage import init_db
 from oracle_bot.voice import router as voice_router
+from oracle_bot.bestpaints_bot import router as bestpaints_router
 
 logger = logging.getLogger("oracle_bot.cloud")
 
@@ -93,6 +94,7 @@ async def start_cloud() -> None:
     _dp.include_router(life_quiz_router)
     _dp.include_router(router)
     _dp.include_router(voice_router)
+    _dp.include_router(bestpaints_router)
     me = await _bot.get_me()
     logger.info("Облако: @%s webhook (sync feed_update)", me.username)
     print(f"m-Oracul cloud ready: @{me.username}", flush=True)

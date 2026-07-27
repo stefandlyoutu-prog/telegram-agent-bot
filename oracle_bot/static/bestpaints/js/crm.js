@@ -1,4 +1,4 @@
-/** BestPaints CRM — серверные объекты, статусы, чек-листы. */
+/** BestPaints CRM — сделки Лидоруба, статусы, чек-листы, график. */
 
 const API = "/bestpaints/api";
 
@@ -51,30 +51,38 @@ export async function doAction(id, action, extra = {}) {
   });
 }
 
+/** Кнопки следующего шага по статусу */
 const NEXT_ACTIONS = {
+  created: [
+    { action: "reassign_surveyor", label: "Назначить из графика", primary: true },
+  ],
   assigned: [{ action: "accept", label: "Взял в работу", primary: true }],
   accepted: [{ action: "confirm_visit", label: "Выезд подтверждён", primary: true }],
-  visit_confirmed: [{ action: "arrive", label: "На объекте", primary: true }],
-  on_site: [
-    { action: "estimate_done", label: "Смета готова", primary: true },
-    { action: "open_survey", label: "Открыть конструктор", ghost: true },
+  visit_confirmed: [
+    { action: "start_measure", label: "На адресе · начинаю замер", primary: true },
+    { action: "open_survey", label: "Открыть конструктор (со строения)", ghost: true },
   ],
-  estimate_done: [
-    { action: "sign_contract", label: "Договор подписан", primary: true },
-    { action: "decline_contract", label: "Не заключён", danger: true },
-    { action: "open_survey", label: "Конструктор / смета", ghost: true },
+  on_site: [
+    { action: "open_survey", label: "Конструктор / смета", primary: true },
+    { action: "sign_on_site", label: "Заключил на адресе", primary: true },
+    { action: "decline_on_site", label: "Не заключил", danger: true },
   ],
   contract_signed: [
-    { action: "close", label: "Закрыть объект", primary: true },
+    { action: "close", label: "Закрыть сделку", primary: true },
   ],
   contract_declined: [
-    { action: "assign_manager", label: "Назначить менеджера", primary: true },
+    { action: "assign_manager", label: "Отдать менеджеру (защита ТЗ)", primary: true },
   ],
   manager_assigned: [
     { action: "manager_accept", label: "Менеджер взял в работу", primary: true },
+    { action: "open_survey", label: "Смотреть замер", ghost: true },
   ],
   manager_accepted: [
-    { action: "close", label: "Закрыть", primary: true },
+    { action: "sign_on_site", label: "Менеджер заключил", primary: true },
+    { action: "close", label: "Закрыть", ghost: true },
+  ],
+  closed: [
+    { action: "reopen", label: "Вернуть в работу", primary: true },
   ],
 };
 
@@ -107,21 +115,24 @@ export function statusPill(obj) {
 
 export function boardHtml(objects) {
   if (!objects.length) {
-    return `<div class="empty crm-empty">Нет серверных объектов CRM. Создайте объект — замерщик получит SMS (если настроено).</div>`;
+    return `<div class="empty crm-empty">Нет сделок. Лидоруб создаёт в Telegram (/zamer) или кнопкой ниже.</div>`;
   }
   return `<div class="crm-list">${objects
     .map(
       (o) => `
-    <article class="crm-item" data-crm-open="${esc(o.id)}">
+    <article class="crm-item">
       <div class="crm-item-main">
         <h3>${esc(o.title)} ${statusPill(o)}</h3>
         <p>${esc(o.address || "Адрес не указан")}
           · ${esc(o.client_name || "Клиент")}
           ${o.surveyor_name ? ` · ${esc(o.surveyor_name)}` : ""}
+          ${o.measure_date ? ` · замер ${esc(o.measure_date)}` : ""}
           ${o.escalated_at ? ` · <span class="crm-escalated">эскалация</span>` : ""}
         </p>
       </div>
-      <button type="button" class="btn" data-crm-open="${esc(o.id)}">Открыть</button>
+      <div class="survey-actions">
+        <button type="button" class="btn" data-crm-open="${esc(o.id)}">Открыть</button>
+      </div>
     </article>`
     )
     .join("")}</div>`;
@@ -129,40 +140,51 @@ export function boardHtml(objects) {
 
 export function createFormHtml(meta) {
   const surv = (meta?.staff?.surveyors || [])
-    .map((s) => `<option value="${esc(s.id)}">${esc(s.name)} (${esc(s.note || s.phone || "")})</option>`)
+    .map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`)
     .join("");
+  const today = meta?.today || "";
+  const duty = (meta?.on_duty_surveyors || []).map((s) => s.name).join(", ") || "никого — заполните график";
   return `
   <form class="crm-create" id="crm-create-form">
-    <h3>Новый объект CRM</h3>
-    <p class="hint">Ледоруб создаёт объект → замерщик назначается по адресу → SMS.</p>
-    <label>Название / объект<input name="title" required placeholder="Дом Ивановых" /></label>
-    <label>Адрес<input name="address" required placeholder="Серебрянка, ул. …" /></label>
+    <h3>Новая сделка (как у Лидоруба)</h3>
+    <p class="hint">Сегодня в графике замерщиков: <strong>${esc(duty)}</strong></p>
+    <label>Название сделки<input name="title" required placeholder="Как в вашей CRM" /></label>
+    <label>Квалификация (комментарий)<textarea name="qualification" rows="2" placeholder="Что обсудили с клиентом"></textarea></label>
+    <label>Адрес объекта<input name="address" required placeholder="Адрес" /></label>
+    <label>Дата замера<input name="measure_date" type="date" value="${esc(today)}" /></label>
     <label>Клиент<input name="client_name" placeholder="ФИО" /></label>
     <label>Телефон клиента<input name="client_phone" type="tel" placeholder="+7…" /></label>
-    <label>Ледоруб (имя)<input name="ledorub_name" placeholder="Ваше имя" /></label>
-    <label>Телефон ледоруба (для эскалации)<input name="ledorub_phone" type="tel" placeholder="+7…" /></label>
-    <label>Замерщик (или авто по адресу)
+    <label>Лидоруб (имя)<input name="lidarub_name" placeholder="Ваше имя" /></label>
+    <label>Телефон Лидоруба<input name="lidarub_phone" type="tel" placeholder="+7… (эскалация)" /></label>
+    <label>Замерщик (пусто = из графика)
       <select name="surveyor_id">
-        <option value="">Авто по адресу</option>
+        <option value="">Из графика / зоны</option>
         ${surv}
       </select>
     </label>
-    <button type="submit" class="btn primary block">Создать и назначить</button>
+    <button type="submit" class="btn primary block">Создать сделку</button>
   </form>`;
 }
 
 function checklistHtml(obj, meta) {
-  const signed = obj.status === "contract_signed" || obj.status === "closed";
-  const declined =
-    obj.status === "contract_declined" ||
-    obj.status === "manager_assigned" ||
-    obj.status === "manager_accepted";
+  const signedish = ["contract_signed", "closed"].includes(obj.status);
+  const declinedish = ["contract_declined", "manager_assigned", "manager_accepted"].includes(obj.status);
   let items = [];
-  if (signed || obj.status === "contract_signed") items = meta?.checklists?.signed || [];
-  else if (declined) items = meta?.checklists?.declined || [];
-  else return "";
-  const cur = obj.checklist || {};
+  if (obj.status === "contract_signed" || (signedish && obj.status !== "closed" && !declinedish)) {
+    items = meta?.checklists?.signed || [];
+  } else if (declinedish || obj.status === "contract_signed") {
+    items = obj.status === "contract_signed" ? meta?.checklists?.signed || [] : meta?.checklists?.declined || [];
+  }
+  if (obj.status === "contract_signed") items = meta?.checklists?.signed || [];
+  if (declinedish) items = meta?.checklists?.declined || [];
+  if (obj.status === "closed" && Object.keys(obj.checklist || {}).length) {
+    items = Object.keys(obj.checklist).some((k) => ["video", "tz", "contract_scan"].includes(k))
+      ? meta?.checklists?.signed || []
+      : meta?.checklists?.declined || [];
+  }
   if (!items.length) return "";
+  const cur = obj.checklist || {};
+  const up = obj.uploads || {};
   return `
   <div class="crm-checklist">
     <h3>Чек-лист</h3>
@@ -175,8 +197,24 @@ function checklistHtml(obj, meta) {
       </label>`
       )
       .join("")}
-    <button type="button" class="btn" id="crm-save-check">Сохранить чек-лист</button>
+    <label>Ссылка на фото<input data-upload="photos" value="${esc(up.photos || "")}" placeholder="https://…" /></label>
+    <label>Ссылка на видео<input data-upload="video" value="${esc(up.video || "")}" placeholder="https://…" /></label>
+    <label>Ссылка на ТЗ<input data-upload="tz" value="${esc(up.tz || "")}" placeholder="https://…" /></label>
+    ${
+      declinedish
+        ? `<label>Причина отказа<textarea data-refusal rows="2">${esc(obj.refusal_reason || "")}</textarea></label>`
+        : ""
+    }
+    <button type="button" class="btn" id="crm-save-check">Сохранить чек-лист и ссылки</button>
   </div>`;
+}
+
+function audioHtml(obj) {
+  const list = obj.audio || [];
+  if (!list.length) return "";
+  return `<div class="crm-audio"><h3>Аудио от Лидоруба</h3><ul>${list
+    .map((a, i) => `<li>#${i + 1} ${esc(a.name || "audio")} <span class="hint">(file_id в Telegram)</span></li>`)
+    .join("")}</ul><p class="hint">Прослушать: откройте переписку с ботом или попросите админа выгрузить.</p></div>`;
 }
 
 export function detailHtml(obj, events, meta) {
@@ -184,23 +222,29 @@ export function detailHtml(obj, events, meta) {
   const mgrOpts = (meta?.staff?.managers || [])
     .map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`)
     .join("");
+  const statusOpts = (meta?.statuses || [])
+    .map((s) => `<option value="${esc(s.id)}" ${s.id === obj.status ? "selected" : ""}>${esc(s.label)}</option>`)
+    .join("");
   return `
   <header class="topbar">
     <div class="brand">
-      <strong>CRM · ${esc(obj.title)}</strong>
+      <strong>Сделка · ${esc(obj.title)}</strong>
       <span>${statusPill(obj)}</span>
     </div>
     <button type="button" class="btn ghost" id="crm-back">← К списку</button>
   </header>
   <section class="hero-card crm-detail">
     <p><strong>Адрес:</strong> ${esc(obj.address)}</p>
+    <p><strong>Дата замера:</strong> ${esc(obj.measure_date || "—")}</p>
+    <p><strong>Квалификация:</strong> ${esc(obj.qualification || "—")}</p>
     <p><strong>Клиент:</strong> ${esc(obj.client_name)} ${esc(obj.client_phone)}</p>
     <p><strong>Замерщик:</strong> ${esc(obj.surveyor_name || "—")} ${esc(obj.surveyor_phone || "")}</p>
     <p><strong>Менеджер:</strong> ${esc(obj.manager_name || "—")}</p>
-    <p><strong>Ледоруб:</strong> ${esc(obj.ledorub_name || "—")}</p>
+    <p><strong>Лидоруб:</strong> ${esc(obj.lidarub_name || obj.ledorub_name || "—")}</p>
     ${obj.survey_local_id ? `<p><strong>Локальный замер:</strong> ${esc(obj.survey_local_id)}</p>` : ""}
     ${obj.escalated_at ? `<p class="crm-escalated">Эскалация: замерщик не взял вовремя (${fmtTs(obj.escalated_at)})</p>` : ""}
   </section>
+  ${audioHtml(obj)}
   <div class="crm-actions">
     ${actions
       .map((a) => {
@@ -210,11 +254,25 @@ export function detailHtml(obj, events, meta) {
       .join("")}
   </div>
   ${
-    obj.status === "contract_declined"
+    obj.status === "contract_declined" || obj.status === "manager_assigned"
       ? `<label class="crm-mgr">Менеджер<select id="crm-mgr">${mgrOpts}</select></label>`
       : ""
   }
   ${checklistHtml(obj, meta)}
+
+  <details class="crm-admin" open>
+    <summary>Исправить статус / удалить</summary>
+    <p class="hint">Если нажали не ту кнопку — выберите статус и сохраните. Удаление скрывает сделку из списка.</p>
+    <label>Статус вручную
+      <select id="crm-set-status">${statusOpts}</select>
+    </label>
+    <div class="crm-actions">
+      <button type="button" class="btn" id="crm-apply-status">Сменить статус</button>
+      <button type="button" class="btn" data-crm-act="reopen">Вернуть в работу</button>
+      <button type="button" class="btn danger" data-crm-act="delete">Удалить сделку</button>
+    </div>
+  </details>
+
   <h2 class="subhead">История</h2>
   <ul class="crm-events">
     ${(events || [])
@@ -228,18 +286,15 @@ export function homeCrmSectionHtml(objects) {
   return `
   <section class="crm-board">
     <div class="crm-board-head">
-      <h2 class="subhead">CRM · воронка замеров</h2>
-      <button type="button" class="btn primary" id="crm-toggle-create">+ Объект CRM</button>
+      <h2 class="subhead">CRM · сделки замеров</h2>
+      <button type="button" class="btn primary" id="crm-toggle-create">+ Сделка</button>
     </div>
+    <p class="hint crm-board-hint">Лидоруб создаёт в Telegram (/zamer). Здесь статусы, замер и чек-листы.</p>
     <div id="crm-create-wrap" class="crm-create-wrap" hidden></div>
     ${boardHtml(objects)}
   </section>`;
 }
 
-/**
- * Bind home CRM: load objects, create form, open detail.
- * @param {{ root: HTMLElement, toast: Function, onOpenDetail: (id:string)=>void, getMeta: ()=>Promise<any> }} ctx
- */
 export async function mountHomeCrm(ctx) {
   const { root, toast, onOpenDetail, getMeta } = ctx;
   let objects = [];
@@ -257,7 +312,6 @@ export async function mountHomeCrm(ctx) {
   }
   const listHost = root.querySelector(".crm-board");
   if (!listHost) return;
-  // refresh list part
   const oldList = listHost.querySelector(".crm-list, .crm-empty");
   const tmp = document.createElement("div");
   tmp.innerHTML = boardHtml(objects);
@@ -275,7 +329,6 @@ export async function mountHomeCrm(ctx) {
   const wrap = root.querySelector("#crm-create-wrap");
   if (toggle && wrap) {
     toggle.onclick = async () => {
-      const hide = wrap.hasAttribute("hidden") === false && wrap.innerHTML;
       if (wrap.innerHTML && !wrap.hidden) {
         wrap.hidden = true;
         return;
@@ -290,7 +343,11 @@ export async function mountHomeCrm(ctx) {
         const payload = Object.fromEntries(fd.entries());
         try {
           const obj = await createObject(payload);
-          toast(`Создан: ${obj.title} → ${obj.surveyor_name || "без замерщика"}`);
+          if (obj.status === "created") {
+            toast("Создано, но график пуст — назначьте замерщика");
+          } else {
+            toast(`Создано → ${obj.surveyor_name || "замерщик"}`);
+          }
           wrap.hidden = true;
           wrap.innerHTML = "";
           await mountHomeCrm(ctx);
@@ -321,29 +378,42 @@ export async function mountDetail(ctx) {
 
   const refresh = () => mountDetail(ctx);
 
+  async function runAction(action, extra = {}) {
+    if (action === "open_survey") {
+      onOpenSurvey(obj);
+      return;
+    }
+    if (action === "delete") {
+      if (!confirm("Удалить сделку из списка? (можно не восстановить без админа)")) return;
+    }
+    if (action === "reopen") {
+      extra.status = extra.status || "accepted";
+    }
+    if (action === "assign_manager") {
+      const sel = root.querySelector("#crm-mgr");
+      if (sel) extra.manager_id = sel.value;
+    }
+    if (action === "decline_on_site") {
+      const reason = prompt("Кратко: почему не заключили?") || "";
+      extra.refusal_reason = reason;
+    }
+    try {
+      await doAction(objectId, action, extra);
+      toast("Обновлено");
+      if (action === "delete") onBack();
+      else await refresh();
+    } catch (err) {
+      toast(String(err.message || err));
+    }
+  }
+
   root.querySelectorAll("[data-crm-act]").forEach((btn) => {
-    btn.onclick = async () => {
-      const action = btn.getAttribute("data-crm-act");
-      if (action === "open_survey") {
-        onOpenSurvey(obj);
-        return;
-      }
-      const extra = {};
-      if (action === "assign_manager") {
-        const sel = root.querySelector("#crm-mgr");
-        if (sel) extra.manager_id = sel.value;
-      }
-      if (action === "estimate_done" && obj.survey_local_id) {
-        extra.survey_local_id = obj.survey_local_id;
-      }
-      try {
-        await doAction(objectId, action, extra);
-        toast("Статус обновлён");
-        await refresh();
-      } catch (err) {
-        toast(String(err.message || err));
-      }
-    };
+    btn.onclick = () => runAction(btn.getAttribute("data-crm-act"));
+  });
+
+  root.querySelector("#crm-apply-status")?.addEventListener("click", async () => {
+    const st = root.querySelector("#crm-set-status")?.value;
+    await runAction("set_status", { status: st });
   });
 
   const saveCheck = root.querySelector("#crm-save-check");
@@ -353,8 +423,13 @@ export async function mountDetail(ctx) {
       root.querySelectorAll("[data-check]").forEach((inp) => {
         checklist[inp.getAttribute("data-check")] = !!inp.checked;
       });
+      const uploads = {};
+      root.querySelectorAll("[data-upload]").forEach((inp) => {
+        uploads[inp.getAttribute("data-upload")] = inp.value.trim();
+      });
+      const refusal = root.querySelector("[data-refusal]")?.value || "";
       try {
-        await doAction(objectId, "save_checklist", { checklist });
+        await doAction(objectId, "save_checklist", { checklist, uploads, refusal_reason: refusal });
         toast("Чек-лист сохранён");
         await refresh();
       } catch (err) {

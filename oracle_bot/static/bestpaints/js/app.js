@@ -122,6 +122,7 @@ function goHome() {
   view = "home";
   survey = null;
   crmObjectId = null;
+  crmMetaCache = null;
   history.replaceState({}, "", location.pathname);
   render();
 }
@@ -396,10 +397,19 @@ function renderCrm() {
     onBack: () => goHome(),
     getMeta: getCrmMeta,
     onOpenSurvey: async (obj) => {
-      // link or create local survey for constructor
+      // Сделка Лидоруба уже с данными → сразу шаг 2 «Строение»
+      const startAtBuilding = () => {
+        survey = migrateSurvey(store.get(survey.id) || survey);
+        view = "wizard";
+        step = 1; // Строение
+        history.replaceState({}, "", `?id=${survey.id}&step=1&crm=${encodeURIComponent(obj.id)}`);
+        store.upsert(survey);
+        render();
+      };
       let sid = obj.survey_local_id;
       if (sid && store.get(sid)) {
-        openSurvey(sid);
+        survey = migrateSurvey(store.get(sid));
+        startAtBuilding();
         return;
       }
       const s = emptySurvey();
@@ -408,14 +418,21 @@ function renderCrm() {
       s.client.name = obj.client_name || "";
       s.client.phone = obj.client_phone || "";
       s.client.address = obj.address || "";
+      s.notes = s.notes || {};
+      if (typeof s.notes === "object") {
+        s.notes.qualification = obj.qualification || "";
+        s.notes.crmId = obj.id;
+        s.notes.measureDate = obj.measure_date || "";
+      }
       if (s.contract) s.contract.objectName = obj.title || "";
       store.upsert(s);
+      survey = s;
       try {
         await doAction(obj.id, "link_survey", { survey_local_id: s.id });
       } catch (e) {
         toast(String(e.message || e));
       }
-      openSurvey(s.id);
+      startAtBuilding();
     },
   });
 }
@@ -466,7 +483,7 @@ function renderHome() {
         </article>`;
               })
               .join("")
-          : `<div class="empty">Пока нет объектов. Нажмите «Новый объект».</div>`
+          : `<div class="empty">Пока нет локальных замеров. Нажмите «+ Локальный замер».</div>`
       }
     </div>
 

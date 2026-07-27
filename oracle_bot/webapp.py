@@ -358,9 +358,9 @@ async def bp_api_meta(request: Request):
 
 
 @app.get("/bestpaints/api/objects")
-async def bp_api_objects(request: Request, status: str | None = None):
+async def bp_api_objects(request: Request, status: str | None = None, include_deleted: int = 0):
     _bp_api_auth(request)
-    return {"objects": bp_crm.list_objects(status)}
+    return {"objects": bp_crm.list_objects(status=status, include_deleted=bool(include_deleted))}
 
 
 @app.post("/bestpaints/api/objects")
@@ -390,6 +390,28 @@ async def bp_api_action(oid: str, request: Request):
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     return {"object": obj, "events": bp_crm.list_events(oid)}
+
+
+@app.get("/bestpaints/api/schedule")
+async def bp_api_schedule(request: Request, date: str | None = None):
+    _bp_api_auth(request)
+    day = date or bp_crm.today_str()
+    return {"date": day, "items": bp_crm.list_schedule(day), "on_duty_surveyors": bp_crm.on_duty("surveyor", day), "on_duty_managers": bp_crm.on_duty("manager", day)}
+
+
+@app.post("/bestpaints/api/schedule")
+async def bp_api_schedule_set(request: Request):
+    _bp_api_auth(request)
+    data = await request.json()
+    try:
+        return bp_crm.set_schedule(
+            str(data.get("role") or ""),
+            str(data.get("person_id") or ""),
+            str(data.get("work_date") or bp_crm.today_str()),
+            str(data.get("note") or ""),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
 
 
 @app.get("/bestpaints/{file_path:path}")
