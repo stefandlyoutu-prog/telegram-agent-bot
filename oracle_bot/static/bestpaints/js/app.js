@@ -291,6 +291,11 @@ function cloneDeep(value) {
   }
 }
 
+function save() {
+  if (!survey) return;
+  store.upsert(survey);
+}
+
 function setDeep(path, value) {
   const parts = path.split(".");
   let obj = survey;
