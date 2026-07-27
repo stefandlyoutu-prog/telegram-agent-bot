@@ -59,15 +59,195 @@ def _db_path() -> Path:
     return Path(__file__).resolve().parents[1] / "data" / "bestpaints_crm.db"
 
 
-def _staff_path() -> Path:
+def _staff_bundled_path() -> Path:
     return Path(__file__).resolve().parent / "static" / "bestpaints" / "data" / "crm_staff.json"
 
 
+def _staff_runtime_path() -> Path:
+    """Editable staff lives next to DB (persists on Render disk)."""
+    raw = os.getenv("BESTPAINTS_STAFF_PATH", "").strip()
+    if raw:
+        return Path(raw)
+    if Path("/var/data").exists():
+        return Path("/var/data/bestpaints_staff.json")
+    return Path(__file__).resolve().parents[1] / "data" / "bestpaints_staff.json"
+
+
+def _normalize_username(raw: str | None) -> str:
+    u = (raw or "").strip().lstrip("@").lower()
+    return u
+
+
+def _normalize_person(p: dict[str, Any], *, role: str) -> dict[str, Any]:
+    pid = str(p.get("id") or "").strip()
+    if not pid:
+        prefix = {"surveyor": "sv", "manager": "mg", "lidarub": "ld"}.get(role, "p")
+        pid = f"{prefix}_{uuid.uuid4().hex[:6]}"
+    return {
+        "id": pid,
+        "name": str(p.get("name") or "").strip() or pid,
+        "phone": str(p.get("phone") or "").strip(),
+        "tg_username": _normalize_username(p.get("tg_username") or p.get("username")),
+        "tg_id": str(p.get("tg_id") or "").strip(),
+        "note": str(p.get("note") or "").strip(),
+    }
+
+
+def _default_staff() -> dict[str, Any]:
+    return {
+        "escalation_hours": 2,
+        "lidarubs": [],
+        "surveyors": [],
+        "managers": [],
+        "zones": [],
+    }
+
+
 def load_staff() -> dict[str, Any]:
-    path = _staff_path()
-    if not path.exists():
-        return {"surveyors": [], "managers": [], "zones": [], "escalation_hours": 2}
-    return json.loads(path.read_text(encoding="utf-8"))
+    runtime = _staff_runtime_path()
+    bundled = _staff_bundled_path()
+    data: dict[str, Any] = _default_staff()
+    src = runtime if runtime.exists() else bundled
+    if src.exists():
+        try:
+            loaded = json.loads(src.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                data.update(loaded)
+        except json.JSONDecodeError:
+            pass
+    # normalize people
+    for key, role in (("surveyors", "surveyor"), ("managers", "manager"), ("lidarubs", "lidarub")):
+        people = data.get(key) or []
+        data[key] = [_normalize_person(p, role=role) for p in people if isinstance(p, dict)]
+    data.setdefault("zones", [])
+    data.setdefault("escalation_hours", 2)
+    return data
+
+
+def save_staff(data: dict[str, Any]) -> dict[str, Any]:
+    """Persist staff to runtime path. Returns normalized staff."""
+    out = _default_staff()
+    out["escalation_hours"] = float(data.get("escalation_hours") or 2)
+    out["zones"] = data.get("zones") if isinstance(data.get("zones"), list) else []
+    for key, role in (("surveyors", "surveyor"), ("managers", "manager"), ("lidarubs", "lidarub")):
+        people = data.get(key) or []
+        out[key] = [_normalize_person(p, role=role) for p in people if isinstance(p, dict) and str(p.get("name") or "").strip()]
+    path = _staff_runtime_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return out
+
+
+def upsert_person(role: str, person: dict[str, Any]) -> dict[str, Any]:
+    role = (role or "").strip().lower()
+    key = {"surveyor": "surveyors", "manager": "managers", "lidarub": "lidarubs"}.get(role)
+    if not key:
+        raise ValueError("role must be surveyor|manager|lidarub")
+    staff = load_staff()
+    base = _normalize_person(person, role=role)
+    people = list(staff.get(key) or [])
+    replaced = False
+    for i, old in enumerate(people):
+        if old.get("id") == base["id"] or (
+            base["tg_username"] and _normalize_username(old.get("tg_username")) == base["tg_username"]
+        ):
+            merged = dict(old)
+            merged["id"] = base["id"] or old.get("id") or base["id"]
+            for field in ("name", "phone", "tg_username", "tg_id", "note"):
+                if field in person and person.get(field) is not None:
+                    if field == "tg_username":
+                        merged[field] = _normalize_username(person.get(field))
+                    else:
+                        merged[field] = str(person.get(field) or "").strip()
+            if not merged.get("name"):
+                merged["name"] = base["name"]
+            people[i] = merged
+            replaced = True
+            break
+    if not replaced:
+        people.append(base)
+    staff[key] = people
+    return save_staff(staff)
+
+
+def delete_person(role: str, person_id: str) -> dict[str, Any]:
+    role = (role or "").strip().lower()
+    key = {"surveyor": "surveyors", "manager": "managers", "lidarub": "lidarubs"}.get(role)
+    if not key:
+        raise ValueError("role must be surveyor|manager|lidarub")
+    staff = load_staff()
+    pid = str(person_id or "").strip()
+    staff[key] = [p for p in (staff.get(key) or []) if p.get("id") != pid]
+    return save_staff(staff)
+
+
+def link_telegram_user(*, tg_id: str | int, username: str = "", full_name: str = "") -> dict[str, Any] | None:
+    """Bind Telegram user to staff row by @username. Returns matched person or None."""
+    uid = str(tg_id).strip()
+    uname = _normalize_username(username)
+    if not uid and not uname:
+        return None
+    staff = load_staff()
+    changed = False
+    matched: dict[str, Any] | None = None
+    for key, role in (("surveyors", "surveyor"), ("managers", "manager"), ("lidarubs", "lidarub")):
+        people = list(staff.get(key) or [])
+        for i, p in enumerate(people):
+            hit = bool(
+                (uname and _normalize_username(p.get("tg_username")) == uname)
+                or (uid and str(p.get("tg_id") or "") == uid)
+            )
+            if not hit:
+                continue
+            row = dict(p)
+            if uid and row.get("tg_id") != uid:
+                row["tg_id"] = uid
+                changed = True
+            if uname and _normalize_username(row.get("tg_username")) != uname:
+                row["tg_username"] = uname
+                changed = True
+            if full_name and not (row.get("name") or "").strip():
+                row["name"] = full_name
+                changed = True
+            people[i] = row
+            matched = {**row, "role": role}
+        staff[key] = people
+    if changed:
+        save_staff(staff)
+    return matched
+
+
+def find_person_by_tg(tg_id: str | int = "", username: str = "") -> dict[str, Any] | None:
+    uid = str(tg_id or "").strip()
+    uname = _normalize_username(username)
+    staff = load_staff()
+    for key, role in (("surveyors", "surveyor"), ("managers", "manager"), ("lidarubs", "lidarub")):
+        for p in staff.get(key) or []:
+            if uid and str(p.get("tg_id") or "") == uid:
+                return {**p, "role": role}
+            if uname and _normalize_username(p.get("tg_username")) == uname:
+                return {**p, "role": role}
+    return None
+
+
+def toggle_schedule(role: str, person_id: str, work_date: str) -> dict[str, Any]:
+    """Add person to day if missing, else remove."""
+    init_db()
+    day = work_date or today_str()
+    if role not in ("surveyor", "manager"):
+        raise ValueError("role must be surveyor|manager")
+    if not _person_by_id(role, person_id):
+        raise ValueError("unknown person_id")
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT id FROM schedule WHERE role=? AND person_id=? AND work_date=?",
+            (role, person_id, day),
+        ).fetchone()
+        if row:
+            conn.execute("DELETE FROM schedule WHERE role=? AND person_id=? AND work_date=?", (role, person_id, day))
+            return {"ok": True, "on_duty": False, "role": role, "person_id": person_id, "work_date": day}
+    set_schedule(role, person_id, day)
+    return {"ok": True, "on_duty": True, "role": role, "person_id": person_id, "work_date": day}
 
 
 def connect() -> sqlite3.Connection:
@@ -273,11 +453,45 @@ def _send_sms(phone: str, text: str) -> str:
 
 def _person_by_id(role: str, person_id: str) -> dict[str, str] | None:
     staff = load_staff()
-    key = "surveyors" if role == "surveyor" else "managers"
+    key = "surveyors" if role == "surveyor" else "managers" if role == "manager" else "lidarubs"
     for p in staff.get(key) or []:
         if p.get("id") == person_id:
-            return {"id": p.get("id") or "", "name": p.get("name") or "", "phone": p.get("phone") or ""}
+            return {
+                "id": p.get("id") or "",
+                "name": p.get("name") or "",
+                "phone": p.get("phone") or "",
+                "tg_username": p.get("tg_username") or "",
+                "tg_id": p.get("tg_id") or "",
+            }
     return None
+
+
+def _person_label(person: dict[str, Any] | None) -> str:
+    if not person:
+        return ""
+    name = person.get("name") or person.get("id") or ""
+    u = _normalize_username(person.get("tg_username"))
+    return f"{name} (@{u})" if u else name
+
+
+def notify_person(text: str, person: dict[str, Any] | None) -> list[str]:
+    """SMS stub + TG DM if tg_id + ops broadcast with @mention."""
+    notes: list[str] = []
+    if not person:
+        return notify_all(text)
+    phone = (person.get("phone") or "").strip()
+    mention = ""
+    u = _normalize_username(person.get("tg_username"))
+    if u:
+        mention = f"@{u} "
+    body = f"{mention}{text}"
+    if phone:
+        notes.extend(notify_all(body, phone=phone, skip_tg=True))
+    tg_id = str(person.get("tg_id") or "").strip()
+    if tg_id:
+        notes.append(_send_telegram(tg_id, body))
+    notes.extend(notify_all(body, phone="", skip_tg=False))
+    return notes
 
 
 def set_schedule(role: str, person_id: str, work_date: str, note: str = "") -> dict[str, Any]:
@@ -389,7 +603,13 @@ def pick_manager_from_schedule(work_date: str | None = None) -> tuple[dict[str, 
         if not managers:
             return None, "no_managers"
         m = managers[0]
-        return {"id": m.get("id") or "", "name": m.get("name") or "", "phone": m.get("phone") or ""}, "staff_fallback"
+        return {
+            "id": m.get("id") or "",
+            "name": m.get("name") or "",
+            "phone": m.get("phone") or "",
+            "tg_username": m.get("tg_username") or "",
+            "tg_id": m.get("tg_id") or "",
+        }, "staff_fallback"
     return duty[0], "schedule"
 
 
@@ -476,7 +696,7 @@ def create_object(payload: dict[str, Any]) -> dict[str, Any]:
             f"Квалификация: {qualification[:200] or '—'}. "
             f"Откройте {link} и нажмите «Взял в работу»."
         )
-        notes = notify_phones(msg, [(surveyor or {}).get("phone") or ""])
+        notes = notify_person(msg, surveyor)
         log_event(oid, "notify_surveyor", "; ".join(notes))
 
     obj = get_object(oid)
@@ -708,10 +928,15 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         updates["manager_name"] = mgr.get("name") or ""
         updates["manager_phone"] = mgr.get("phone") or ""
         message = f"Назначен менеджер {updates['manager_name']} ({reason}) — защита ТЗ"
-        notify_phones(
+        notify_person(
             f"🔔 Бери в работу (защита ТЗ): «{obj['title']}», {obj['address']}. "
             f"https://moracul.ru/bestpaints/?crm={oid}",
-            [updates["manager_phone"]],
+            {
+                "name": updates["manager_name"],
+                "phone": updates["manager_phone"],
+                "tg_username": (mgr or {}).get("tg_username") or "",
+                "tg_id": (mgr or {}).get("tg_id") or "",
+            },
         )
 
     elif action == "manager_accept":
@@ -784,9 +1009,9 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         updates["assigned_at"] = now
         updates["escalated_at"] = None
         message = f"Переназначен замерщик {person['name']} ({reason})"
-        notify_phones(
+        notify_person(
             f"BestPaints: вам назначена сделка «{obj['title']}». https://moracul.ru/bestpaints/?crm={oid}",
-            [person["phone"]],
+            person,
         )
 
     else:
@@ -803,10 +1028,10 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
                 updates["manager_name"] = mgr["name"]
                 updates["manager_phone"] = mgr["phone"]
                 message += f" → менеджер {mgr['name']}"
-                notify_phones(
+                notify_person(
                     f"🔔 Бери в работу (защита ТЗ): «{obj['title']}», {obj['address']}. "
                     f"https://moracul.ru/bestpaints/?crm={oid}",
-                    [mgr["phone"]],
+                    mgr,
                 )
 
     sets = ", ".join(f"{k}=?" for k in updates)

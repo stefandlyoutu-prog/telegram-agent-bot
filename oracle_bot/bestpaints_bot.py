@@ -207,7 +207,24 @@ def _fill_schedule(day: str, who: str) -> list[str]:
 async def cmd_start_help(message: Message):
     if not _enabled():
         return
-    await message.answer(_help_text())
+    linked = ""
+    if message.from_user:
+        hit = crm.link_telegram_user(
+            tg_id=message.from_user.id,
+            username=message.from_user.username or "",
+            full_name=message.from_user.full_name or "",
+        )
+        if hit:
+            role_ru = {"surveyor": "замерщик", "manager": "менеджер", "lidarub": "лидоруб"}.get(
+                hit.get("role") or "", hit.get("role") or ""
+            )
+            linked = f"\n✅ Вы в команде: {hit.get('name')} ({role_ru})\n"
+        elif message.from_user.username:
+            linked = (
+                f"\nВаш ник @{message.from_user.username} пока не в команде.\n"
+                "Админ добавляет имя+@ник во вкладке «Команда» на сайте.\n"
+            )
+    await message.answer(linked + _help_text())
 
 
 @router.message(Command("chatid", "bp_chatid"))

@@ -444,19 +444,17 @@ function renderHome() {
   app.innerHTML = `
     <header class="topbar">
       <div class="brand">
-        <strong>BestPaints Survey</strong>
-        <span>CRM + замер → конструктор → смета</span>
+        <strong>BestPaints</strong>
+        <span>CRM · замер · смета</span>
       </div>
     </header>
-    ${homeCrmSectionHtml([])}
-    <section class="hero-card">
-      <h1>Локальные замеры</h1>
-      <p>Офлайн-конструктор на устройстве. Для воронки (статусы, SMS) используйте «Объект CRM» выше.</p>
-      <button class="btn primary block" id="btn-new" style="margin-top:14px">+ Локальный замер</button>
-    </section>
+    ${homeCrmSectionHtml()}
 
-    <h2 class="subhead">Локальные объекты</h2>
-    <div class="survey-list">
+    <details class="local-fold">
+      <summary>Локальные замеры на устройстве (${list.length})</summary>
+      <p class="hint">Офлайн-конструктор. Воронка статусов — во вкладке «Сделки» выше.</p>
+      <button class="btn ghost block" id="btn-new" style="margin:10px 0">+ Локальный замер</button>
+      <div class="survey-list">
       ${
         list.length
           ? list
@@ -483,15 +481,15 @@ function renderHome() {
         </article>`;
               })
               .join("")
-          : `<div class="empty">Пока нет локальных замеров. Нажмите «+ Локальный замер».</div>`
+          : `<div class="empty soft mini">Пока пусто</div>`
       }
-    </div>
+      </div>
+    </details>
 
     ${
       trash.length
-        ? `<details class="trash-panel" open>
-      <summary>Корзина · ${trash.length} ${trash.length === 1 ? "элемент" : "элементов"}
-        <span class="hint">хранение до 30 дней</span></summary>
+        ? `<details class="trash-panel">
+      <summary>Корзина · ${trash.length}</summary>
       <div class="trash-list">
         ${trash
           .map(
@@ -514,10 +512,11 @@ function renderHome() {
         : ""
     }
 
-    <p class="footer-note">Установить на iPhone: Safari → Поделиться → На экран «Домой».
-      · <a href="/bestpaints/docs/BestPaints_Obuchenie_v4.pdf?v=20260728" target="_blank" rel="noopener">Обучение (PDF)</a>
-      · <a href="/bestpaints/docs/TOMORROW_PLAYBOOK.html" target="_blank" rel="noopener">Шпаргалка разбора</a>
-      · <a href="/bestpaints/logout">Выйти</a></p>
+    <p class="footer-note">
+      <a href="/bestpaints/docs/TOMORROW_PLAYBOOK.html" target="_blank" rel="noopener">Шпаргалка</a>
+      · <a href="/bestpaints/docs/BestPaints_Obuchenie_v4.pdf?v=20260728" target="_blank" rel="noopener">PDF</a>
+      · <a href="/bestpaints/logout">Выйти</a>
+    </p>
   `;
   $("#btn-new").onclick = () => newSurvey();
   app.querySelectorAll("[data-open]").forEach((btn) => {

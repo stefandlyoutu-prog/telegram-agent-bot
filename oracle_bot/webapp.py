@@ -403,6 +403,15 @@ async def bp_api_schedule(request: Request, date: str | None = None):
 async def bp_api_schedule_set(request: Request):
     _bp_api_auth(request)
     data = await request.json()
+    if (data or {}).get("toggle"):
+        try:
+            return bp_crm.toggle_schedule(
+                str(data.get("role") or ""),
+                str(data.get("person_id") or ""),
+                str(data.get("work_date") or bp_crm.today_str()),
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
     if (data or {}).get("clear"):
         day = str(data.get("work_date") or bp_crm.today_str())
         n = bp_crm.clear_schedule(day, str(data["role"]) if data.get("role") else None)
@@ -425,6 +434,40 @@ async def bp_api_schedule_set(request: Request):
             str(data.get("work_date") or bp_crm.today_str()),
             str(data.get("note") or ""),
         )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/bestpaints/api/staff")
+async def bp_api_staff_get(request: Request):
+    _bp_api_auth(request)
+    return bp_crm.load_staff()
+
+
+@app.put("/bestpaints/api/staff")
+async def bp_api_staff_put(request: Request):
+    _bp_api_auth(request)
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise HTTPException(400, "json object required")
+    return bp_crm.save_staff(data)
+
+
+@app.post("/bestpaints/api/staff/person")
+async def bp_api_staff_person(request: Request):
+    _bp_api_auth(request)
+    data = await request.json()
+    try:
+        return bp_crm.upsert_person(str((data or {}).get("role") or ""), data if isinstance(data, dict) else {})
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.delete("/bestpaints/api/staff/person/{role}/{person_id}")
+async def bp_api_staff_delete(role: str, person_id: str, request: Request):
+    _bp_api_auth(request)
+    try:
+        return bp_crm.delete_person(role, person_id)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 

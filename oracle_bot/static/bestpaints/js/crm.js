@@ -60,6 +60,25 @@ export async function setSchedule(payload) {
   return api("/schedule", { method: "POST", body: JSON.stringify(payload) });
 }
 
+export async function upsertStaffPerson(payload) {
+  return api("/staff/person", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function deleteStaffPerson(role, id) {
+  return api(`/staff/person/${encodeURIComponent(role)}/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+function nickOf(p) {
+  const u = String(p?.tg_username || "").replace(/^@/, "");
+  return u ? `@${u}` : "";
+}
+
+function personLine(p) {
+  const nick = nickOf(p);
+  const link = p?.tg_id ? " · связан" : nick ? "" : " · укажите @ник";
+  return `${esc(p?.name || p?.id || "?")}${nick ? ` · <span class="crm-nick">${esc(nick)}</span>` : ""}${esc(link)}`;
+}
+
 /** Кнопки следующего шага по статусу */
 const NEXT_ACTIONS = {
   created: [
@@ -124,55 +143,374 @@ export function statusPill(obj) {
 
 export function boardHtml(objects) {
   if (!objects.length) {
-    return `<div class="empty crm-empty">Нет сделок. Лидоруб создаёт в Telegram (/zamer) или кнопкой ниже.</div>`;
+    return `<div class="empty crm-empty">Пока нет сделок. Создайте здесь или через бота <code>/zamer</code>.</div>`;
   }
   return `<div class="crm-list">${objects
     .map(
       (o) => `
-    <article class="crm-item">
-      <div class="crm-item-main">
-        <h3>${esc(o.title)} ${statusPill(o)}</h3>
-        <p>${esc(o.address || "Адрес не указан")}
-          · ${esc(o.client_name || "Клиент")}
-          ${o.surveyor_name ? ` · ${esc(o.surveyor_name)}` : ""}
-          ${o.measure_date ? ` · замер ${esc(o.measure_date)}` : ""}
-          ${o.escalated_at ? ` · <span class="crm-escalated">эскалация</span>` : ""}
-        </p>
+    <button type="button" class="crm-card" data-crm-open="${esc(o.id)}">
+      <div class="crm-card-top">
+        <strong>${esc(o.title)}</strong>
+        ${statusPill(o)}
       </div>
-      <div class="survey-actions">
-        <button type="button" class="btn" data-crm-open="${esc(o.id)}">Открыть</button>
+      <div class="crm-card-meta">
+        ${esc(o.address || "без адреса")}
+        ${o.measure_date ? ` · ${esc(o.measure_date)}` : ""}
+        ${o.surveyor_name ? ` · ${esc(o.surveyor_name)}` : ""}
+        ${o.escalated_at ? ` · <span class="crm-escalated">эскалация</span>` : ""}
       </div>
-    </article>`
+    </button>`
     )
     .join("")}</div>`;
 }
 
 export function createFormHtml(meta) {
   const surv = (meta?.staff?.surveyors || [])
-    .map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`)
+    .map((s) => `<option value="${esc(s.id)}">${esc(s.name)}${nickOf(s) ? " " + nickOf(s) : ""}</option>`)
     .join("");
   const today = meta?.today || "";
-  const duty = (meta?.on_duty_surveyors || []).map((s) => s.name).join(", ") || "никого — заполните график";
+  const duty = (meta?.on_duty_surveyors || []).map((s) => s.name).join(", ") || "никого в графике";
   return `
   <form class="crm-create" id="crm-create-form">
-    <h3>Новая сделка (как у Лидоруба)</h3>
-    <p class="hint">Сегодня в графике замерщиков: <strong>${esc(duty)}</strong></p>
-    <label>Название сделки<input name="title" required placeholder="Как в вашей CRM" /></label>
-    <label>Квалификация (комментарий)<textarea name="qualification" rows="2" placeholder="Что обсудили с клиентом"></textarea></label>
-    <label>Адрес объекта<input name="address" required placeholder="Адрес" /></label>
+    <h3>Новая сделка</h3>
+    <p class="hint">Сегодня на смене: ${esc(duty)}</p>
+    <label>Название<input name="title" required placeholder="Как в CRM" /></label>
+    <label>Квалификация<textarea name="qualification" rows="2" placeholder="Кратко"></textarea></label>
+    <label>Адрес<input name="address" required /></label>
     <label>Дата замера<input name="measure_date" type="date" value="${esc(today)}" /></label>
-    <label>Клиент<input name="client_name" placeholder="ФИО" /></label>
-    <label>Телефон клиента<input name="client_phone" type="tel" placeholder="+7…" /></label>
-    <label>Лидоруб (имя)<input name="lidarub_name" placeholder="Ваше имя" /></label>
-    <label>Телефон Лидоруба<input name="lidarub_phone" type="tel" placeholder="+7… (эскалация)" /></label>
-    <label>Замерщик (пусто = из графика)
+    <div class="crm-form-row">
+      <label>Клиент<input name="client_name" /></label>
+      <label>Телефон<input name="client_phone" type="tel" /></label>
+    </div>
+    <label>Замерщик
       <select name="surveyor_id">
-        <option value="">Из графика / зоны</option>
+        <option value="">Авто из графика</option>
         ${surv}
       </select>
     </label>
-    <button type="submit" class="btn primary block">Создать сделку</button>
+    <button type="submit" class="btn primary block">Создать</button>
   </form>`;
+}
+
+function chipHtml(person, role, onDutyIds) {
+  const on = onDutyIds.has(person.id);
+  const nick = nickOf(person);
+  return `<button type="button" class="crm-chip ${on ? "on" : ""}" data-sch-toggle="${esc(role)}:${esc(person.id)}" title="${esc(nick || "без ника")}">
+    <span class="crm-chip-name">${esc(person.name)}</span>
+    <span class="crm-chip-nick">${esc(nick || "—")}</span>
+  </button>`;
+}
+
+export function schedulePanelHtml(meta, day) {
+  const d = day || meta?.today || "";
+  const onS = new Set((meta?.on_duty_surveyors || []).map((x) => x.id));
+  const onM = new Set((meta?.on_duty_managers || []).map((x) => x.id));
+  const surv = meta?.staff?.surveyors || [];
+  const mgr = meta?.staff?.managers || [];
+  return `
+  <div class="crm-panel-inner">
+    <div class="crm-panel-head">
+      <div>
+        <h3>График смен</h3>
+        <p class="hint">Нажмите имя — в смене / вне смены. Бот: <code>/grafik_fill</code></p>
+      </div>
+      <input type="date" id="crm-sch-date" value="${esc(d)}" class="crm-date" />
+    </div>
+    <div class="crm-chip-block">
+      <div class="crm-chip-label">Замерщики</div>
+      <div class="crm-chips">${surv.map((p) => chipHtml(p, "surveyor", onS)).join("") || "<span class='hint'>Добавьте в «Команда»</span>"}</div>
+    </div>
+    <div class="crm-chip-block">
+      <div class="crm-chip-label">Менеджеры</div>
+      <div class="crm-chips">${mgr.map((p) => chipHtml(p, "manager", onM)).join("") || "<span class='hint'>Добавьте в «Команда»</span>"}</div>
+    </div>
+    <div class="crm-row-actions">
+      <button type="button" class="btn primary" id="crm-sch-fill">Всех на день</button>
+      <button type="button" class="btn ghost" id="crm-sch-clear">Очистить</button>
+    </div>
+  </div>`;
+}
+
+function teamRowHtml(p, role) {
+  const nick = nickOf(p);
+  const linked = p.tg_id ? `<span class="crm-linked" title="Telegram связан">●</span>` : "";
+  return `
+  <article class="crm-team-row" data-role="${esc(role)}" data-id="${esc(p.id)}">
+    <div class="crm-team-info">
+      <strong>${esc(p.name)} ${linked}</strong>
+      <span>${esc(nick || "нет @ника")}${p.phone ? " · " + esc(p.phone) : ""}</span>
+    </div>
+    <div class="crm-team-btns">
+      <button type="button" class="btn ghost sm" data-team-edit>Изменить</button>
+      <button type="button" class="btn ghost sm" data-team-del title="Удалить">✕</button>
+    </div>
+  </article>`;
+}
+
+export function teamPanelHtml(meta) {
+  const staff = meta?.staff || {};
+  const roles = [
+    ["lidarubs", "lidarub", "Лидорубы"],
+    ["surveyors", "surveyor", "Замерщики"],
+    ["managers", "manager", "Менеджеры"],
+  ];
+  return `
+  <div class="crm-panel-inner">
+    <div class="crm-panel-head">
+      <div>
+        <h3>Команда</h3>
+        <p class="hint">Имя + @ник Telegram — бот узнает человека при <code>/start</code> и пишет в Ops с упоминанием.</p>
+      </div>
+    </div>
+    <form class="crm-team-add" id="crm-team-add">
+      <select name="role" required>
+        <option value="surveyor">Замерщик</option>
+        <option value="manager">Менеджер</option>
+        <option value="lidarub">Лидоруб</option>
+      </select>
+      <input name="name" required placeholder="Имя" />
+      <input name="tg_username" placeholder="@ник" />
+      <input name="phone" placeholder="+7…" />
+      <button type="submit" class="btn primary">Добавить</button>
+    </form>
+    ${roles
+      .map(([key, role, title]) => {
+        const list = staff[key] || [];
+        return `<div class="crm-team-group">
+          <div class="crm-chip-label">${esc(title)}</div>
+          ${list.map((p) => teamRowHtml(p, role)).join("") || "<p class='hint'>Пусто</p>"}
+        </div>`;
+      })
+      .join("")}
+    <p class="hint crm-bot-hint">Бот <a href="https://t.me/BestPaints_Zamerbot" target="_blank" rel="noopener">@BestPaints_Zamerbot</a>
+      · после добавления @ника человек пишет боту <code>/start</code> — появляется «связан».</p>
+  </div>`;
+}
+
+export function homeCrmSectionHtml() {
+  return `
+  <section class="crm-shell" id="crm-shell">
+    <nav class="crm-tabs" role="tablist">
+      <button type="button" class="crm-tab active" data-tab="deals">Сделки</button>
+      <button type="button" class="crm-tab" data-tab="schedule">График</button>
+      <button type="button" class="crm-tab" data-tab="team">Команда</button>
+    </nav>
+    <div class="crm-tab-panels">
+      <div class="crm-tab-panel" id="crm-panel-deals" data-panel="deals">
+        <div class="crm-panel-head">
+          <div>
+            <h3>Сделки</h3>
+            <p class="hint" id="crm-duty-hint">Загрузка графика…</p>
+          </div>
+          <button type="button" class="btn primary" id="crm-toggle-create">+ Сделка</button>
+        </div>
+        <div id="crm-create-wrap" class="crm-create-wrap" hidden></div>
+        <div id="crm-deals-list"></div>
+      </div>
+      <div class="crm-tab-panel" id="crm-panel-schedule" data-panel="schedule" hidden></div>
+      <div class="crm-tab-panel" id="crm-panel-team" data-panel="team" hidden></div>
+    </div>
+  </section>`;
+}
+
+export async function mountHomeCrm(ctx) {
+  const { root, toast, onOpenDetail, getMeta } = ctx;
+  const shell = root.querySelector("#crm-shell");
+  if (!shell) return;
+
+  let meta;
+  let objects;
+  try {
+    objects = await fetchObjects();
+    meta = await getMeta();
+  } catch (e) {
+    shell.insertAdjacentHTML(
+      "beforeend",
+      `<div class="callout danger">CRM недоступен: ${esc(e.message)}</div>`
+    );
+    return;
+  }
+
+  const duty = (meta.on_duty_surveyors || []).map((s) => s.name).join(", ") || "никого — откройте «График»";
+  const dutyEl = root.querySelector("#crm-duty-hint");
+  if (dutyEl) dutyEl.textContent = `На смене сегодня: ${duty}`;
+
+  const listEl = root.querySelector("#crm-deals-list");
+  if (listEl) listEl.innerHTML = boardHtml(objects);
+
+  root.querySelectorAll("[data-crm-open]").forEach((btn) => {
+    btn.onclick = (ev) => {
+      ev.preventDefault();
+      onOpenDetail(btn.getAttribute("data-crm-open"));
+    };
+  });
+
+  // tabs
+  const showTab = (name) => {
+    root.querySelectorAll(".crm-tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
+    root.querySelectorAll(".crm-tab-panel").forEach((p) => {
+      p.hidden = p.dataset.panel !== name;
+    });
+  };
+  root.querySelectorAll(".crm-tab").forEach((tab) => {
+    tab.onclick = async () => {
+      showTab(tab.dataset.tab);
+      if (tab.dataset.tab === "schedule") await renderSchedule();
+      if (tab.dataset.tab === "team") await renderTeam();
+    };
+  });
+
+  async function refreshMeta() {
+    meta = await getMeta();
+    const d = (meta.on_duty_surveyors || []).map((s) => s.name).join(", ") || "никого — откройте «График»";
+    if (dutyEl) dutyEl.textContent = `На смене сегодня: ${d}`;
+  }
+
+  async function renderSchedule() {
+    const panel = root.querySelector("#crm-panel-schedule");
+    const day = root.querySelector("#crm-sch-date")?.value || meta.today;
+    const pack = await fetchSchedule(day);
+    const view = {
+      ...meta,
+      today: day,
+      schedule_today: pack.items || [],
+      on_duty_surveyors: pack.on_duty_surveyors || [],
+      on_duty_managers: pack.on_duty_managers || [],
+    };
+    panel.innerHTML = schedulePanelHtml(view, day);
+    panel.querySelector("#crm-sch-date")?.addEventListener("change", () => renderSchedule().catch((e) => toast(String(e.message || e))));
+    panel.querySelector("#crm-sch-fill")?.addEventListener("click", async () => {
+      const d = panel.querySelector("#crm-sch-date")?.value || meta.today;
+      await setSchedule({ fill_all: true, work_date: d });
+      toast(`Все на ${d}`);
+      await refreshMeta();
+      await renderSchedule();
+    });
+    panel.querySelector("#crm-sch-clear")?.addEventListener("click", async () => {
+      const d = panel.querySelector("#crm-sch-date")?.value || meta.today;
+      if (!confirm(`Очистить смену ${d}?`)) return;
+      await setSchedule({ clear: true, work_date: d });
+      toast("Очищено");
+      await refreshMeta();
+      await renderSchedule();
+    });
+    panel.querySelectorAll("[data-sch-toggle]").forEach((btn) => {
+      btn.onclick = async () => {
+        const [role, pid] = (btn.getAttribute("data-sch-toggle") || "").split(":");
+        const d = panel.querySelector("#crm-sch-date")?.value || meta.today;
+        try {
+          const r = await setSchedule({ toggle: true, role, person_id: pid, work_date: d });
+          toast(r.on_duty ? "В смене" : "Снят со смены");
+          await refreshMeta();
+          await renderSchedule();
+        } catch (err) {
+          toast(String(err.message || err));
+        }
+      };
+    });
+  }
+
+  async function renderTeam() {
+    const panel = root.querySelector("#crm-panel-team");
+    meta = await getMeta();
+    panel.innerHTML = teamPanelHtml(meta);
+    const form = panel.querySelector("#crm-team-add");
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const payload = Object.fromEntries(fd.entries());
+      payload.tg_username = String(payload.tg_username || "").replace(/^@/, "");
+      try {
+        await upsertStaffPerson(payload);
+        toast("Сохранено");
+        await refreshMeta();
+        await renderTeam();
+      } catch (err) {
+        toast(String(err.message || err));
+      }
+    };
+    panel.querySelectorAll("[data-team-del]").forEach((btn) => {
+      btn.onclick = async () => {
+        const row = btn.closest(".crm-team-row");
+        if (!row || !confirm("Удалить из команды?")) return;
+        try {
+          await deleteStaffPerson(row.dataset.role, row.dataset.id);
+          toast("Удалено");
+          await refreshMeta();
+          await renderTeam();
+        } catch (err) {
+          toast(String(err.message || err));
+        }
+      };
+    });
+    panel.querySelectorAll("[data-team-edit]").forEach((btn) => {
+      btn.onclick = async () => {
+        const row = btn.closest(".crm-team-row");
+        if (!row) return;
+        const role = row.dataset.role;
+        const id = row.dataset.id;
+        const peopleKey = role === "surveyor" ? "surveyors" : role === "manager" ? "managers" : "lidarubs";
+        const p = (meta.staff?.[peopleKey] || []).find((x) => x.id === id);
+        if (!p) return;
+        const name = prompt("Имя", p.name || "") ?? null;
+        if (name === null) return;
+        const tg = prompt("Telegram @ник (без @)", p.tg_username || "") ?? null;
+        if (tg === null) return;
+        const phone = prompt("Телефон", p.phone || "") ?? null;
+        if (phone === null) return;
+        try {
+          await upsertStaffPerson({
+            role,
+            id,
+            name: name.trim(),
+            tg_username: String(tg).replace(/^@/, "").trim(),
+            phone: phone.trim(),
+            tg_id: p.tg_id || "",
+          });
+          toast("Обновлено");
+          await refreshMeta();
+          await renderTeam();
+        } catch (err) {
+          toast(String(err.message || err));
+        }
+      };
+    });
+  }
+
+  const toggle = root.querySelector("#crm-toggle-create");
+  const wrap = root.querySelector("#crm-create-wrap");
+  if (toggle && wrap) {
+    toggle.onclick = async () => {
+      if (!wrap.hidden && wrap.innerHTML) {
+        wrap.hidden = true;
+        return;
+      }
+      const m = await getMeta();
+      wrap.innerHTML = createFormHtml(m);
+      wrap.hidden = false;
+      wrap.querySelector("#crm-create-form").onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const payload = Object.fromEntries(fd.entries());
+        try {
+          const obj = await createObject(payload);
+          toast(obj.status === "created" ? "Создано без графика" : `→ ${obj.surveyor_name}`);
+          wrap.hidden = true;
+          wrap.innerHTML = "";
+          objects = await fetchObjects();
+          if (listEl) listEl.innerHTML = boardHtml(objects);
+          root.querySelectorAll("[data-crm-open]").forEach((btn) => {
+            btn.onclick = (ev) => {
+              ev.preventDefault();
+              onOpenDetail(btn.getAttribute("data-crm-open"));
+            };
+          });
+        } catch (err) {
+          toast(String(err.message || err));
+        }
+      };
+    };
+  }
 }
 
 function checklistHtml(obj, meta) {
@@ -291,156 +629,6 @@ export function detailHtml(obj, events, meta) {
   <p class="footer-note"><a href="/bestpaints/logout">Выйти</a></p>`;
 }
 
-export function schedulePanelHtml(meta) {
-  const today = meta?.today || "";
-  const items = meta?.schedule_today || [];
-  const surv = (meta?.on_duty_surveyors || []).map((s) => s.name).join(", ") || "никого";
-  const mgr = (meta?.on_duty_managers || []).map((m) => m.name).join(", ") || "никого";
-  const list =
-    items
-      .map((r) => `<li>${esc(r.role)}: <strong>${esc(r.person_name || r.person_id)}</strong></li>`)
-      .join("") || "<li class='hint'>Пусто — сделки не назначатся</li>";
-  return `
-  <section class="crm-schedule" id="crm-schedule">
-    <div class="crm-board-head">
-      <h2 class="subhead">График смен · ${esc(today)}</h2>
-    </div>
-    <p class="hint">Замерщики: <strong>${esc(surv)}</strong> · Менеджеры: <strong>${esc(mgr)}</strong></p>
-    <ul class="crm-schedule-list">${list}</ul>
-    <div class="crm-schedule-actions">
-      <label>Дата <input type="date" id="crm-sch-date" value="${esc(today)}" /></label>
-      <button type="button" class="btn primary" id="crm-sch-fill">Поставить всех в график</button>
-      <button type="button" class="btn ghost" id="crm-sch-clear">Очистить день</button>
-      <button type="button" class="btn ghost" id="crm-sch-reload">Обновить</button>
-    </div>
-    <p class="hint">То же в боте: <code>/grafik_fill</code> · без графика /zamer оставит сделку «Создана»</p>
-  </section>`;
-}
-
-export function homeCrmSectionHtml(objects) {
-  return `
-  <section class="crm-board">
-    <div class="crm-board-head">
-      <h2 class="subhead">CRM · сделки замеров</h2>
-      <button type="button" class="btn primary" id="crm-toggle-create">+ Сделка</button>
-    </div>
-    <p class="hint crm-board-hint">Лидоруб: Telegram /zamer · График ниже или /grafik_fill · статусы здесь</p>
-    <div id="crm-schedule-host"></div>
-    <div id="crm-create-wrap" class="crm-create-wrap" hidden></div>
-    ${boardHtml(objects)}
-  </section>`;
-}
-
-export async function mountHomeCrm(ctx) {
-  const { root, toast, onOpenDetail, getMeta } = ctx;
-  let objects = [];
-  let meta = null;
-  try {
-    objects = await fetchObjects();
-    meta = await getMeta();
-  } catch (e) {
-    const el = root.querySelector(".crm-board");
-    if (el) {
-      el.insertAdjacentHTML(
-        "beforeend",
-        `<div class="callout danger">CRM недоступен: ${esc(e.message)}. Работает только локальный замер.</div>`
-      );
-    }
-    return;
-  }
-  const listHost = root.querySelector(".crm-board");
-  if (!listHost) return;
-
-  const schHost = root.querySelector("#crm-schedule-host");
-  if (schHost) {
-    schHost.innerHTML = schedulePanelHtml(meta);
-    const reloadSch = async () => {
-      const day = root.querySelector("#crm-sch-date")?.value || meta.today;
-      const pack = await fetchSchedule(day);
-      const fakeMeta = {
-        ...meta,
-        today: day,
-        schedule_today: pack.items || [],
-        on_duty_surveyors: pack.on_duty_surveyors || [],
-        on_duty_managers: pack.on_duty_managers || [],
-      };
-      schHost.innerHTML = schedulePanelHtml(fakeMeta);
-      bindSch();
-    };
-    const bindSch = () => {
-      root.querySelector("#crm-sch-reload")?.addEventListener("click", () => reloadSch().catch((e) => toast(String(e.message || e))));
-      root.querySelector("#crm-sch-fill")?.addEventListener("click", async () => {
-        const day = root.querySelector("#crm-sch-date")?.value || meta.today;
-        try {
-          await setSchedule({ fill_all: true, work_date: day });
-          toast(`График на ${day} заполнен`);
-          await reloadSch();
-        } catch (err) {
-          toast(String(err.message || err));
-        }
-      });
-      root.querySelector("#crm-sch-clear")?.addEventListener("click", async () => {
-        const day = root.querySelector("#crm-sch-date")?.value || meta.today;
-        if (!confirm(`Очистить график на ${day}?`)) return;
-        try {
-          await setSchedule({ clear: true, work_date: day });
-          toast(`График ${day} очищен`);
-          await reloadSch();
-        } catch (err) {
-          toast(String(err.message || err));
-        }
-      });
-      root.querySelector("#crm-sch-date")?.addEventListener("change", () => reloadSch().catch((e) => toast(String(e.message || e))));
-    };
-    bindSch();
-  }
-
-  const oldList = listHost.querySelector(".crm-list, .crm-empty");
-  const tmp = document.createElement("div");
-  tmp.innerHTML = boardHtml(objects);
-  if (oldList) oldList.replaceWith(...tmp.childNodes);
-  else listHost.append(...tmp.childNodes);
-
-  root.querySelectorAll("[data-crm-open]").forEach((btn) => {
-    btn.onclick = (ev) => {
-      ev.preventDefault();
-      onOpenDetail(btn.getAttribute("data-crm-open"));
-    };
-  });
-
-  const toggle = root.querySelector("#crm-toggle-create");
-  const wrap = root.querySelector("#crm-create-wrap");
-  if (toggle && wrap) {
-    toggle.onclick = async () => {
-      if (wrap.innerHTML && !wrap.hidden) {
-        wrap.hidden = true;
-        return;
-      }
-      const m = await getMeta();
-      wrap.innerHTML = createFormHtml(m);
-      wrap.hidden = false;
-      const form = wrap.querySelector("#crm-create-form");
-      form.onsubmit = async (e) => {
-        e.preventDefault();
-        const fd = new FormData(form);
-        const payload = Object.fromEntries(fd.entries());
-        try {
-          const obj = await createObject(payload);
-          if (obj.status === "created") {
-            toast("Создано, но график пуст — назначьте замерщика");
-          } else {
-            toast(`Создано → ${obj.surveyor_name || "замерщик"}`);
-          }
-          wrap.hidden = true;
-          wrap.innerHTML = "";
-          await mountHomeCrm(ctx);
-        } catch (err) {
-          toast(String(err.message || err));
-        }
-      };
-    };
-  }
-}
 
 export async function mountDetail(ctx) {
   const { root, objectId, toast, onBack, onOpenSurvey, getMeta } = ctx;
