@@ -2093,7 +2093,7 @@ function renderTech(root) {
   const paintsI = listPaintOptions(catalog, "interior");
 
   root.innerHTML = `
-    <h2 class="section-title">Технология · ${escapeHtml(b.name)}</h2>
+    <h2 class="section-title calc-hero">Конструктор · ${escapeHtml(b.name)}</h2>
     <p class="section-sub">
       Фасад <b>${facadeArea.toFixed(1)} м²</b>
       ${b.zones?.interior ? ` · интерьер <b>${interiorArea.toFixed(1)} м²</b>` : ""}
@@ -2155,17 +2155,26 @@ function renderTech(root) {
       }).join("")}
     </div>
     <label class="hint" style="display:block;margin:12px 0 8px">ЛКМ фасад × ${facadeArea.toFixed(0)} м²</label>
-    <div class="choice-grid">
+    <div class="paint-grid">
       ${paintsF
         .map((p) => {
           const item = p.items.find((i) => i.tech === b.tech.techId);
           const sum = item && facadeArea ? money(item.price * facadeArea) : "—";
+          const ladder = (p.pricesByTech || p.items.map((i) => i.price))
+            .map((pr, idx) => `<span class="${b.tech.techId === idx + 1 ? "on" : ""}">${idx + 1}: ${money(pr)}</span>`)
+            .join("");
           return `
-          <button type="button" class="choice ${b.tech.paintId === p.id ? "selected" : ""}" data-paint="${esc(p.id)}">
-            <strong>${escapeHtml(shortName(p.name))}</strong>
-            <span>${p.opacity === "opaque" ? "Укрывной" : "Полупрозрачный"} · ${p.brand}
-              ${item?.guarantee ? ` · ${item.guarantee} лет` : ""}</span>
-            <span class="badge">${item ? `${money(item.price)}/м² → <b>${sum}</b>` : "нет цены"}</span>
+          <button type="button" class="paint-card ${b.tech.paintId === p.id ? "selected" : ""}" data-paint="${esc(p.id)}">
+            <div class="paint-card-top">
+              <span class="paint-brand">${escapeHtml(p.brand)}</span>
+              <span class="paint-coat">${p.opacity === "opaque" ? "Укрывной" : "Полупрозрачный"}</span>
+            </div>
+            <strong class="paint-name">${escapeHtml(shortName(p.name))}</strong>
+            <span class="paint-type">${escapeHtml(p.type || "")}${p.country ? ` · ${escapeHtml(p.country)}` : ""}</span>
+            <span class="paint-fan">Веер: ${escapeHtml(p.fan || "—")}</span>
+            <span class="paint-warranty">Гарантия техн. 4–5: <b>${p.warrantyYears45 || item?.guarantee || "—"} лет</b>${p.antisepticRequired ? " · с антисептиком" : ""}</span>
+            <div class="paint-ladder">${ladder}</div>
+            <span class="paint-total">${item ? `${money(item.price)}/м² → <b>${sum}</b>` : "нет цены"}</span>
           </button>`;
         })
         .join("")}
@@ -2188,17 +2197,21 @@ function renderTech(root) {
         ).join("")}
       </select>
     </div>
-    <div class="choice-grid">
+    <div class="paint-grid">
       ${paintsI
         .map((p) => {
           const tid = Number(b.tech.techIdInterior) || b.tech.techId;
           const item = p.items.find((i) => i.tech === tid);
           const sum = item && interiorArea ? money(item.price * interiorArea) : "—";
           return `
-          <button type="button" class="choice ${b.tech.paintIdInterior === p.id ? "selected" : ""}" data-paint-int="${esc(p.id)}">
-            <strong>${escapeHtml(shortName(p.name))}</strong>
-            <span>Интерьер · ${p.brand}</span>
-            <span class="badge">${item ? `${money(item.price)}/м² → <b>${sum}</b>` : "нет цены"}</span>
+          <button type="button" class="paint-card ${b.tech.paintIdInterior === p.id ? "selected" : ""}" data-paint-int="${esc(p.id)}">
+            <div class="paint-card-top">
+              <span class="paint-brand">${escapeHtml(p.brand)}</span>
+              <span class="paint-coat">Интерьер</span>
+            </div>
+            <strong class="paint-name">${escapeHtml(shortName(p.name))}</strong>
+            <span class="paint-fan">Веер: ${escapeHtml(p.fan || "—")}</span>
+            <span class="paint-total">${item ? `${money(item.price)}/м² → <b>${sum}</b>` : "нет цены"}</span>
           </button>`;
         })
         .join("")}

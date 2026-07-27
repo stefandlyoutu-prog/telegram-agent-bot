@@ -73,6 +73,24 @@ class Grafik(StatesGroup):
     pick = State()
 
 
+
+@router.message(Command("chatid", "bp_chatid"))
+async def cmd_chatid(message: Message):
+    """Покажет chat_id — добавьте бота в группу ops/подписанные и вызовите /chatid."""
+    if not _enabled():
+        return
+    chat = message.chat
+    title = chat.title or getattr(chat, "full_name", None) or "-"
+    await message.answer(
+        f"chat_id = {chat.id}\n"
+        f"тип: {chat.type}\n"
+        f"title: {title}\n\n"
+        "Скопируйте число и пришлите:\n"
+        "· ops → BESTPAINTS_TG_CHAT_OPS\n"
+        "· подписанные договоры → BESTPAINTS_TG_CHAT_SIGNED"
+    )
+
+
 @router.message(Command("bp", "bestpaints", "zamer_help"))
 async def cmd_help(message: Message):
     if not _enabled():
@@ -81,7 +99,7 @@ async def cmd_help(message: Message):
         "BestPaints · замеры\n\n"
         "Лидоруб:\n"
         "/zamer — создать новый замер (сделка)\n\n"
-        "Админ:\n"
+        "Админ / группы:\n/chatid — узнать Chat ID группы\n"
         "/grafik — кто сегодня в графике\n"
         "/grafik_add YYYY-MM-DD surveyor|manager ID — добавить в график\n"
         "/grafik_clear YYYY-MM-DD — очистить день\n"

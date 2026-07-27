@@ -94,7 +94,6 @@ async def start_cloud() -> None:
     _dp.include_router(life_quiz_router)
     _dp.include_router(router)
     _dp.include_router(voice_router)
-    _dp.include_router(bestpaints_router)
     me = await _bot.get_me()
     logger.info("Облако: @%s webhook (sync feed_update)", me.username)
     print(f"m-Oracul cloud ready: @{me.username}", flush=True)
@@ -125,6 +124,7 @@ async def start_cloud() -> None:
         drop_pending_updates=False,
     )
     logger.info("Webhook: %s", webhook_url)
+    await _init_bestpaints_bot()
 
     if ORACLE_PUSH_ENABLED:
         _push_task = asyncio.create_task(push_worker(_bot, ORACLE_PUSH_INTERVAL_SEC))
@@ -334,3 +334,56 @@ async def robokassa_fail(request: Request):
 
 def cloud_runtime() -> tuple[Optional[Bot], Optional[Dispatcher]]:
     return _bot, _dp
+
+
+# ── BestPaints dedicated bot (optional second token) ────────────────
+_bp_bot: Optional[Bot] = None
+_bp_dp: Optional[Dispatcher] = None
+
+
+async def _init_bestpaints_bot() -> None:
+    """Отдельный бот BestPaints: /zamer, /grafik, /chatid."""
+    global _bp_bot, _bp_dp
+    token = os.getenv("BESTPAINTS_TG_BOT_TOKEN", "").strip()
+    if not token:
+        logger.info("BestPaints bot: токен не задан — команды в основном боте")
+        # fallback: keep router on main dp
+        if _dp is not None:
+            _dp.include_router(bestpaints_router)
+        return
+    from aiogram.client.default import DefaultBotProperties
+    from aiogram.enums import ParseMode
+    from bot.services.telegram_net import create_telegram_session
+
+    _bp_bot = Bot(
+        token=token,
+        session=create_telegram_session(),
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    _bp_dp = Dispatcher(storage=MemoryStorage())
+    _bp_dp.include_router(bestpaints_router)
+    me = await _bp_bot.get_me()
+    logger.info("BestPaints bot: @%s", me.username)
+    webhook_base = os.getenv("ORACLE_WEBHOOK_URL", "").strip() or os.getenv("RENDER_EXTERNAL_URL", "")
+    if webhook_base:
+        url = webhook_base.rstrip("/") + "/webhook/bestpaints"
+        await _bp_bot.delete_webhook(drop_pending_updates=False)
+        await _bp_bot.set_webhook(url, drop_pending_updates=False)
+        logger.info("BestPaints webhook: %s", url)
+
+
+@router_cloud.post("/webhook/bestpaints")
+async def bestpaints_webhook(request: Request):
+    if _bp_bot is None or _bp_dp is None:
+        return {"ok": False, "error": "bp bot not ready"}
+    try:
+        data = await request.json()
+        update = Update.model_validate(data, context={"bot": _bp_bot})
+    except Exception:
+        logger.exception("bestpaints webhook parse")
+        return {"ok": True}
+    try:
+        await _bp_dp.feed_update(_bp_bot, update)
+    except Exception:
+        logger.exception("bestpaints feed_update failed")
+    return {"ok": True}

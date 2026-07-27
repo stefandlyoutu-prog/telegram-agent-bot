@@ -131,19 +131,35 @@ export function listPaintOptions(catalog, scope = "facade") {
   const out = [];
   for (const [brand, pack] of Object.entries(catalog || {})) {
     for (const p of pack.products) {
-      const name = p.name.toLowerCase();
-      const both = name.includes("фасад и интерьер");
+      const name = (p.name || "").toLowerCase();
+      const scopeMeta = (p.scope || "").toLowerCase();
+      const both =
+        name.includes("фасад и интерьер") ||
+        scopeMeta.includes("фасад и интерьер") ||
+        scopeMeta.includes("фасад/интерьер");
       const isInterior =
         !both &&
-        (name.includes("интерьер") || name.includes("terra wax") || name.includes("sterling"));
+        (scopeMeta.includes("интерьер") ||
+          name.includes("интерьер") ||
+          name.includes("terra wax") ||
+          name.includes("sterling"));
       if (scope === "facade" && isInterior) continue;
       if (scope === "interior" && !isInterior && !both) continue;
-      const opacity = name.includes("укрывн") ? "opaque" : "semi";
+      const opacity =
+        p.coating || (name.includes("укрывн") ? "opaque" : "semi");
       out.push({
-        id: `${brand}::${p.name}`,
+        id: p.id ? `${brand}::${p.id}` : `${brand}::${p.name}`,
         brand,
-        name: p.name,
+        name: p.displayName || p.name,
+        fullName: p.name,
+        type: p.type || "",
         opacity,
+        fan: p.fan || "",
+        country: p.country || "",
+        warrantyYears45: p.warrantyYears45 || null,
+        antisepticRequired: !!p.antisepticRequired,
+        note: p.note || "",
+        pricesByTech: p.pricesByTech || null,
         items: p.items,
       });
     }
@@ -443,7 +459,10 @@ export function totalAreas(survey) {
 function paintLine(catalog, paintId, techId, qty, label) {
   if (!paintId || !techId || qty <= 0) return null;
   const [brand, ...rest] = paintId.split("::");
-  const product = catalog[brand]?.products.find((p) => p.name === rest.join("::"));
+  const key = rest.join("::");
+  const product = catalog[brand]?.products.find(
+    (p) => p.id === key || p.name === key || p.displayName === key
+  );
   const item = product?.items.find((i) => i.tech === techId);
   if (!item) return null;
   return {
