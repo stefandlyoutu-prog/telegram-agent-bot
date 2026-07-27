@@ -1030,21 +1030,23 @@ function renderClient(root) {
   };
 
   titleEl?.addEventListener("input", () => {
+    // Не вызываем render() на каждом символе — ломает набор названия.
     syncTitleContract();
     const open = Boolean(titleEl.value.trim());
     const block = $("#flow-client", root);
     block?.classList.toggle("open", open);
     block?.classList.toggle("locked", !open);
     if (clientEl) clientEl.disabled = !open;
-    if (open && !hasTitle) {
-      // re-render once to unlock next stages cleanly
-      flushVisibleFields();
-      render();
-    }
   });
   titleEl?.addEventListener("change", () => {
     syncTitleContract();
     render();
+  });
+  titleEl?.addEventListener("blur", () => {
+    if (titleEl.value.trim()) {
+      syncTitleContract();
+      render();
+    }
   });
 
   clientEl?.addEventListener("change", () => render());
