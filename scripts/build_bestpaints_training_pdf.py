@@ -21,29 +21,29 @@ W, H = 1920, 1080
 
 SCENES = [
     (None, "BestPaints Survey + CRM",
-     "Обучение продукту от и до\n\nКабинет: moracul.ru/bestpaints\nЛогин: bestpaints\nПароль: ZamerBp2026!\n\nБот: @BestPaints_Zamerbot\nГруппы: BP Ops · BP Подписанные"),
+     "Обучение продукту от и до\n\nКабинет: moracul.ru/bestpaints\nЛогин: bestpaints\nПароль: ZamerBp2026!\n\nБот: @BestPaints_Zamerbot\nВкладки: Сделки · Аналитика · График · Команда"),
     ("01_login.png", "Вход в кабинет",
-     "1. Откройте moracul.ru/bestpaints\n2. Логин bestpaints\n3. Пароль ZamerBp2026!\n4. Нажмите «Войти»\n\nПосле входа — список CRM-сделок и локальные замеры."),
-    ("02_home.png", "Главный экран",
-     "Сверху: CRM · сделки замеров (воронка, статусы, SMS/TG).\nСнизу: локальные замеры (офлайн-конструктор).\n\nКнопка «+ Сделка» — создать сделку в вебе.\nЛидоруб обычно создаёт через Telegram /zamer."),
+     "1. Откройте moracul.ru/bestpaints\n2. Логин bestpaints\n3. Пароль ZamerBp2026!\n4. Нажмите «Войти»"),
+    ("02_home.png", "Сделки",
+     "Вкладка «Сделки» — воронка замеров.\n+ Сделка или Telegram /zamer.\nКарточка: статусы, сумма и скидка."),
+    ("10_analytics.png", "Аналитика",
+     "Заключено / В работе / Не заключено — суммы.\nКонверсия · средний чек · скидка %.\nЗамеры, площадь, воронка, топ по замерщикам.\nПериод: 7 / 30 / месяц / всё."),
+    ("11_schedule.png", "График",
+     "Клик по человеку = в смене.\nБез графика сделка не назначается.\nБот: /grafik_fill"),
+    ("12_team.png", "Команда",
+     "Имя + @ник Telegram.\nПосле /start в боте — «связан».\nЛидоруб / замерщик / менеджер."),
     ("03_crm_create.png", "Создание сделки",
-     "Поля:\n• Название сделки (как в вашей CRM)\n• Квалификация\n• Адрес · дата замера\n• Клиент / Лидоруб\n\nНазначение замерщика — из графика на дату.\nЕсли график пуст — статус «Создана»."),
-    ("04_crm_detail.png", "Карточка сделки — статусы",
-     "Замерщик по порядку:\n1. Взял в работу\n2. Выезд подтверждён\n3. На адресе · начинаю замер\n4. Конструктор / смета\n5. Заключил / Не заключил\n\nКаждый шаг уходит в группу BP Ops."),
-    ("05_crm_admin.png", "Исправить / удалить / вернуть",
-     "Блок «Исправить статус / удалить»:\n• сменить статус вручную\n• Вернуть в работу\n• Удалить сделку\n\nЕсли нажали не ту кнопку — здесь правите."),
-    ("06_step_project.png", "Замер: шаг «Проект»",
-     "Данные клиента и объекта.\nЕсли сделка из CRM — часть полей уже заполнена.\nИз CRM конструктор стартует со шага «Строение»."),
-    ("07_step_building.png", "Шаг «Строение»",
-     "Тип строения, зоны (фасад/интерьер),\nматериал, крыша.\nНесколько строений на одном участке — вкладками."),
+     "Название · квалификация · адрес · дата.\nЗамерщик — из графика или вручную."),
+    ("04_crm_detail.png", "Карточка и сумма",
+     "Статусы по порядку.\nБлок «Сумма и скидка» → в аналитику.\nЗаключил / Не заключил."),
+    ("05_crm_admin.png", "Исправить статус",
+     "Сменить статус · вернуть · удалить.\nЕсли нажали не ту кнопку — здесь."),
     ("08_step_tech.png", "Конструктор ЛКМ",
-     "Состояние дома → технология 1–5 → состав.\n12 составов: ADLER, G-Nature, OSMO, Россия, WOLMAN.\nНа карточке: веер, гарантия, цены за м², сумма."),
-    ("09_step_estimate.png", "Смета и договор",
-     "Итог, PDF, договорные поля.\nПосле выезда: «Заключил» → чек-лист + чат «Подписанные».\n«Не заключил» → менеджеру из графика (защита ТЗ)."),
-    (None, "Telegram: кто что жмёт",
-     "Лидоруб: /zamer (сделка + аудио)\nАдмин: /grafik, /grafik_add, /bp_staff\n\nГруппа BP Ops — лента статусов\nГруппа BP Подписанные — только договоры\n\nSMS — когда подключим шлюз (сейчас stub)."),
+     "Технология 1–5 · 12 составов.\nЦены за м² → смета → скидка %."),
+    ("09_step_estimate.png", "Смета",
+     "Итог и скидка.\nСохраните сумму в карточке CRM.\nДоговор → группа «Подписанные»."),
     (None, "Чек-лист первого дня",
-     "□ Войти в кабинет\n□ Бот в группах + /chatid\n□ /grafik_add на сегодня\n□ /zamer тестовая сделка\n□ Пройти статусы до «на адресе»\n□ Открыть конструктор ЛКМ\n□ Проверить Ops / Подписанные"),
+     "□ Войти · вкладки понятны\n□ Команда: имя + @ник\n□ График на сегодня\n□ /zamer или + Сделка\n□ Сумма в карточке\n□ Аналитика: цифры сходятся\n□ Ops / Подписанные"),
 ]
 
 
@@ -71,6 +71,17 @@ def capture():
         page.wait_for_url("**/bestpaints/**", timeout=30000)
         page.wait_for_timeout(1500)
         shot(page, "02_home")
+        # Analytics / Schedule / Team tabs
+        for tab, name in [("analytics", "10_analytics"), ("schedule", "11_schedule"), ("team", "12_team")]:
+            t = page.locator(f'.crm-tab[data-tab="{tab}"]').first
+            if t.count():
+                t.click()
+                page.wait_for_timeout(1200)
+                shot(page, name)
+        deals = page.locator('.crm-tab[data-tab="deals"]').first
+        if deals.count():
+            deals.click()
+            page.wait_for_timeout(600)
         btn = page.locator("#crm-toggle-create").first
         if btn.count():
             btn.click()
@@ -91,6 +102,11 @@ def capture():
         else:
             shot(page, "04_crm_detail")
             shot(page, "05_crm_admin")
+        # open local fold then new survey if available
+        fold = page.locator("details.local-fold summary").first
+        if fold.count():
+            fold.click()
+            page.wait_for_timeout(400)
         new_btn = page.locator("#btn-new").first
         if new_btn.count():
             new_btn.click()
@@ -175,7 +191,10 @@ def build_pdf():
         pdf.image(str(sp), x=0, y=0, w=297.0, h=297.0 * 9 / 16)
     OUT_PDF.parent.mkdir(parents=True, exist_ok=True)
     pdf.output(str(OUT_PDF))
+    v5 = OUT_PDF.with_name("BestPaints_Obuchenie_v5.pdf")
+    v5.write_bytes(OUT_PDF.read_bytes())
     print("PDF", OUT_PDF, OUT_PDF.stat().st_size)
+    print("PDF", v5, v5.stat().st_size)
 
 
 def main():

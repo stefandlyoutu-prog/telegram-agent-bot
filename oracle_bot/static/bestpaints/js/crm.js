@@ -68,6 +68,15 @@ export async function deleteStaffPerson(role, id) {
   return api(`/staff/person/${encodeURIComponent(role)}/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export async function fetchAnalytics(period = "30d") {
+  return api(`/analytics?period=${encodeURIComponent(period)}`);
+}
+
+function moneyFmt(n) {
+  const v = Math.round(Number(n) || 0);
+  return v.toLocaleString("ru-RU") + " ₽";
+}
+
 function nickOf(p) {
   const u = String(p?.tg_username || "").replace(/^@/, "");
   return u ? `@${u}` : "";
@@ -157,6 +166,8 @@ export function boardHtml(objects) {
         ${esc(o.address || "без адреса")}
         ${o.measure_date ? ` · ${esc(o.measure_date)}` : ""}
         ${o.surveyor_name ? ` · ${esc(o.surveyor_name)}` : ""}
+        ${Number(o.amount_total) > 0 ? ` · <span class="crm-money">${esc(moneyFmt(o.amount_total))}</span>` : ""}
+        ${Number(o.discount_pct) > 0 ? ` · −${esc(String(o.discount_pct))}%` : ""}
         ${o.escalated_at ? ` · <span class="crm-escalated">эскалация</span>` : ""}
       </div>
     </button>`
@@ -292,6 +303,7 @@ export function homeCrmSectionHtml() {
   <section class="crm-shell" id="crm-shell">
     <nav class="crm-tabs" role="tablist">
       <button type="button" class="crm-tab active" data-tab="deals">Сделки</button>
+      <button type="button" class="crm-tab" data-tab="analytics">Аналитика</button>
       <button type="button" class="crm-tab" data-tab="schedule">График</button>
       <button type="button" class="crm-tab" data-tab="team">Команда</button>
     </nav>
@@ -307,10 +319,112 @@ export function homeCrmSectionHtml() {
         <div id="crm-create-wrap" class="crm-create-wrap" hidden></div>
         <div id="crm-deals-list"></div>
       </div>
+      <div class="crm-tab-panel" id="crm-panel-analytics" data-panel="analytics" hidden></div>
       <div class="crm-tab-panel" id="crm-panel-schedule" data-panel="schedule" hidden></div>
       <div class="crm-tab-panel" id="crm-panel-team" data-panel="team" hidden></div>
     </div>
   </section>`;
+}
+
+function analyticsHtml(data, period) {
+  const k = data.kpis || {};
+  const maxFunnel = Math.max(1, ...((data.funnel || []).map((f) => f.count)));
+  return `
+  <div class="crm-panel-inner an-root">
+    <div class="crm-panel-head">
+      <div>
+        <h3>Аналитика</h3>
+        <p class="hint">${esc(data.from || "…")} → ${esc(data.to || "…")}</p>
+      </div>
+    </div>
+    <div class="an-periods" id="an-periods">
+      ${[
+        ["7d", "7 дней"],
+        ["30d", "30 дней"],
+        ["month", "Месяц"],
+        ["all", "Всё"],
+      ]
+        .map(
+          ([id, label]) =>
+            `<button type="button" class="an-period ${period === id ? "on" : ""}" data-period="${id}">${label}</button>`
+        )
+        .join("")}
+    </div>
+    <div class="an-hero">
+      <div class="an-hero-card win">
+        <span>Заключено</span>
+        <strong>${esc(moneyFmt(k.signed_sum))}</strong>
+        <em>${esc(String(k.signed || 0))} сделок</em>
+      </div>
+      <div class="an-hero-card work">
+        <span>В работе</span>
+        <strong>${esc(moneyFmt(k.in_work_sum))}</strong>
+        <em>${esc(String(k.in_work || 0))} сделок</em>
+      </div>
+      <div class="an-hero-card lose">
+        <span>Не заключено</span>
+        <strong>${esc(moneyFmt(k.declined_sum))}</strong>
+        <em>${esc(String(k.declined || 0))} сделок</em>
+      </div>
+    </div>
+    <div class="an-kpis">
+      <div class="an-kpi"><span>Конверсия</span><strong>${esc(String(k.conversion_pct || 0))}%</strong></div>
+      <div class="an-kpi"><span>Средний чек</span><strong>${esc(moneyFmt(k.avg_check))}</strong></div>
+      <div class="an-kpi"><span>Ср. скидка</span><strong>${esc(String(k.avg_discount_pct || 0))}%</strong></div>
+      <div class="an-kpi"><span>Скидки, ₽</span><strong>${esc(moneyFmt(k.discount_rub))}</strong></div>
+      <div class="an-kpi"><span>Замеров</span><strong>${esc(String(k.measures || 0))}</strong></div>
+      <div class="an-kpi"><span>Площадь</span><strong>${esc(String(k.area_m2 || 0))} м²</strong></div>
+    </div>
+    ${(k.without_amount || 0) > 0 ? `<p class="hint an-warn">Без суммы в CRM: ${esc(String(k.without_amount))} — укажите в карточке сделки.</p>` : ""}
+    <div class="an-block">
+      <div class="crm-chip-label">Воронка за период</div>
+      <div class="an-funnel">
+        ${(data.funnel || [])
+          .filter((f) => f.count > 0)
+          .map(
+            (f) => `
+          <div class="an-funnel-row">
+            <span>${esc(f.label)}</span>
+            <div class="an-bar"><i style="width:${Math.round((100 * f.count) / maxFunnel)}%;background:${esc(f.color)}"></i></div>
+            <b>${esc(String(f.count))}</b>
+          </div>`
+          )
+          .join("") || "<p class='hint'>Нет сделок за период</p>"}
+      </div>
+    </div>
+    <div class="an-block">
+      <div class="crm-chip-label">По замерщикам</div>
+      <div class="an-people">
+        ${(data.by_surveyor || [])
+          .map(
+            (p) => `
+          <div class="an-person">
+            <strong>${esc(p.name)}</strong>
+            <span>${esc(String(p.deals))} сделок · ✅ ${esc(String(p.signed))} · ✕ ${esc(String(p.declined))}</span>
+            <em>${esc(moneyFmt(p.sum_signed))} заключено</em>
+          </div>`
+          )
+          .join("") || "<p class='hint'>Пока пусто</p>"}
+      </div>
+    </div>
+    ${
+      (data.top_signed || []).length
+        ? `<div class="an-block">
+      <div class="crm-chip-label">Топ договоров</div>
+      <div class="an-top">
+        ${data.top_signed
+          .map(
+            (t) => `<button type="button" class="an-top-row" data-crm-open="${esc(t.id)}">
+              <span>${esc(t.title)}</span>
+              <b>${esc(moneyFmt(t.amount_total))}${t.discount_pct ? ` <i>−${esc(String(t.discount_pct))}%</i>` : ""}</b>
+            </button>`
+          )
+          .join("")}
+      </div>
+    </div>`
+        : ""
+    }
+  </div>`;
 }
 
 export async function mountHomeCrm(ctx) {
@@ -357,6 +471,7 @@ export async function mountHomeCrm(ctx) {
       showTab(tab.dataset.tab);
       if (tab.dataset.tab === "schedule") await renderSchedule();
       if (tab.dataset.tab === "team") await renderTeam();
+      if (tab.dataset.tab === "analytics") await renderAnalytics("30d");
     };
   });
 
@@ -364,6 +479,26 @@ export async function mountHomeCrm(ctx) {
     meta = await getMeta();
     const d = (meta.on_duty_surveyors || []).map((s) => s.name).join(", ") || "никого — откройте «График»";
     if (dutyEl) dutyEl.textContent = `На смене сегодня: ${d}`;
+  }
+
+  async function renderAnalytics(period) {
+    const panel = root.querySelector("#crm-panel-analytics");
+    panel.innerHTML = `<p class="hint" style="padding:12px">Считаем…</p>`;
+    try {
+      const data = await fetchAnalytics(period);
+      panel.innerHTML = analyticsHtml(data, period);
+      panel.querySelectorAll("[data-period]").forEach((btn) => {
+        btn.onclick = () => renderAnalytics(btn.getAttribute("data-period"));
+      });
+      panel.querySelectorAll("[data-crm-open]").forEach((btn) => {
+        btn.onclick = (ev) => {
+          ev.preventDefault();
+          onOpenDetail(btn.getAttribute("data-crm-open"));
+        };
+      });
+    } catch (err) {
+      panel.innerHTML = `<div class="callout danger">${esc(err.message || err)}</div>`;
+    }
   }
 
   async function renderSchedule() {
@@ -591,6 +726,19 @@ export function detailHtml(obj, events, meta) {
     ${obj.survey_local_id ? `<p><strong>Локальный замер:</strong> ${esc(obj.survey_local_id)}</p>` : ""}
     ${obj.escalated_at ? `<p class="crm-escalated">Эскалация: замерщик не взял вовремя (${fmtTs(obj.escalated_at)})</p>` : ""}
   </section>
+  <section class="crm-money-box">
+    <h3>Сумма и скидка</h3>
+    <p class="hint">Попадает в аналитику. После сметы в конструкторе внесите итог сюда.</p>
+    <div class="crm-form-row">
+      <label>Сумма до скидки, ₽<input id="crm-money-sub" type="number" min="0" step="100" value="${esc(obj.amount_subtotal || "")}" /></label>
+      <label>Скидка, %<input id="crm-money-disc" type="number" min="0" max="100" step="0.5" value="${esc(obj.discount_pct || 0)}" /></label>
+    </div>
+    <div class="crm-form-row">
+      <label>Итого, ₽<input id="crm-money-total" type="number" min="0" step="100" value="${esc(obj.amount_total || "")}" readonly /></label>
+      <label>Площадь, м²<input id="crm-money-area" type="number" min="0" step="0.1" value="${esc(obj.area_m2 || "")}" /></label>
+    </div>
+    <button type="button" class="btn primary" id="crm-save-money">Сохранить в аналитику</button>
+  </section>
   ${audioHtml(obj)}
   <div class="crm-actions">
     ${actions
@@ -648,6 +796,30 @@ export async function mountDetail(ctx) {
   root.querySelector("#crm-back").onclick = onBack;
 
   const refresh = () => mountDetail(ctx);
+
+  const subEl = root.querySelector("#crm-money-sub");
+  const discEl = root.querySelector("#crm-money-disc");
+  const totEl = root.querySelector("#crm-money-total");
+  const recalc = () => {
+    const sub = Number(subEl?.value || 0);
+    const disc = Number(discEl?.value || 0);
+    if (totEl) totEl.value = String(Math.round(sub * (1 - disc / 100)));
+  };
+  subEl?.addEventListener("input", recalc);
+  discEl?.addEventListener("input", recalc);
+  root.querySelector("#crm-save-money")?.addEventListener("click", async () => {
+    try {
+      await doAction(objectId, "save_money", {
+        amount_subtotal: Number(subEl?.value || 0),
+        discount_pct: Number(discEl?.value || 0),
+        area_m2: Number(root.querySelector("#crm-money-area")?.value || 0),
+      });
+      toast("Сумма сохранена");
+      await refresh();
+    } catch (err) {
+      toast(String(err.message || err));
+    }
+  });
 
   async function runAction(action, extra = {}) {
     if (action === "open_survey") {

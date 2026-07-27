@@ -514,7 +514,7 @@ function renderHome() {
 
     <p class="footer-note">
       <a href="/bestpaints/docs/TOMORROW_PLAYBOOK.html" target="_blank" rel="noopener">Шпаргалка</a>
-      · <a href="/bestpaints/docs/BestPaints_Obuchenie_v4.pdf?v=20260728" target="_blank" rel="noopener">PDF</a>
+      · <a href="/bestpaints/docs/BestPaints_Obuchenie_v5.pdf?v=20260728a" target="_blank" rel="noopener">PDF</a>
       · <a href="/bestpaints/logout">Выйти</a>
     </p>
   `;

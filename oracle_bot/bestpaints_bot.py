@@ -28,7 +28,7 @@ logger = logging.getLogger("oracle_bot.bestpaints")
 router = Router(name="bestpaints")
 
 CABINET = "https://moracul.ru/bestpaints/"
-PDF = "https://moracul.ru/bestpaints/docs/BestPaints_Obuchenie_v4.pdf?v=20260728"
+PDF = "https://moracul.ru/bestpaints/docs/BestPaints_Obuchenie_v5.pdf?v=20260728a"
 PLAYBOOK = "https://moracul.ru/bestpaints/docs/TOMORROW_PLAYBOOK.html"
 
 

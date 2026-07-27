@@ -472,11 +472,32 @@ async def bp_api_staff_delete(role: str, person_id: str, request: Request):
         raise HTTPException(400, str(e)) from e
 
 
+@app.get("/bestpaints/api/analytics")
+async def bp_api_analytics(
+    request: Request,
+    period: str = "30d",
+    date_from: str | None = None,
+    date_to: str | None = None,
+):
+    _bp_api_auth(request)
+    try:
+        return bp_crm.analytics(period=period, date_from=date_from, date_to=date_to)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.get("/bestpaints/{file_path:path}")
 async def bestpaints_files(file_path: str, request: Request):
     # Bust stale cached training PDF
-    if file_path in ("docs/BestPaints_Obuchenie.pdf", "docs/BestPaints_Obuchenie.pdf/", "docs/BestPaints_Obuchenie_v3.pdf", "docs/BestPaints_Obuchenie_v3.pdf/"):
-        return RedirectResponse("/bestpaints/docs/BestPaints_Obuchenie_v4.pdf?v=20260728", status_code=302)
+    if file_path in (
+        "docs/BestPaints_Obuchenie.pdf",
+        "docs/BestPaints_Obuchenie.pdf/",
+        "docs/BestPaints_Obuchenie_v3.pdf",
+        "docs/BestPaints_Obuchenie_v3.pdf/",
+        "docs/BestPaints_Obuchenie_v4.pdf",
+        "docs/BestPaints_Obuchenie_v4.pdf/",
+    ):
+        return RedirectResponse("/bestpaints/docs/BestPaints_Obuchenie_v5.pdf?v=20260728a", status_code=302)
     if file_path.startswith("api/"):
         raise HTTPException(404, "Not found")
     if file_path in ("login", "login.html"):

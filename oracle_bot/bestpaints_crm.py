@@ -270,6 +270,10 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
         "lidarub_tg_id": "TEXT NOT NULL DEFAULT ''",
         "visit_reminded_at": "REAL",
         "deal_source": "TEXT NOT NULL DEFAULT 'web'",
+        "amount_subtotal": "REAL NOT NULL DEFAULT 0",
+        "discount_pct": "REAL NOT NULL DEFAULT 0",
+        "amount_total": "REAL NOT NULL DEFAULT 0",
+        "area_m2": "REAL NOT NULL DEFAULT 0",
     }
     for name, decl in alters.items():
         if name not in cols:
@@ -377,7 +381,67 @@ def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
     d["status_label"] = meta["label"]
     d["status_color"] = meta["color"]
     d["is_deleted"] = bool(d.get("deleted_at"))
+    d["amount_subtotal"] = float(d.get("amount_subtotal") or 0)
+    d["discount_pct"] = float(d.get("discount_pct") or 0)
+    d["amount_total"] = float(d.get("amount_total") or 0)
+    d["area_m2"] = float(d.get("area_m2") or 0)
     return d
+
+
+def _money_fields(payload: dict[str, Any]) -> dict[str, float]:
+    """Parse money from payload; recompute total if discount/subtotal given."""
+    out: dict[str, float] = {}
+    if "area_m2" in payload and payload.get("area_m2") is not None:
+        try:
+            out["area_m2"] = max(0.0, float(payload.get("area_m2") or 0))
+        except (TypeError, ValueError):
+            out["area_m2"] = 0.0
+    sub = payload.get("amount_subtotal", payload.get("subtotal"))
+    disc = payload.get("discount_pct", payload.get("discount"))
+    total = payload.get("amount_total", payload.get("total"))
+    try:
+        if sub is not None and str(sub).strip() != "":
+            out["amount_subtotal"] = max(0.0, float(sub))
+    except (TypeError, ValueError):
+        pass
+    try:
+        if disc is not None and str(disc).strip() != "":
+            out["discount_pct"] = min(100.0, max(0.0, float(disc)))
+    except (TypeError, ValueError):
+        pass
+    if "amount_subtotal" in out or "discount_pct" in out:
+        # need both to recompute — caller merges with existing
+        pass
+    try:
+        if total is not None and str(total).strip() != "" and "amount_subtotal" not in out:
+            out["amount_total"] = max(0.0, float(total))
+    except (TypeError, ValueError):
+        pass
+    return out
+
+
+def _apply_money(updates: dict[str, Any], obj: dict[str, Any], payload: dict[str, Any]) -> None:
+    keys = ("amount_subtotal", "discount_pct", "amount_total", "subtotal", "total", "discount", "area_m2")
+    if not any(k in payload for k in keys):
+        return
+    money = _money_fields(payload)
+    sub = float(money.get("amount_subtotal", obj.get("amount_subtotal") or 0))
+    disc = float(money.get("discount_pct", obj.get("discount_pct") or 0))
+    if "amount_subtotal" in money:
+        updates["amount_subtotal"] = sub
+        sub = money["amount_subtotal"]
+    if "discount_pct" in money:
+        updates["discount_pct"] = disc
+        disc = money["discount_pct"]
+    if "area_m2" in money:
+        updates["area_m2"] = money["area_m2"]
+    if "amount_subtotal" in money or "discount_pct" in money:
+        updates["amount_total"] = round(float(sub) * (1 - float(disc) / 100.0), 2)
+    elif "amount_total" in money:
+        updates["amount_total"] = money["amount_total"]
+        if not float(obj.get("amount_subtotal") or 0):
+            updates["amount_subtotal"] = money["amount_total"]
+            updates.setdefault("discount_pct", float(obj.get("discount_pct") or 0))
 
 
 def log_event(object_id: str, kind: str, message: str) -> None:
@@ -891,12 +955,14 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         updates["estimate_at"] = now
         if payload.get("survey_local_id"):
             updates["survey_local_id"] = payload["survey_local_id"]
+        _apply_money(updates, obj, payload)
         message = "Смета/замер сохранены"
 
     elif action in ("sign_contract", "sign_on_site"):
         updates["status"] = "contract_signed"
         updates["contract_at"] = now
         updates["checklist_json"] = json.dumps({i["id"]: False for i in CHECKLIST_SIGNED}, ensure_ascii=False)
+        _apply_money(updates, obj, payload)
         message = "Договор заключён на адресе"
         chat = resolve_chat("signed")
         notify_all(
@@ -911,6 +977,7 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         if payload.get("refusal_reason"):
             updates["refusal_reason"] = str(payload["refusal_reason"])
         updates["checklist_json"] = json.dumps({i["id"]: False for i in CHECKLIST_DECLINED}, ensure_ascii=False)
+        _apply_money(updates, obj, payload)
         message = "Договор не заключён на адресе"
         _broadcast_status(obj, "Не заключён — уйдёт менеджеру")
 
@@ -987,11 +1054,21 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
 
     elif action == "link_survey":
         updates["survey_local_id"] = payload.get("survey_local_id") or ""
+        _apply_money(updates, obj, payload)
         message = "Привязан локальный замер"
 
     elif action == "save_uploads":
         updates["uploads_json"] = json.dumps(payload.get("uploads") or {}, ensure_ascii=False)
         message = "Ссылки на загрузки сохранены"
+
+    elif action == "save_money":
+        _apply_money(updates, obj, payload)
+        if not any(k in updates for k in ("amount_subtotal", "discount_pct", "amount_total", "area_m2")):
+            raise ValueError("укажите сумму или скидку")
+        message = (
+            f"Смета в CRM: {updates.get('amount_total', obj.get('amount_total')):,.0f} ₽"
+            f" (скидка {updates.get('discount_pct', obj.get('discount_pct')):g}%)"
+        ).replace(",", " ")
 
     elif action == "reassign_surveyor":
         sid = (payload.get("surveyor_id") or "").strip()
@@ -1088,6 +1165,165 @@ def resolve_chat(role: str) -> str:
 
 
 
+def _period_bounds(period: str, date_from: str | None = None, date_to: str | None = None) -> tuple[float | None, float | None, str, str]:
+    """Return (ts_from, ts_to, label_from, label_to) in Moscow TZ."""
+    today = datetime.now(TZ).date()
+    if date_from or date_to:
+        d0 = date.fromisoformat(date_from) if date_from else date(1970, 1, 1)
+        d1 = date.fromisoformat(date_to) if date_to else today
+        start = datetime(d0.year, d0.month, d0.day, tzinfo=TZ)
+        end = datetime(d1.year, d1.month, d1.day, 23, 59, 59, tzinfo=TZ)
+        return start.timestamp(), end.timestamp(), d0.isoformat(), d1.isoformat()
+    p = (period or "30d").strip().lower()
+    if p in ("all", "всё", "vse"):
+        return None, None, "", today.isoformat()
+    if p in ("today", "день", "1d"):
+        d0 = today
+    elif p in ("7d", "week", "неделя"):
+        d0 = today - timedelta(days=6)
+    elif p in ("month", "месяц", "mtd"):
+        d0 = today.replace(day=1)
+    else:  # 30d default
+        d0 = today - timedelta(days=29)
+        p = "30d"
+    start = datetime(d0.year, d0.month, d0.day, tzinfo=TZ)
+    end = datetime(today.year, today.month, today.day, 23, 59, 59, tzinfo=TZ)
+    return start.timestamp(), end.timestamp(), d0.isoformat(), today.isoformat()
+
+
+IN_WORK_STATUSES = {
+    "created",
+    "assigned",
+    "accepted",
+    "visit_confirmed",
+    "on_site",
+    "manager_assigned",
+    "manager_accepted",
+}
+WON_STATUSES = {"contract_signed", "closed"}
+LOST_STATUSES = {"contract_declined"}
+# manager_* after decline still "not signed" pipeline — count separately as open_lost
+
+
+def analytics(*, period: str = "30d", date_from: str | None = None, date_to: str | None = None) -> dict[str, Any]:
+    init_db()
+    ts_from, ts_to, label_from, label_to = _period_bounds(period, date_from, date_to)
+    objs = list_objects(include_deleted=False)
+
+    def in_period(ts: float | None) -> bool:
+        if ts is None:
+            return ts_from is None
+        if ts_from is not None and ts < ts_from:
+            return False
+        if ts_to is not None and ts > ts_to:
+            return False
+        return True
+
+    created = [o for o in objs if in_period(o.get("created_at"))]
+    # outcome by contract_at if set else updated_at for closed/signed in period
+    def outcome_ts(o: dict[str, Any]) -> float | None:
+        return o.get("contract_at") or o.get("updated_at")
+
+    signed = [o for o in objs if o.get("status") in WON_STATUSES and in_period(outcome_ts(o))]
+    declined = [
+        o
+        for o in objs
+        if o.get("status") in LOST_STATUSES | {"manager_assigned", "manager_accepted"}
+        and in_period(outcome_ts(o))
+    ]
+    in_work = [o for o in objs if o.get("status") in IN_WORK_STATUSES]
+    measured = [
+        o
+        for o in created
+        if o.get("on_site_at") or o.get("status") in ("on_site", "contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed")
+    ]
+
+    def money_sum(rows: list[dict[str, Any]]) -> float:
+        return round(sum(float(o.get("amount_total") or 0) for o in rows), 2)
+
+    def money_sub(rows: list[dict[str, Any]]) -> float:
+        return round(sum(float(o.get("amount_subtotal") or 0) for o in rows), 2)
+
+    signed_sum = money_sum(signed)
+    declined_sum = money_sum(declined)
+    in_work_sum = money_sum(in_work)
+    pipeline_sum = money_sum(created)
+    decided = len(signed) + len(declined)
+    conversion = round(100.0 * len(signed) / decided, 1) if decided else 0.0
+    with_money = [o for o in signed if float(o.get("amount_total") or 0) > 0]
+    avg_check = round(signed_sum / len(with_money), 2) if with_money else 0.0
+    discounts = [float(o.get("discount_pct") or 0) for o in signed + declined if float(o.get("amount_subtotal") or 0) > 0 or float(o.get("discount_pct") or 0) > 0]
+    avg_discount = round(sum(discounts) / len(discounts), 1) if discounts else 0.0
+    discount_rub = round(money_sub(signed) - signed_sum, 2) if signed else 0.0
+    area_sum = round(sum(float(o.get("area_m2") or 0) for o in measured), 1)
+
+    by_status: dict[str, int] = {}
+    for o in created:
+        st = o.get("status") or "created"
+        by_status[st] = by_status.get(st, 0) + 1
+
+    by_surveyor: list[dict[str, Any]] = []
+    buckets: dict[str, dict[str, Any]] = {}
+    for o in created:
+        name = o.get("surveyor_name") or "Без замерщика"
+        b = buckets.setdefault(name, {"name": name, "deals": 0, "signed": 0, "declined": 0, "sum_signed": 0.0, "sum_work": 0.0})
+        b["deals"] += 1
+        if o.get("status") in WON_STATUSES:
+            b["signed"] += 1
+            b["sum_signed"] += float(o.get("amount_total") or 0)
+        elif o.get("status") in LOST_STATUSES | {"manager_assigned", "manager_accepted"}:
+            b["declined"] += 1
+        if o.get("status") in IN_WORK_STATUSES:
+            b["sum_work"] += float(o.get("amount_total") or 0)
+    by_surveyor = sorted(buckets.values(), key=lambda x: (-x["sum_signed"], -x["deals"]))
+    for b in by_surveyor:
+        b["sum_signed"] = round(b["sum_signed"], 2)
+        b["sum_work"] = round(b["sum_work"], 2)
+
+    funnel = []
+    for sid, label, color in STATUSES:
+        funnel.append({"id": sid, "label": label, "color": color, "count": by_status.get(sid, 0)})
+
+    return {
+        "period": period or "custom",
+        "from": label_from,
+        "to": label_to,
+        "kpis": {
+            "deals_created": len(created),
+            "in_work": len(in_work),
+            "in_work_sum": in_work_sum,
+            "signed": len(signed),
+            "signed_sum": signed_sum,
+            "declined": len(declined),
+            "declined_sum": declined_sum,
+            "conversion_pct": conversion,
+            "avg_check": avg_check,
+            "avg_discount_pct": avg_discount,
+            "discount_rub": discount_rub,
+            "measures": len(measured),
+            "area_m2": area_sum,
+            "pipeline_sum": pipeline_sum,
+            "without_amount": sum(1 for o in created if float(o.get("amount_total") or 0) <= 0),
+        },
+        "funnel": funnel,
+        "by_surveyor": by_surveyor,
+        "top_signed": sorted(
+            [
+                {
+                    "id": o["id"],
+                    "title": o.get("title"),
+                    "amount_total": float(o.get("amount_total") or 0),
+                    "discount_pct": float(o.get("discount_pct") or 0),
+                    "surveyor_name": o.get("surveyor_name") or "",
+                }
+                for o in signed
+                if float(o.get("amount_total") or 0) > 0
+            ],
+            key=lambda x: -x["amount_total"],
+        )[:5],
+    }
+
+
 def meta() -> dict[str, Any]:
     init_db()
     return {
@@ -1103,4 +1339,5 @@ def meta() -> dict[str, Any]:
         "tg_ops": resolve_chat("ops"),
         "tg_signed": resolve_chat("signed"),
         "roles_hint": "Лидоруб создаёт сделку в ТГ; админ заполняет график; замерщик/менеджер ведут статусы в веб.",
+        "analytics_hint": "Вкладка «Аналитика»: суммы, конверсия, скидки за период.",
     }
