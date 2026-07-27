@@ -452,6 +452,105 @@ def log_event(object_id: str, kind: str, message: str) -> None:
         )
 
 
+def _msg_lines(*parts: str) -> str:
+    """Столбик для TG/SMS: без пустых строк, без «простыни»."""
+    out: list[str] = []
+    for p in parts:
+        s = (p or "").strip()
+        if s:
+            out.append(s)
+    return "\n".join(out)
+
+
+def format_deal_created(
+    *,
+    title: str,
+    address: str,
+    measure_date: str,
+    qualification: str,
+    link: str,
+    surveyor_name: str = "",
+) -> str:
+    return _msg_lines(
+        "🏠 BestPaints · новая сделка",
+        f"«{title}»",
+        f"📍 {address or '—'}",
+        f"📅 Замер: {measure_date or '—'}",
+        f"🏷️ {qualification[:200] or '—'}" if (qualification or "").strip() else "",
+        f"👷 {surveyor_name}" if surveyor_name else "",
+        "",
+        "👉 Откройте и нажмите «Взял в работу»:",
+        link,
+    )
+
+
+def format_status_change(*, title: str, label: str, address: str, link: str) -> str:
+    return _msg_lines(
+        "BestPaints · статус",
+        f"«{title}»",
+        f"→ {label}",
+        f"📍 {address or '—'}",
+        link,
+    )
+
+
+def format_no_schedule(*, title: str, address: str, assign_day: str) -> str:
+    return _msg_lines(
+        "⚠️ BestPaints · нет графика",
+        f"«{title}»",
+        f"📍 {address or '—'}",
+        f"На {assign_day} замерщиков нет в графике.",
+        "Админ: заполните /grafik",
+    )
+
+
+def format_visit_reminder(*, title: str, address: str, link: str) -> str:
+    return _msg_lines(
+        "BestPaints · завтра замер",
+        f"«{title}»",
+        f"📍 {address or '—'}",
+        "Позвоните клиенту и нажмите «Выезд подтверждён»:",
+        link,
+    )
+
+
+def format_assigned(*, title: str, link: str) -> str:
+    return _msg_lines(
+        "BestPaints · вам сделка",
+        f"«{title}»",
+        link,
+    )
+
+
+def format_manager_take(*, title: str, address: str, link: str) -> str:
+    return _msg_lines(
+        "🔔 BestPaints · защита ТЗ",
+        f"«{title}»",
+        f"📍 {address or '—'}",
+        "Берите в работу:",
+        link,
+    )
+
+
+def format_contract_signed(*, title: str, address: str, client: str, surveyor: str) -> str:
+    return _msg_lines(
+        "✍️ BestPaints · договор заключён",
+        f"«{title}»",
+        f"📍 {address or '—'}",
+        f"Клиент: {client or '—'}",
+        f"Замерщик: {surveyor or '—'}",
+    )
+
+
+def format_escalation(*, title: str, address: str, surveyor: str, phone: str, hours: float) -> str:
+    return _msg_lines(
+        f"⚠️ BestPaints · не взяли за {hours:g} ч",
+        f"«{title}»",
+        f"📍 {address or '—'}",
+        f"Назначен: {surveyor or '—'} ({phone or '—'})",
+    )
+
+
 def notify_phones(text: str, phones: list[str]) -> list[str]:
     notes: list[str] = []
     seen: set[str] = set()
@@ -471,7 +570,8 @@ def notify_all(text: str, *, phone: str = "", telegram_chat: str = "", skip_tg: 
     if phone and os.getenv("BESTPAINTS_SMS_URL", "").strip():
         notes.append(_send_sms(phone, text))
     elif phone:
-        notes.append(f"SMS stub → {phone}: {text[:120]}")
+        preview = text.replace("\n", " / ")[:120]
+        notes.append(f"SMS stub → {phone}: {preview}")
     if skip_tg:
         return notes
     chat = telegram_chat or resolve_chat("ops")
@@ -480,9 +580,11 @@ def notify_all(text: str, *, phone: str = "", telegram_chat: str = "", skip_tg: 
     ):
         notes.append(_send_telegram(chat, text))
     elif text and chat:
-        notes.append(f"TG stub → {chat}: {text[:120]}")
+        preview = text.replace("\n", " / ")[:120]
+        notes.append(f"TG stub → {chat}: {preview}")
     elif text and not chat:
-        notes.append(f"TG stub: {text[:120]}")
+        preview = text.replace("\n", " / ")[:120]
+        notes.append(f"TG stub: {preview}")
     return notes
 
 
@@ -491,11 +593,22 @@ def _send_telegram(chat_id: str, text: str) -> str:
     if not token:
         return "TG skip: no token"
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    body = urllib.parse.urlencode({"chat_id": chat_id, "text": text[:3500]}).encode()
+    body = urllib.parse.urlencode(
+        {
+            "chat_id": chat_id,
+            "text": text[:3500],
+            "disable_web_page_preview": "true",
+        }
+    ).encode()
     try:
         with urllib.request.urlopen(urllib.request.Request(url, data=body, method="POST"), timeout=20) as r:
-            r.read()
-        return f"TG ok → {chat_id}"
+            raw = r.read().decode("utf-8", errors="replace")
+        mid = ""
+        try:
+            mid = str(json.loads(raw).get("result", {}).get("message_id") or "")
+        except Exception:  # noqa: BLE001
+            mid = ""
+        return f"TG ok → {chat_id}" + (f" #{mid}" if mid else "")
     except Exception as e:  # noqa: BLE001
         return f"TG fail → {chat_id}: {e}"
 
@@ -504,7 +617,9 @@ def _send_sms(phone: str, text: str) -> str:
     tpl = os.getenv("BESTPAINTS_SMS_URL", "").strip()
     if not tpl:
         return "SMS stub"
-    url = tpl.replace("{phone}", urllib.parse.quote(phone)).replace("{text}", urllib.parse.quote(text[:300]))
+    # SMS: столбик → короткие строки через " · " чтобы уложиться в лимит шлюза
+    flat = " · ".join(line for line in text.splitlines() if line.strip())
+    url = tpl.replace("{phone}", urllib.parse.quote(phone)).replace("{text}", urllib.parse.quote(flat[:300]))
     try:
         method = os.getenv("BESTPAINTS_SMS_METHOD", "GET").upper()
         req = urllib.request.Request(url, method=method)
@@ -547,8 +662,8 @@ def notify_person(text: str, person: dict[str, Any] | None) -> list[str]:
     mention = ""
     u = _normalize_username(person.get("tg_username"))
     if u:
-        mention = f"@{u} "
-    body = f"{mention}{text}"
+        mention = f"@{u}"
+    body = _msg_lines(mention, text) if mention else text
     if phone:
         notes.extend(notify_all(body, phone=phone, skip_tg=True))
     tg_id = str(person.get("tg_id") or "").strip()
@@ -742,12 +857,9 @@ def create_object(payload: dict[str, Any]) -> dict[str, Any]:
         )
 
     if status == "created":
-        msg = (
-            f"⚠️ BestPaints: сделка «{title}» создана, но график замерщиков на {assign_day} пуст. "
-            f"Админ: заполните график (/grafik). Адрес: {address}"
-        )
+        msg = format_no_schedule(title=title, address=address, assign_day=assign_day)
         notes = notify_all(msg)
-        log_event(oid, "no_schedule", msg + " | " + "; ".join(notes))
+        log_event(oid, "no_schedule", msg.replace("\n", " | ") + " | " + "; ".join(notes))
     else:
         log_event(
             oid,
@@ -755,10 +867,13 @@ def create_object(payload: dict[str, Any]) -> dict[str, Any]:
             f"Сделка создана Лидорубом «{lidarub_name}»: {title}. Назначен {surveyor['name']} ({assign_reason})",
         )
         link = f"https://moracul.ru/bestpaints/?crm={oid}"
-        msg = (
-            f"BestPaints: создана сделка «{title}». Адрес: {address}. Дата замера: {measure_date or '—'}. "
-            f"Квалификация: {qualification[:200] or '—'}. "
-            f"Откройте {link} и нажмите «Взял в работу»."
+        msg = format_deal_created(
+            title=title,
+            address=address,
+            measure_date=measure_date or "",
+            qualification=qualification or "",
+            link=link,
+            surveyor_name=surveyor.get("name") or "",
         )
         notes = notify_person(msg, surveyor)
         log_event(oid, "notify_surveyor", "; ".join(notes))
@@ -827,14 +942,17 @@ def escalate_overdue() -> int:
                 "UPDATE objects SET escalated_at=?, updated_at=? WHERE id=?",
                 (_now(), _now(), d["id"]),
             )
-            msg = (
-                f"⚠️ Замерщик не взял в работу за {hours:g} ч: «{d['title']}», {d['address']}. "
-                f"Назначен: {d['surveyor_name']} ({d['surveyor_phone']})."
+            msg = format_escalation(
+                title=d["title"],
+                address=d.get("address") or "",
+                surveyor=d.get("surveyor_name") or "",
+                phone=d.get("surveyor_phone") or "",
+                hours=hours,
             )
             notes = notify_phones(msg, [d.get("ledorub_phone") or ""])
             conn.execute(
                 "INSERT INTO events(object_id, kind, message, created_at) VALUES (?,?,?,?)",
-                (d["id"], "escalation", msg + " | " + "; ".join(notes), _now()),
+                (d["id"], "escalation", msg.replace("\n", " | ") + " | " + "; ".join(notes), _now()),
             )
             n += 1
     return n
@@ -862,14 +980,11 @@ def send_visit_reminders() -> int:
                 (_now(), _now(), d["id"]),
             )
             link = f"https://moracul.ru/bestpaints/?crm={d['id']}"
-            msg = (
-                f"BestPaints: завтра замер «{d['title']}» ({d['address']}). "
-                f"Позвоните клиенту и нажмите «Выезд подтверждён»: {link}"
-            )
+            msg = format_visit_reminder(title=d["title"], address=d.get("address") or "", link=link)
             notes = notify_phones(msg, [d.get("surveyor_phone") or ""])
             conn.execute(
                 "INSERT INTO events(object_id, kind, message, created_at) VALUES (?,?,?,?)",
-                (d["id"], "visit_reminder", msg + " | " + "; ".join(notes), _now()),
+                (d["id"], "visit_reminder", msg.replace("\n", " | ") + " | " + "; ".join(notes), _now()),
             )
             n += 1
     return n
@@ -877,13 +992,12 @@ def send_visit_reminders() -> int:
 
 def _broadcast_status(obj: dict[str, Any], label: str) -> list[str]:
     link = f"https://moracul.ru/bestpaints/?crm={obj['id']}"
-    msg = f"BestPaints: «{obj['title']}» → {label}. Адрес: {obj.get('address')}. {link}"
-    phones = [
-        obj.get("surveyor_phone") or "",
-        obj.get("lidarub_phone") or obj.get("ledorub_phone") or "",
-        obj.get("manager_phone") or "",
-        obj.get("client_phone") or "",
-    ]
+    msg = format_status_change(
+        title=obj.get("title") or "",
+        label=label,
+        address=obj.get("address") or "",
+        link=link,
+    )
     # client SMS optional — skip client by default to avoid spam; include staff only
     phones = [
         obj.get("surveyor_phone") or "",
@@ -966,7 +1080,12 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         message = "Договор заключён на адресе"
         chat = resolve_chat("signed")
         notify_all(
-            f"✍️ Договор заключён: «{obj['title']}»\nАдрес: {obj['address']}\nКлиент: {obj['client_name']} {obj['client_phone']}\nЗамерщик: {obj['surveyor_name']}",
+            format_contract_signed(
+                title=obj.get("title") or "",
+                address=obj.get("address") or "",
+                client=f"{obj.get('client_name') or ''} {obj.get('client_phone') or ''}".strip(),
+                surveyor=obj.get("surveyor_name") or "",
+            ),
             telegram_chat=chat,
         )
         _broadcast_status(obj, "Договор заключён")
@@ -996,8 +1115,11 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         updates["manager_phone"] = mgr.get("phone") or ""
         message = f"Назначен менеджер {updates['manager_name']} ({reason}) — защита ТЗ"
         notify_person(
-            f"🔔 Бери в работу (защита ТЗ): «{obj['title']}», {obj['address']}. "
-            f"https://moracul.ru/bestpaints/?crm={oid}",
+            format_manager_take(
+                title=obj.get("title") or "",
+                address=obj.get("address") or "",
+                link=f"https://moracul.ru/bestpaints/?crm={oid}",
+            ),
             {
                 "name": updates["manager_name"],
                 "phone": updates["manager_phone"],
@@ -1087,7 +1209,7 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         updates["escalated_at"] = None
         message = f"Переназначен замерщик {person['name']} ({reason})"
         notify_person(
-            f"BestPaints: вам назначена сделка «{obj['title']}». https://moracul.ru/bestpaints/?crm={oid}",
+            format_assigned(title=obj.get("title") or "", link=f"https://moracul.ru/bestpaints/?crm={oid}"),
             person,
         )
 
@@ -1106,8 +1228,11 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
                 updates["manager_phone"] = mgr["phone"]
                 message += f" → менеджер {mgr['name']}"
                 notify_person(
-                    f"🔔 Бери в работу (защита ТЗ): «{obj['title']}», {obj['address']}. "
-                    f"https://moracul.ru/bestpaints/?crm={oid}",
+                    format_manager_take(
+                        title=obj.get("title") or "",
+                        address=obj.get("address") or "",
+                        link=f"https://moracul.ru/bestpaints/?crm={oid}",
+                    ),
                     mgr,
                 )
 
