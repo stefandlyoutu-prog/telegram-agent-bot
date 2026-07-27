@@ -317,6 +317,7 @@ export function homeCrmSectionHtml() {
           <button type="button" class="btn primary" id="crm-toggle-create">+ Сделка</button>
         </div>
         <div id="crm-create-wrap" class="crm-create-wrap" hidden></div>
+        <div id="crm-filter-bar" class="crm-filter-bar" hidden></div>
         <div id="crm-deals-list"></div>
       </div>
       <div class="crm-tab-panel" id="crm-panel-analytics" data-panel="analytics" hidden></div>
@@ -334,7 +335,7 @@ function analyticsHtml(data, period) {
     <div class="crm-panel-head">
       <div>
         <h3>Аналитика</h3>
-        <p class="hint">${esc(data.from || "…")} → ${esc(data.to || "…")}</p>
+        <p class="hint">${esc(data.from || "…")} → ${esc(data.to || "…")} · нажмите блок — откроются сделки</p>
       </div>
     </div>
     <div class="an-periods" id="an-periods">
@@ -351,66 +352,68 @@ function analyticsHtml(data, period) {
         .join("")}
     </div>
     <div class="an-hero">
-      <div class="an-hero-card win">
+      <button type="button" class="an-hero-card win" data-an-filter="signed">
         <span>Заключено</span>
         <strong>${esc(moneyFmt(k.signed_sum))}</strong>
-        <em>${esc(String(k.signed || 0))} сделок</em>
-      </div>
-      <div class="an-hero-card work">
+        <em>${esc(String(k.signed || 0))} сделок →</em>
+      </button>
+      <button type="button" class="an-hero-card work" data-an-filter="in_work">
         <span>В работе</span>
-        <strong>${esc(moneyFmt(k.in_work_sum))}</strong>
-        <em>${esc(String(k.in_work || 0))} сделок</em>
-      </div>
-      <div class="an-hero-card lose">
+        <strong>${esc(String(k.in_work || 0))}</strong>
+        <em>сделок →</em>
+      </button>
+      <button type="button" class="an-hero-card lose" data-an-filter="declined">
         <span>Не заключено</span>
-        <strong>${esc(moneyFmt(k.declined_sum))}</strong>
-        <em>${esc(String(k.declined || 0))} сделок</em>
+        <strong>${esc(String(k.declined || 0))}</strong>
+        <em>сделок →</em>
+      </button>
+    </div>
+    <details class="an-more">
+      <summary>Ещё цифры · конверсия, чек, скидка, м²</summary>
+      <div class="an-kpis">
+        <div class="an-kpi"><span>Конверсия</span><strong>${esc(String(k.conversion_pct || 0))}%</strong></div>
+        <div class="an-kpi"><span>Средний чек</span><strong>${esc(moneyFmt(k.avg_check))}</strong></div>
+        <div class="an-kpi"><span>Ср. скидка</span><strong>${esc(String(k.avg_discount_pct || 0))}%</strong></div>
+        <div class="an-kpi"><span>Скидки, ₽</span><strong>${esc(moneyFmt(k.discount_rub))}</strong></div>
+        <button type="button" class="an-kpi an-kpi-btn" data-an-filter="measured"><span>Замеров</span><strong>${esc(String(k.measures || 0))} →</strong></button>
+        <div class="an-kpi"><span>Площадь</span><strong>${esc(String(k.area_m2 || 0))} м²</strong></div>
       </div>
-    </div>
-    <div class="an-kpis">
-      <div class="an-kpi"><span>Конверсия</span><strong>${esc(String(k.conversion_pct || 0))}%</strong></div>
-      <div class="an-kpi"><span>Средний чек</span><strong>${esc(moneyFmt(k.avg_check))}</strong></div>
-      <div class="an-kpi"><span>Ср. скидка</span><strong>${esc(String(k.avg_discount_pct || 0))}%</strong></div>
-      <div class="an-kpi"><span>Скидки, ₽</span><strong>${esc(moneyFmt(k.discount_rub))}</strong></div>
-      <div class="an-kpi"><span>Замеров</span><strong>${esc(String(k.measures || 0))}</strong></div>
-      <div class="an-kpi"><span>Площадь</span><strong>${esc(String(k.area_m2 || 0))} м²</strong></div>
-    </div>
-    ${(k.without_amount || 0) > 0 ? `<p class="hint an-warn">Без суммы в CRM: ${esc(String(k.without_amount))} — укажите в карточке сделки.</p>` : ""}
-    <div class="an-block">
-      <div class="crm-chip-label">Воронка за период</div>
+    </details>
+    <details class="an-more">
+      <summary>Воронка</summary>
       <div class="an-funnel">
         ${(data.funnel || [])
           .filter((f) => f.count > 0)
           .map(
             (f) => `
-          <div class="an-funnel-row">
+          <button type="button" class="an-funnel-row" data-an-status="${esc(f.id)}">
             <span>${esc(f.label)}</span>
             <div class="an-bar"><i style="width:${Math.round((100 * f.count) / maxFunnel)}%;background:${esc(f.color)}"></i></div>
-            <b>${esc(String(f.count))}</b>
-          </div>`
+            <b>${esc(String(f.count))} →</b>
+          </button>`
           )
           .join("") || "<p class='hint'>Нет сделок за период</p>"}
       </div>
-    </div>
-    <div class="an-block">
-      <div class="crm-chip-label">По замерщикам</div>
+    </details>
+    <details class="an-more">
+      <summary>По замерщикам</summary>
       <div class="an-people">
         ${(data.by_surveyor || [])
           .map(
             (p) => `
-          <div class="an-person">
-            <strong>${esc(p.name)}</strong>
-            <span>${esc(String(p.deals))} сделок · ✅ ${esc(String(p.signed))} · ✕ ${esc(String(p.declined))}</span>
+          <button type="button" class="an-person" data-an-surveyor="${esc(p.name)}">
+            <strong>${esc(p.name)} →</strong>
+            <span>${esc(String(p.deals))} · ✅ ${esc(String(p.signed))} · ✕ ${esc(String(p.declined))}</span>
             <em>${esc(moneyFmt(p.sum_signed))} заключено</em>
-          </div>`
+          </button>`
           )
           .join("") || "<p class='hint'>Пока пусто</p>"}
       </div>
-    </div>
+    </details>
     ${
       (data.top_signed || []).length
-        ? `<div class="an-block">
-      <div class="crm-chip-label">Топ договоров</div>
+        ? `<details class="an-more">
+      <summary>Топ договоров</summary>
       <div class="an-top">
         ${data.top_signed
           .map(
@@ -421,7 +424,7 @@ function analyticsHtml(data, period) {
           )
           .join("")}
       </div>
-    </div>`
+    </details>`
         : ""
     }
   </div>`;
@@ -434,6 +437,7 @@ export async function mountHomeCrm(ctx) {
 
   let meta;
   let objects;
+  let dealFilter = null; // { type, value, label }
   try {
     objects = await fetchObjects();
     meta = await getMeta();
@@ -450,22 +454,82 @@ export async function mountHomeCrm(ctx) {
   if (dutyEl) dutyEl.textContent = `На смене сегодня: ${duty}`;
 
   const listEl = root.querySelector("#crm-deals-list");
-  if (listEl) listEl.innerHTML = boardHtml(objects);
+  const filterBar = root.querySelector("#crm-filter-bar");
 
-  root.querySelectorAll("[data-crm-open]").forEach((btn) => {
-    btn.onclick = (ev) => {
-      ev.preventDefault();
-      onOpenDetail(btn.getAttribute("data-crm-open"));
-    };
-  });
+  const WON = new Set(["contract_signed", "closed"]);
+  const LOST = new Set(["contract_declined", "manager_assigned", "manager_accepted"]);
+  const WORK = new Set([
+    "created",
+    "assigned",
+    "accepted",
+    "visit_confirmed",
+    "on_site",
+    "manager_assigned",
+    "manager_accepted",
+  ]);
 
-  // tabs
+  function filteredObjects() {
+    if (!dealFilter) return objects;
+    const { type, value } = dealFilter;
+    return objects.filter((o) => {
+      if (type === "signed") return WON.has(o.status);
+      if (type === "declined") return LOST.has(o.status);
+      if (type === "in_work") return WORK.has(o.status);
+      if (type === "measured") {
+        return (
+          o.on_site_at ||
+          ["on_site", "contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed"].includes(
+            o.status
+          )
+        );
+      }
+      if (type === "status") return o.status === value;
+      if (type === "surveyor") return (o.surveyor_name || "Без замерщика") === value;
+      return true;
+    });
+  }
+
+  function paintDeals() {
+    const rows = filteredObjects();
+    if (filterBar) {
+      if (dealFilter) {
+        filterBar.hidden = false;
+        filterBar.innerHTML = `<span>Фильтр: <strong>${esc(dealFilter.label)}</strong> · ${rows.length}</span>
+          <button type="button" class="btn ghost sm" id="crm-filter-clear">Сбросить</button>`;
+        filterBar.querySelector("#crm-filter-clear").onclick = () => {
+          dealFilter = null;
+          paintDeals();
+        };
+      } else {
+        filterBar.hidden = true;
+        filterBar.innerHTML = "";
+      }
+    }
+    if (listEl) listEl.innerHTML = boardHtml(rows);
+    root.querySelectorAll("#crm-deals-list [data-crm-open]").forEach((btn) => {
+      btn.onclick = (ev) => {
+        ev.preventDefault();
+        onOpenDetail(btn.getAttribute("data-crm-open"));
+      };
+    });
+  }
+
+  paintDeals();
+
   const showTab = (name) => {
     root.querySelectorAll(".crm-tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
     root.querySelectorAll(".crm-tab-panel").forEach((p) => {
       p.hidden = p.dataset.panel !== name;
     });
   };
+
+  function applyAnFilter(type, value, label) {
+    dealFilter = { type, value, label };
+    showTab("deals");
+    paintDeals();
+    toast(label);
+  }
+
   root.querySelectorAll(".crm-tab").forEach((tab) => {
     tab.onclick = async () => {
       showTab(tab.dataset.tab);
@@ -489,6 +553,31 @@ export async function mountHomeCrm(ctx) {
       panel.innerHTML = analyticsHtml(data, period);
       panel.querySelectorAll("[data-period]").forEach((btn) => {
         btn.onclick = () => renderAnalytics(btn.getAttribute("data-period"));
+      });
+      panel.querySelectorAll("[data-an-filter]").forEach((btn) => {
+        btn.onclick = () => {
+          const t = btn.getAttribute("data-an-filter");
+          const labels = {
+            signed: "Заключено",
+            in_work: "В работе",
+            declined: "Не заключено",
+            measured: "С замером",
+          };
+          applyAnFilter(t, t, labels[t] || t);
+        };
+      });
+      panel.querySelectorAll("[data-an-status]").forEach((btn) => {
+        btn.onclick = () => {
+          const st = btn.getAttribute("data-an-status");
+          const lab = (meta.statuses || []).find((s) => s.id === st)?.label || st;
+          applyAnFilter("status", st, lab);
+        };
+      });
+      panel.querySelectorAll("[data-an-surveyor]").forEach((btn) => {
+        btn.onclick = () => {
+          const name = btn.getAttribute("data-an-surveyor");
+          applyAnFilter("surveyor", name, `Замерщик: ${name}`);
+        };
       });
       panel.querySelectorAll("[data-crm-open]").forEach((btn) => {
         btn.onclick = (ev) => {
@@ -633,13 +722,7 @@ export async function mountHomeCrm(ctx) {
           wrap.hidden = true;
           wrap.innerHTML = "";
           objects = await fetchObjects();
-          if (listEl) listEl.innerHTML = boardHtml(objects);
-          root.querySelectorAll("[data-crm-open]").forEach((btn) => {
-            btn.onclick = (ev) => {
-              ev.preventDefault();
-              onOpenDetail(btn.getAttribute("data-crm-open"));
-            };
-          });
+          paintDeals();
         } catch (err) {
           toast(String(err.message || err));
         }
@@ -707,6 +790,9 @@ export function detailHtml(obj, events, meta) {
   const statusOpts = (meta?.statuses || [])
     .map((s) => `<option value="${esc(s.id)}" ${s.id === obj.status ? "selected" : ""}>${esc(s.label)}</option>`)
     .join("");
+  const showMoney = ["on_site", "contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed"].includes(
+    obj.status
+  );
   return `
   <header class="topbar">
     <div class="brand">
@@ -715,32 +801,8 @@ export function detailHtml(obj, events, meta) {
     </div>
     <button type="button" class="btn ghost" id="crm-back">← К списку</button>
   </header>
-  <section class="hero-card crm-detail">
-    <p><strong>Адрес:</strong> ${esc(obj.address)}</p>
-    <p><strong>Дата замера:</strong> ${esc(obj.measure_date || "—")}</p>
-    <p><strong>Квалификация:</strong> ${esc(obj.qualification || "—")}</p>
-    <p><strong>Клиент:</strong> ${esc(obj.client_name)} ${esc(obj.client_phone)}</p>
-    <p><strong>Замерщик:</strong> ${esc(obj.surveyor_name || "—")} ${esc(obj.surveyor_phone || "")}</p>
-    <p><strong>Менеджер:</strong> ${esc(obj.manager_name || "—")}</p>
-    <p><strong>Лидоруб:</strong> ${esc(obj.lidarub_name || obj.ledorub_name || "—")}</p>
-    ${obj.survey_local_id ? `<p><strong>Локальный замер:</strong> ${esc(obj.survey_local_id)}</p>` : ""}
-    ${obj.escalated_at ? `<p class="crm-escalated">Эскалация: замерщик не взял вовремя (${fmtTs(obj.escalated_at)})</p>` : ""}
-  </section>
-  <section class="crm-money-box">
-    <h3>Сумма и скидка</h3>
-    <p class="hint">Попадает в аналитику. После сметы в конструкторе внесите итог сюда.</p>
-    <div class="crm-form-row">
-      <label>Сумма до скидки, ₽<input id="crm-money-sub" type="number" min="0" step="100" value="${esc(obj.amount_subtotal || "")}" /></label>
-      <label>Скидка, %<input id="crm-money-disc" type="number" min="0" max="100" step="0.5" value="${esc(obj.discount_pct || 0)}" /></label>
-    </div>
-    <div class="crm-form-row">
-      <label>Итого, ₽<input id="crm-money-total" type="number" min="0" step="100" value="${esc(obj.amount_total || "")}" readonly /></label>
-      <label>Площадь, м²<input id="crm-money-area" type="number" min="0" step="0.1" value="${esc(obj.area_m2 || "")}" /></label>
-    </div>
-    <button type="button" class="btn primary" id="crm-save-money">Сохранить в аналитику</button>
-  </section>
-  ${audioHtml(obj)}
-  <div class="crm-actions">
+
+  <div class="crm-actions sticky-acts">
     ${actions
       .map((a) => {
         const cls = a.primary ? "btn primary" : a.danger ? "btn danger" : "btn ghost";
@@ -753,11 +815,48 @@ export function detailHtml(obj, events, meta) {
       ? `<label class="crm-mgr">Менеджер<select id="crm-mgr">${mgrOpts}</select></label>`
       : ""
   }
-  ${checklistHtml(obj, meta)}
 
-  <details class="crm-admin" open>
+  <details class="crm-fold">
+    <summary>Данные сделки</summary>
+    <section class="hero-card crm-detail">
+      <p><strong>Адрес:</strong> ${esc(obj.address)}</p>
+      <p><strong>Дата замера:</strong> ${esc(obj.measure_date || "—")}</p>
+      <p><strong>Квалификация:</strong> ${esc(obj.qualification || "—")}</p>
+      <p><strong>Клиент:</strong> ${esc(obj.client_name)} ${esc(obj.client_phone)}</p>
+      <p><strong>Замерщик:</strong> ${esc(obj.surveyor_name || "—")} ${esc(obj.surveyor_phone || "")}</p>
+      <p><strong>Менеджер:</strong> ${esc(obj.manager_name || "—")}</p>
+      <p><strong>Лидоруб:</strong> ${esc(obj.lidarub_name || obj.ledorub_name || "—")}</p>
+      ${obj.survey_local_id ? `<p><strong>Локальный замер:</strong> ${esc(obj.survey_local_id)}</p>` : ""}
+      ${obj.escalated_at ? `<p class="crm-escalated">Эскалация (${fmtTs(obj.escalated_at)})</p>` : ""}
+    </section>
+  </details>
+
+  ${
+    showMoney
+      ? `<details class="crm-fold" ${Number(obj.amount_total) > 0 ? "" : "open"}>
+    <summary>Сумма и скидка${Number(obj.amount_total) > 0 ? ` · ${esc(moneyFmt(obj.amount_total))}` : ""}</summary>
+    <section class="crm-money-box">
+      <p class="hint">После сметы в конструкторе. Попадает в аналитику.</p>
+      <div class="crm-form-row">
+        <label>Сумма до скидки, ₽<input id="crm-money-sub" type="number" min="0" step="100" value="${esc(obj.amount_subtotal || "")}" /></label>
+        <label>Скидка, %<input id="crm-money-disc" type="number" min="0" max="100" step="0.5" value="${esc(obj.discount_pct || 0)}" /></label>
+      </div>
+      <div class="crm-form-row">
+        <label>Итого, ₽<input id="crm-money-total" type="number" min="0" step="100" value="${esc(obj.amount_total || "")}" readonly /></label>
+        <label>Площадь, м²<input id="crm-money-area" type="number" min="0" step="0.1" value="${esc(obj.area_m2 || "")}" /></label>
+      </div>
+      <button type="button" class="btn primary" id="crm-save-money">Сохранить в аналитику</button>
+    </section>
+  </details>`
+      : `<p class="hint crm-money-later">Сумма появится после статуса «На адресе» / сметы — сейчас рано.</p>`
+  }
+
+  ${audioHtml(obj) ? `<details class="crm-fold"><summary>Аудио Лидоруба</summary>${audioHtml(obj)}</details>` : ""}
+  ${checklistHtml(obj, meta) ? `<details class="crm-fold"><summary>Чек-лист</summary>${checklistHtml(obj, meta)}</details>` : ""}
+
+  <details class="crm-admin">
     <summary>Исправить статус / удалить</summary>
-    <p class="hint">Если нажали не ту кнопку — выберите статус и сохраните. Удаление скрывает сделку из списка.</p>
+    <p class="hint">Если нажали не ту кнопку — выберите статус.</p>
     <label>Статус вручную
       <select id="crm-set-status">${statusOpts}</select>
     </label>
@@ -768,12 +867,14 @@ export function detailHtml(obj, events, meta) {
     </div>
   </details>
 
-  <h2 class="subhead">История</h2>
-  <ul class="crm-events">
-    ${(events || [])
-      .map((e) => `<li><span class="hint">${fmtTs(e.created_at)}</span> ${esc(e.message)}</li>`)
-      .join("") || "<li class='hint'>Пока пусто</li>"}
-  </ul>
+  <details class="crm-fold">
+    <summary>История</summary>
+    <ul class="crm-events">
+      ${(events || [])
+        .map((e) => `<li><span class="hint">${fmtTs(e.created_at)}</span> ${esc(e.message)}</li>`)
+        .join("") || "<li class='hint'>Пока пусто</li>"}
+    </ul>
+  </details>
   <p class="footer-note"><a href="/bestpaints/logout">Выйти</a></p>`;
 }
 

@@ -1166,8 +1166,8 @@ function renderBuilding(root) {
     <p class="section-sub">Что красим на участке. После этого — замер сторон.</p>
     ${tipBlock("building")}
 
-    <div class="flow-step open">
-      <div class="flow-step-num">1</div>
+    <div class="flow-step open" data-flow="1">
+      <button type="button" class="flow-step-num" data-flow-tog="1">1</button>
       <div class="flow-step-body">
         <div class="field">
           <label>Название строения</label>
@@ -1185,10 +1185,10 @@ function renderBuilding(root) {
       </div>
     </div>
 
-    <div class="flow-step open">
-      <div class="flow-step-num">2</div>
+    <div class="flow-step" data-flow="2">
+      <button type="button" class="flow-step-num" data-flow-tog="2">2</button>
       <div class="flow-step-body">
-        <label class="hint" style="display:block;margin:0 0 8px">Зоны работ</label>
+        <label class="hint" style="display:block;margin:0 0 8px">Зоны работ · фасад и/или интерьер</label>
         <div class="zone-toggles">
           ${WORK_ZONES.map(
             (z) => `
@@ -1198,6 +1198,7 @@ function renderBuilding(root) {
             </label>`
           ).join("")}
         </div>
+        <p class="hint">Стены — на шаге «Замер». Подшива, лобовая, столбы, потолки — на шаге «Допы».</p>
         ${
           b.kind === "fence"
             ? `<label class="check-inline" style="margin-top:12px;display:flex">
@@ -1213,8 +1214,8 @@ function renderBuilding(root) {
       </div>
     </div>
 
-    <div class="flow-step open">
-      <div class="flow-step-num">3</div>
+    <div class="flow-step" data-flow="3">
+      <button type="button" class="flow-step-num" data-flow-tog="3">3</button>
       <div class="flow-step-body">
         <label class="hint" style="display:block;margin:0 0 8px">Крыша / силуэт</label>
         <div class="choice-grid compact">
@@ -1229,8 +1230,8 @@ function renderBuilding(root) {
       </div>
     </div>
 
-    <div class="flow-step open">
-      <div class="flow-step-num">4</div>
+    <div class="flow-step" data-flow="4">
+      <button type="button" class="flow-step-num" data-flow-tog="4">4</button>
       <div class="flow-step-body">
         <label class="hint" style="display:block;margin:0 0 8px">Покрытие и материал</label>
         <div class="choice-grid">
@@ -1273,6 +1274,16 @@ function renderBuilding(root) {
   bindVizColors(root);
   bindPhotos(root, b);
   updateKHint();
+  root.querySelectorAll("[data-flow-tog]").forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.getAttribute("data-flow-tog");
+      const step = root.querySelector(`.flow-step[data-flow="${id}"]`);
+      if (!step) return;
+      const was = step.classList.contains("open");
+      root.querySelectorAll(".flow-step").forEach((s) => s.classList.remove("open"));
+      if (!was) step.classList.add("open");
+    };
+  });
 
   $("#btn-del-building", root)?.addEventListener("click", async () => {
     if (survey.buildings.length <= 1) return;
@@ -2008,44 +2019,54 @@ function recountWarmFromOpenings(b) {
 function renderMore(root) {
   const b = active();
   const m = b.measure;
-  root.innerHTML = `
-    <h2 class="section-title">Подшива, шов, потолки, полы</h2>
-    <p class="section-sub">Доберите объёмы, пока на объекте.</p>
-    ${tipBlock("more")}
+  const el = (title, hint, fields, open = false) => `
+    <details class="el-card" ${open ? "open" : ""}>
+      <summary>
+        <span><strong>${title}</strong>${hint ? `<em>${hint}</em>` : ""}</span>
+      </summary>
+      <div class="el-card-body grid two">${fields}</div>
+    </details>`;
+  const field = (label, path, mode = "decimal") =>
+    `<div class="field"><label>${label}</label><input data-path="${path}" value="${esc(m[path.split(".").pop()] ?? "")}" inputmode="${mode}"></div>`;
 
+  root.innerHTML = `
+    <h2 class="section-title">Элементы объекта</h2>
+    <p class="section-sub">Раскрывайте по одному: стены уже на шаге «Замер». Здесь — остальные объёмы (как в конструкторе смет).</p>
+    ${tipBlock("more")}
     ${
       b.zones?.facade
         ? `
-    <h3 class="subhead">Снаружи</h3>
-    <div class="grid two">
-      <div class="field"><label>Подшива, м²</label><input data-path="building.measure.soffitArea" value="${esc(m.soffitArea)}" inputmode="decimal"></div>
-      <div class="field"><label>Лобовая, м²</label><input data-path="building.measure.fasciaArea" value="${esc(m.fasciaArea)}" inputmode="decimal"></div>
-      <div class="field"><label>Свесы, м²</label><input data-path="building.measure.overhangArea" value="${esc(m.overhangArea)}" inputmode="decimal"></div>
-      <div class="field"><label>Крыльцо / вход, м²</label><input data-path="building.measure.porchArea" value="${esc(m.porchArea)}" inputmode="decimal"></div>
-      <div class="field"><label>Лестница, м²</label><input data-path="building.measure.stairsArea" value="${esc(m.stairsArea)}" inputmode="decimal"></div>
-      <div class="field"><label>Наличники, пог.м</label><input data-path="building.measure.trimLength" value="${esc(m.trimLength)}" inputmode="decimal"></div>
-      <div class="field"><label>Доборы, пог.м</label><input data-path="building.measure.doborLength" value="${esc(m.doborLength)}" inputmode="decimal"></div>
-      <div class="field"><label>Раскладка / уголок, пог.м</label><input data-path="building.measure.layoutLength" value="${esc(m.layoutLength)}" inputmode="decimal"></div>
-      <div class="field"><label>Водосток, пог.м</label><input data-path="building.measure.gutterLength" value="${esc(m.gutterLength)}" inputmode="decimal"></div>
-      <div class="field"><label>Отлив, пог.м</label><input data-path="building.measure.sillLength" value="${esc(m.sillLength)}" inputmode="decimal"></div>
-      <div class="field"><label>Ограждения, м²</label><input data-path="building.measure.railingsArea" value="${esc(m.railingsArea)}" inputmode="decimal"></div>
-      <div class="field"><label>Балки / элементы, пог.м</label><input data-path="building.measure.beamsLength" value="${esc(m.beamsLength)}" inputmode="decimal"></div>
+    <p class="crm-chip-label">Снаружи (фасад)</p>
+    ${el("Подшива", m.soffitArea ? `${m.soffitArea} м²` : "", field("Подшива, м²", "building.measure.soffitArea"))}
+    ${el("Лобовая доска", m.fasciaArea ? `${m.fasciaArea} м²` : "", field("Лобовая, м²", "building.measure.fasciaArea"))}
+    ${el("Свесы / крыльцо / лестница", "", `
+      ${field("Свесы, м²", "building.measure.overhangArea")}
+      ${field("Крыльцо / вход, м²", "building.measure.porchArea")}
+      ${field("Лестница, м²", "building.measure.stairsArea")}
+    `)}
+    ${el("Наличники и доборы", "", `
+      ${field("Наличники, пог.м", "building.measure.trimLength")}
+      ${field("Доборы, пог.м", "building.measure.doborLength")}
+      ${field("Раскладка / уголок, пог.м", "building.measure.layoutLength")}
+    `)}
+    ${el("Водосток / отлив / ограждения", "", `
+      ${field("Водосток, пог.м", "building.measure.gutterLength")}
+      ${field("Отлив, пог.м", "building.measure.sillLength")}
+      ${field("Ограждения, м²", "building.measure.railingsArea")}
+      ${field("Балки / элементы, пог.м", "building.measure.beamsLength")}
       ${
         b.kind === "fence"
-          ? `<div class="field"><label>Столбы забора, шт</label><input data-path="building.measure.fencePosts" value="${esc(m.fencePosts)}" inputmode="numeric"></div>`
+          ? field("Столбы забора, шт", "building.measure.fencePosts", "numeric")
           : ""
       }
-    </div>
-    <h3 class="subhead">Тёплый шов</h3>
-    <div class="grid two">
-      <div class="field"><label>Горизонтальный</label><input data-path="building.measure.warmHorizontal" value="${esc(m.warmHorizontal)}" inputmode="decimal"></div>
-      <div class="field"><label>Змейка</label><input data-path="building.measure.warmSnake" value="${esc(m.warmSnake)}" inputmode="decimal"></div>
-      <div class="field"><label>Трещины</label><input data-path="building.measure.warmCracks" value="${esc(m.warmCracks)}" inputmode="decimal"></div>
-      <div class="field"><label>Окна</label><input data-path="building.measure.warmWindows" value="${esc(m.warmWindows)}" inputmode="decimal"></div>
-      <div class="field"><label>Минус</label><input data-path="building.measure.warmMinus" value="${esc(m.warmMinus)}" inputmode="decimal"></div>
+    `)}
+    ${el("Тёплый шов", m.warmSeamTotal ? `итого ${m.warmSeamTotal}` : "", `
+      ${field("Горизонтальный", "building.measure.warmHorizontal")}
+      ${field("Змейка", "building.measure.warmSnake")}
+      ${field("Трещины", "building.measure.warmCracks")}
+      ${field("Окна", "building.measure.warmWindows")}
+      ${field("Минус", "building.measure.warmMinus")}
       <div class="field"><label>Итого шов</label><input data-path="building.measure.warmSeamTotal" value="${esc(m.warmSeamTotal)}" readonly></div>
-    </div>
-    <div class="grid two">
       <div class="field">
         <label>Конопатка</label>
         <select data-path="building.measure.caulk">
@@ -2062,25 +2083,37 @@ function renderMore(root) {
           <option value="no" ${m.oldSealant === "no" ? "selected" : ""}>Нет</option>
         </select>
       </div>
-    </div>`
-        : ""
+    `)}`
+        : `<div class="callout">Снаружи не отмечено — включите «Снаружи (фасад)» на шаге «Строение».</div>`
     }
 
     ${
       b.zones?.interior || b.kind === "terrace"
         ? `
-    <h3 class="subhead">Внутри / терраса</h3>
-    <div class="grid two">
-      <div class="field"><label>Потолки, м²</label><input data-path="building.measure.ceilingArea" value="${esc(m.ceilingArea)}" inputmode="decimal"></div>
-      <div class="field"><label>Полы, м²</label><input data-path="building.measure.floorArea" value="${esc(m.floorArea)}" inputmode="decimal"></div>
-    </div>
-    <div class="field"><label>Где какой пол</label><input data-path="building.measure.floorNote" value="${esc(m.floorNote)}" placeholder="терраса / комнаты / влажная зона"></div>`
-        : `<div class="callout">Интерьер не выбран — потолки/полы скрыты. Включите «Внутри» на шаге «Строение».</div>`
+    <p class="crm-chip-label" style="margin-top:16px">Внутри / терраса</p>
+    ${el("Потолки и полы", "", `
+      ${field("Потолки, м²", "building.measure.ceilingArea")}
+      ${field("Полы, м²", "building.measure.floorArea")}
+    `, true)}
+    ${el("Терраса / вход", "", `
+      ${field("Крыльцо / настил, м²", "building.measure.porchArea")}
+      ${field("Лестница, м²", "building.measure.stairsArea")}
+      ${field("Ограждения / перила, м²", "building.measure.railingsArea")}
+    `)}`
+        : `<div class="callout" style="margin-top:12px">Интерьер не отмечен — включите «Внутри (интерьер)» на шаге «Строение», если красим внутри.</div>`
     }
-
-    <div class="field"><label>Заметки</label><textarea data-path="building.measure.notes">${esc(m.notes)}</textarea></div>
   `;
+
   bindFields(root);
+  // warm seam auto total if helpers exist
+  root.querySelectorAll("[data-path^='building.measure.warm']").forEach((inp) => {
+    inp.addEventListener("change", () => {
+      try {
+        if (typeof syncWarmTotal === "function") syncWarmTotal(active().measure);
+      } catch (_) {}
+      save();
+    });
+  });
 }
 
 /* ——— 5. Технология ——— */
@@ -2093,143 +2126,174 @@ function renderTech(root) {
   const paintsF = listPaintOptions(catalog, "facade");
   const paintsI = listPaintOptions(catalog, "interior");
 
+  const fold = (title, hint, body, open = false) => `
+    <details class="el-card" ${open ? "open" : ""}>
+      <summary><span><strong>${title}</strong>${hint ? `<em>${hint}</em>` : ""}</span></summary>
+      <div class="el-card-body">${body}</div>
+    </details>`;
+
   root.innerHTML = `
     <h2 class="section-title calc-hero">Конструктор · ${escapeHtml(b.name)}</h2>
     <p class="section-sub">
-      Фасад <b>${facadeArea.toFixed(1)} м²</b>
-      ${b.zones?.interior ? ` · интерьер <b>${interiorArea.toFixed(1)} м²</b>` : ""}
-      — цены ниже уже на этот объём.
+      ${b.zones?.facade ? `Стены снаружи <b>${facadeArea.toFixed(1)} м²</b>` : "Снаружи выкл."}
+      ${b.zones?.interior ? ` · внутри <b>${interiorArea.toFixed(1)} м²</b>` : ""}
+      · подшива/лобовая/столбы — шаг «Допы» (как в смете).
     </p>
     ${tipBlock("tech")}
-    ${vizCard(b)}
 
-    <label class="hint" style="display:block;margin-bottom:8px">Состояние поверхности</label>
-    <div class="choice-grid">
-      ${CONDITIONS.map((c) => {
-        const desc = c.byType[b.houseType] || "";
-        return `
-        <button type="button" class="choice ${b.condition === c.id ? "selected" : ""}" data-cond="${c.id}">
-          <strong>${c.title}</strong><span>${desc}</span>
-        </button>`;
-      }).join("")}
-    </div>
+    ${fold(
+      "Превью и цвет",
+      b.previewColor ? "выбран" : "нажмите кружок",
+      `${vizCard(b)}
+      <p class="hint">Кружки меняют цвет на 3D. Текст RAL — ниже в «Состояние».</p>`,
+      true
+    )}
 
-    <div class="grid two" style="margin-top:12px">
-      <div class="field">
-        <label>Влажность, %</label>
-        <input data-path="building.humidity" value="${esc(b.humidity)}" inputmode="decimal">
+    ${fold(
+      "Состояние поверхности",
+      CONDITIONS.find((c) => c.id === b.condition)?.title || "",
+      `
+      <div class="choice-grid">
+        ${CONDITIONS.map((c) => {
+          const desc = c.byType[b.houseType] || "";
+          return `
+          <button type="button" class="choice ${b.condition === c.id ? "selected" : ""}" data-cond="${c.id}">
+            <strong>${c.title}</strong><span>${desc}</span>
+          </button>`;
+        }).join("")}
       </div>
-      <div class="field">
-        <label>Цвет</label>
-        <input data-path="building.colors" value="${esc(b.colors)}" placeholder="как сейчас / темнее / RAL">
-      </div>
-      <div class="field">
-        <label>Сложность снятия покрытия</label>
-        <select data-path="building.removalDifficulty">
-          <option value="easy" ${b.removalDifficulty === "easy" ? "selected" : ""}>Лёгкая</option>
-          <option value="normal" ${b.removalDifficulty === "normal" ? "selected" : ""}>Обычная</option>
-          <option value="hard" ${b.removalDifficulty === "hard" ? "selected" : ""}>Тяжёлая</option>
-          <option value="full_strip" ${b.removalDifficulty === "full_strip" ? "selected" : ""}>Полное снятие</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Старое покрытие — заметка</label>
-        <input data-path="building.oldCoatingNote" value="${esc(b.oldCoatingNote)}" placeholder="отслоение, слои, тест скотчем">
-      </div>
-    </div>
+      <div class="grid two" style="margin-top:12px">
+        <div class="field">
+          <label>Влажность, %</label>
+          <input data-path="building.humidity" value="${esc(b.humidity)}" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label>Цвет (текст / RAL)</label>
+          <input data-path="building.colors" value="${esc(b.colors)}" placeholder="как сейчас / темнее / RAL">
+        </div>
+        <div class="field">
+          <label>Сложность снятия покрытия</label>
+          <select data-path="building.removalDifficulty">
+            <option value="easy" ${b.removalDifficulty === "easy" ? "selected" : ""}>Лёгкая</option>
+            <option value="normal" ${b.removalDifficulty === "normal" ? "selected" : ""}>Обычная</option>
+            <option value="hard" ${b.removalDifficulty === "hard" ? "selected" : ""}>Тяжёлая</option>
+            <option value="full_strip" ${b.removalDifficulty === "full_strip" ? "selected" : ""}>Полное снятие</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Старое покрытие — заметка</label>
+          <input data-path="building.oldCoatingNote" value="${esc(b.oldCoatingNote)}" placeholder="отслоение, слои, тест скотчем">
+        </div>
+      </div>`
+    )}
 
     ${
       b.zones?.facade
-        ? `
-    <h3 class="subhead">Фасад — подготовка</h3>
-    <div class="choice-grid">
-      ${TECHNOLOGIES.map((t) => {
-        const allowed = rec.some((r) => r.id === t.id);
-        const note = rec.find((r) => r.id === t.id)?.note || "Нельзя";
-        return `
-        <button type="button" class="choice ${b.tech.techId === t.id ? "selected" : ""} ${allowed ? "" : "bad"}"
-          data-tech="${t.id}" ${allowed ? "" : "disabled"}>
-          <strong>${t.title}${t.isBase ? " ★" : ""}</strong>
-          <span>${t.desc}</span>
-          <span class="badge ${allowed ? "" : "danger"}">${allowed ? note : "Запрещено"}</span>
-        </button>`;
-      }).join("")}
-    </div>
-    <label class="hint" style="display:block;margin:12px 0 8px">ЛКМ фасад × ${facadeArea.toFixed(0)} м²</label>
-    <div class="paint-grid">
-      ${paintsF
-        .map((p) => {
-          const item = p.items.find((i) => i.tech === b.tech.techId);
-          const sum = item && facadeArea ? money(item.price * facadeArea) : "—";
-          const ladder = (p.pricesByTech || p.items.map((i) => i.price))
-            .map((pr, idx) => `<span class="${b.tech.techId === idx + 1 ? "on" : ""}">${idx + 1}: ${money(pr)}</span>`)
-            .join("");
+        ? fold(
+            "Стены снаружи · технология и ЛКМ",
+            `${facadeArea.toFixed(0)} м²`,
+            `
+      <div class="choice-grid">
+        ${TECHNOLOGIES.map((t) => {
+          const allowed = rec.some((r) => r.id === t.id);
+          const note = rec.find((r) => r.id === t.id)?.note || "Нельзя";
           return `
-          <button type="button" class="paint-card ${b.tech.paintId === p.id ? "selected" : ""}" data-paint="${esc(p.id)}">
-            <div class="paint-card-top">
-              <span class="paint-brand">${escapeHtml(p.brand)}</span>
-              <span class="paint-coat">${p.opacity === "opaque" ? "Укрывной" : "Полупрозрачный"}</span>
-            </div>
-            <strong class="paint-name">${escapeHtml(shortName(p.name))}</strong>
-            <span class="paint-type">${escapeHtml(p.type || "")}${p.country ? ` · ${escapeHtml(p.country)}` : ""}</span>
-            <span class="paint-fan">Веер: ${escapeHtml(p.fan || "—")}</span>
-            <span class="paint-warranty">Гарантия техн. 4–5: <b>${p.warrantyYears45 || item?.guarantee || "—"} лет</b>${p.antisepticRequired ? " · с антисептиком" : ""}</span>
-            <div class="paint-ladder">${ladder}</div>
-            <span class="paint-total">${item ? `${money(item.price)}/м² → <b>${sum}</b>` : "нет цены"}</span>
+          <button type="button" class="choice ${b.tech.techId === t.id ? "selected" : ""} ${allowed ? "" : "bad"}"
+            data-tech="${t.id}" ${allowed ? "" : "disabled"}>
+            <strong>${t.title}${t.isBase ? " ★" : ""}</strong>
+            <span>${t.desc}</span>
+            <span class="badge ${allowed ? "" : "danger"}">${allowed ? note : "Запрещено"}</span>
           </button>`;
-        })
-        .join("")}
-    </div>
-    <div class="callout">${SEMI_LADDER.map((x) => x.tip).join(" → ")}</div>
-    ${techCompareHtml(b, catalog)}`
+        }).join("")}
+      </div>
+      <label class="hint" style="display:block;margin:12px 0 8px">ЛКМ × ${facadeArea.toFixed(0)} м²</label>
+      <div class="paint-grid">
+        ${paintsF
+          .map((p) => {
+            const item = p.items.find((i) => i.tech === b.tech.techId);
+            const sum = item && facadeArea ? money(item.price * facadeArea) : "—";
+            const ladder = (p.pricesByTech || p.items.map((i) => i.price))
+              .map((pr, idx) => `<span class="${b.tech.techId === idx + 1 ? "on" : ""}">${idx + 1}: ${money(pr)}</span>`)
+              .join("");
+            return `
+            <button type="button" class="paint-card ${b.tech.paintId === p.id ? "selected" : ""}" data-paint="${esc(p.id)}">
+              <div class="paint-card-top">
+                <span class="paint-brand">${escapeHtml(p.brand)}</span>
+                <span class="paint-coat">${p.opacity === "opaque" ? "Укрывной" : "Полупрозрачный"}</span>
+              </div>
+              <strong class="paint-name">${escapeHtml(shortName(p.name))}</strong>
+              <span class="paint-type">${escapeHtml(p.type || "")}${p.country ? ` · ${escapeHtml(p.country)}` : ""}</span>
+              <span class="paint-fan">Веер: ${escapeHtml(p.fan || "—")}</span>
+              <span class="paint-warranty">Гарантия техн. 4–5: <b>${p.warrantyYears45 || item?.guarantee || "—"} лет</b>${p.antisepticRequired ? " · с антисептиком" : ""}</span>
+              <div class="paint-ladder">${ladder}</div>
+              <span class="paint-total">${item ? `${money(item.price)}/м² → <b>${sum}</b>` : "нет цены"}</span>
+            </button>`;
+          })
+          .join("")}
+      </div>
+      <div class="callout">${SEMI_LADDER.map((x) => x.tip).join(" → ")}</div>
+      ${techCompareHtml(b, catalog)}`,
+            true
+          )
         : ""
     }
 
     ${
       b.zones?.interior
-        ? `
-    <h3 class="subhead">Интерьер — подготовка и ЛКМ</h3>
-    <div class="field" style="max-width:280px">
-      <label>Технология интерьера</label>
-      <select data-path="building.tech.techIdInterior">
-        ${TECHNOLOGIES.map(
-          (t) =>
-            `<option value="${t.id}" ${Number(b.tech.techIdInterior) === t.id ? "selected" : ""}>${t.short}</option>`
-        ).join("")}
-      </select>
-    </div>
-    <div class="paint-grid">
-      ${paintsI
-        .map((p) => {
-          const tid = Number(b.tech.techIdInterior) || b.tech.techId;
-          const item = p.items.find((i) => i.tech === tid);
-          const sum = item && interiorArea ? money(item.price * interiorArea) : "—";
-          return `
-          <button type="button" class="paint-card ${b.tech.paintIdInterior === p.id ? "selected" : ""}" data-paint-int="${esc(p.id)}">
-            <div class="paint-card-top">
-              <span class="paint-brand">${escapeHtml(p.brand)}</span>
-              <span class="paint-coat">Интерьер</span>
-            </div>
-            <strong class="paint-name">${escapeHtml(shortName(p.name))}</strong>
-            <span class="paint-fan">Веер: ${escapeHtml(p.fan || "—")}</span>
-            <span class="paint-total">${item ? `${money(item.price)}/м² → <b>${sum}</b>` : "нет цены"}</span>
-          </button>`;
-        })
-        .join("")}
-    </div>`
+        ? fold(
+            "Стены внутри · ЛКМ",
+            `${interiorArea.toFixed(0)} м²`,
+            `
+      <div class="field" style="max-width:280px">
+        <label>Технология интерьера</label>
+        <select data-path="building.tech.techIdInterior">
+          ${TECHNOLOGIES.map(
+            (t) =>
+              `<option value="${t.id}" ${Number(b.tech.techIdInterior) === t.id ? "selected" : ""}>${t.short}</option>`
+          ).join("")}
+        </select>
+      </div>
+      <div class="paint-grid">
+        ${paintsI
+          .map((p) => {
+            const tid = Number(b.tech.techIdInterior) || b.tech.techId;
+            const item = p.items.find((i) => i.tech === tid);
+            const sum = item && interiorArea ? money(item.price * interiorArea) : "—";
+            return `
+            <button type="button" class="paint-card ${b.tech.paintIdInterior === p.id ? "selected" : ""}" data-paint-int="${esc(p.id)}">
+              <div class="paint-card-top">
+                <span class="paint-brand">${escapeHtml(p.brand)}</span>
+                <span class="paint-coat">Интерьер</span>
+              </div>
+              <strong class="paint-name">${escapeHtml(shortName(p.name))}</strong>
+              <span class="paint-fan">Веер: ${escapeHtml(p.fan || "—")}</span>
+              <span class="paint-total">${item ? `${money(item.price)}/м² → <b>${sum}</b>` : "нет цены"}</span>
+            </button>`;
+          })
+          .join("")}
+      </div>`
+          )
         : ""
     }
 
-    <label class="choice" style="display:flex;gap:10px;align-items:flex-start;margin:12px 0">
-      <input type="checkbox" data-path="building.tech.compatibilityTest" ${b.tech.compatibilityTest ? "checked" : ""} style="width:auto;margin-top:3px">
-      <span><strong>Тест на совместимость сделан</strong></span>
-    </label>
-    <details><summary class="hint">Что нельзя предлагать</summary>
-      <ul>${FORBIDDEN.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
-    </details>
+    <div class="compat-box">
+      <label class="choice" style="display:flex;gap:10px;align-items:flex-start;margin:0">
+        <input type="checkbox" data-path="building.tech.compatibilityTest" ${b.tech.compatibilityTest ? "checked" : ""} style="width:auto;margin-top:3px">
+        <span><strong>Тест на совместимость сделан</strong></span>
+      </label>
+      <details class="compat-how" open>
+        <summary>Что это и как проверить</summary>
+        <p>На старое покрытие нельзя класть новый состав «вслепую». Тест: на незаметном участке нанести новый ЛКМ (или скотч-тест адгезии) и через время проверить — нет ли отслоения, сморщивания, непрокраса.</p>
+        <p>Если тест не пройден — только полное снятие старого слоя или отказ от состава. Отметьте галочку, когда проверка на объекте сделана.</p>
+      </details>
+      <details><summary class="hint">Что нельзя предлагать</summary>
+        <ul>${FORBIDDEN.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
+      </details>
+    </div>
   `;
 
   bindFields(root);
+  bindVizColors(root);
   // techIdInterior select stores string — coerce
   root.querySelector("[data-path='building.tech.techIdInterior']")?.addEventListener("change", (e) => {
     active().tech.techIdInterior = Number(e.target.value);
