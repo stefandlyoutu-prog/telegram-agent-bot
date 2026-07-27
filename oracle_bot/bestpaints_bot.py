@@ -76,18 +76,30 @@ class Grafik(StatesGroup):
 
 @router.message(Command("chatid", "bp_chatid"))
 async def cmd_chatid(message: Message):
-    """Покажет chat_id — добавьте бота в группу ops/подписанные и вызовите /chatid."""
+    """Покажет chat_id и сохранит группу в CRM (ops / signed по названию)."""
     if not _enabled():
         return
     chat = message.chat
     title = chat.title or getattr(chat, "full_name", None) or "-"
+    role = None
+    low = (title or "").lower()
+    if "подпис" in low or "signed" in low:
+        role = "signed"
+    elif "ops" in low or "операц" in low:
+        role = "ops"
+    saved = ""
+    if chat.type in ("group", "supergroup"):
+        try:
+            info = crm.register_tg_chat(chat.id, title, role)
+            saved = f"\n✅ Привязано как {info['role']} (chat_id={info['chat_id']})"
+        except Exception as e:  # noqa: BLE001
+            saved = f"\n⚠️ Не сохранил: {e}"
     await message.answer(
         f"chat_id = {chat.id}\n"
         f"тип: {chat.type}\n"
-        f"title: {title}\n\n"
-        "Скопируйте число и пришлите:\n"
-        "· ops → BESTPAINTS_TG_CHAT_OPS\n"
-        "· подписанные договоры → BESTPAINTS_TG_CHAT_SIGNED"
+        f"title: {title}"
+        f"{saved}\n\n"
+        "Если писали в личку боту — перешлите любое сообщение из группы сюда."
     )
 
 
@@ -308,3 +320,46 @@ async def zamer_finish(message: Message, state: FSMContext):
             f"Замерщик: {obj['surveyor_name']}\n"
             f"{link}"
         )
+
+
+@router.message(F.forward_from_chat)
+async def forward_bind_chat(message: Message):
+    """В личке: переслать сообщение из BP Ops / BP Подписанные → привязка chat_id."""
+    if not _enabled() or not message.from_user:
+        return
+    if not _is_admin(message.from_user.id) and not _can_create(message.from_user.id):
+        return
+    fc = message.forward_from_chat
+    if not fc or fc.type not in ("group", "supergroup"):
+        return
+    title = fc.title or "-"
+    low = title.lower()
+    role = "signed" if ("подпис" in low or "signed" in low) else "ops" if ("ops" in low or "операц" in low) else None
+    try:
+        info = crm.register_tg_chat(fc.id, title, role)
+        await message.answer(f"✅ Группа «{title}» → {info['role']} ({info['chat_id']})")
+    except Exception as e:  # noqa: BLE001
+        await message.answer(f"Ошибка: {e}")
+
+
+@router.my_chat_member()
+async def on_added_to_group(event):
+    """Автопривязка при добавлении бота в группу с нужным названием."""
+    if not _enabled():
+        return
+    chat = event.chat
+    if chat.type not in ("group", "supergroup"):
+        return
+    new = event.new_chat_member
+    if not new or new.status not in ("member", "administrator"):
+        return
+    title = chat.title or ""
+    low = title.lower()
+    if not any(k in low for k in ("ops", "операц", "подпис", "signed", "bp ")):
+        return
+    role = "signed" if ("подпис" in low or "signed" in low) else "ops"
+    try:
+        crm.register_tg_chat(chat.id, title, role)
+        logger.info("auto-bound TG %s as %s", chat.id, role)
+    except Exception:
+        logger.exception("auto-bind failed")

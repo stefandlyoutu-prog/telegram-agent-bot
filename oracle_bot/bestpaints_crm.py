@@ -155,6 +155,12 @@ def init_db() -> None:
               UNIQUE(role, person_id, work_date)
             );
             CREATE INDEX IF NOT EXISTS idx_objects_status ON objects(status);
+            CREATE TABLE IF NOT EXISTS tg_chats (
+              role TEXT PRIMARY KEY,
+              chat_id TEXT NOT NULL,
+              title TEXT NOT NULL DEFAULT '',
+              updated_at REAL NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_schedule_date ON schedule(work_date, role);
             """
         )
@@ -224,7 +230,7 @@ def notify_all(text: str, *, phone: str = "", telegram_chat: str = "", skip_tg: 
         notes.append(f"SMS stub → {phone}: {text[:120]}")
     if skip_tg:
         return notes
-    chat = telegram_chat or os.getenv("BESTPAINTS_TG_CHAT_OPS", "").strip()
+    chat = telegram_chat or resolve_chat("ops")
     if chat and (
         os.getenv("BESTPAINTS_TG_BOT_TOKEN", "").strip() or os.getenv("ORACLE_BOT_TOKEN", "").strip()
     ):
@@ -672,7 +678,7 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         updates["contract_at"] = now
         updates["checklist_json"] = json.dumps({i["id"]: False for i in CHECKLIST_SIGNED}, ensure_ascii=False)
         message = "Договор заключён на адресе"
-        chat = os.getenv("BESTPAINTS_TG_CHAT_SIGNED", "").strip()
+        chat = resolve_chat("signed")
         notify_all(
             f"✍️ Договор заключён: «{obj['title']}»\nАдрес: {obj['address']}\nКлиент: {obj['client_name']} {obj['client_phone']}\nЗамерщик: {obj['surveyor_name']}",
             telegram_chat=chat,
@@ -813,6 +819,50 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
     return out
 
 
+def register_tg_chat(chat_id: str | int, title: str = "", role: str | None = None) -> dict[str, Any]:
+    """Привязать Telegram-группу. role: ops|signed|auto по названию."""
+    init_db()
+    cid = str(chat_id).strip()
+    title = (title or "").strip()
+    low = title.lower()
+    if not role:
+        if "подпис" in low or "signed" in low:
+            role = "signed"
+        elif "ops" in low or "операц" in low:
+            role = "ops"
+        else:
+            role = "ops"  # default when unknown
+    if role not in ("ops", "signed"):
+        raise ValueError("role must be ops|signed")
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO tg_chats(role, chat_id, title, updated_at) VALUES (?,?,?,?)
+            ON CONFLICT(role) DO UPDATE SET chat_id=excluded.chat_id, title=excluded.title, updated_at=excluded.updated_at
+            """,
+            (role, cid, title, _now()),
+        )
+    return {"role": role, "chat_id": cid, "title": title}
+
+
+def list_tg_chats() -> dict[str, Any]:
+    init_db()
+    with connect() as conn:
+        rows = conn.execute("SELECT role, chat_id, title, updated_at FROM tg_chats").fetchall()
+    return {r["role"]: {"chat_id": r["chat_id"], "title": r["title"], "updated_at": r["updated_at"]} for r in rows}
+
+
+def resolve_chat(role: str) -> str:
+    """Env overrides DB."""
+    env_key = "BESTPAINTS_TG_CHAT_OPS" if role == "ops" else "BESTPAINTS_TG_CHAT_SIGNED"
+    env_val = os.getenv(env_key, "").strip()
+    if env_val:
+        return env_val
+    chats = list_tg_chats()
+    return str((chats.get(role) or {}).get("chat_id") or "")
+
+
+
 def meta() -> dict[str, Any]:
     init_db()
     return {
@@ -824,5 +874,8 @@ def meta() -> dict[str, Any]:
         "on_duty_surveyors": on_duty("surveyor"),
         "on_duty_managers": on_duty("manager"),
         "today": today_str(),
+        "tg_chats": list_tg_chats(),
+        "tg_ops": resolve_chat("ops"),
+        "tg_signed": resolve_chat("signed"),
         "roles_hint": "Лидоруб создаёт сделку в ТГ; админ заполняет график; замерщик/менеджер ведут статусы в веб.",
     }

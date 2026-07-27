@@ -368,7 +368,7 @@ async def _init_bestpaints_bot() -> None:
     if webhook_base:
         url = webhook_base.rstrip("/") + "/webhook/bestpaints"
         await _bp_bot.delete_webhook(drop_pending_updates=False)
-        await _bp_bot.set_webhook(url, drop_pending_updates=False)
+        await _bp_bot.set_webhook(url, drop_pending_updates=False, allowed_updates=ALLOWED_UPDATES)
         logger.info("BestPaints webhook: %s", url)
 
 
