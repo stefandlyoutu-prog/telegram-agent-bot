@@ -340,8 +340,62 @@ async def bestpaints_index(request: Request):
     return FileResponse(BP_STATIC / "index.html")
 
 
+# ── BestPaints CRM API ──────────────────────────────────────────────
+from oracle_bot import bestpaints_crm as bp_crm  # noqa: E402
+
+bp_crm.init_db()
+
+
+def _bp_api_auth(request: Request):
+    if not is_authenticated(request):
+        raise HTTPException(401, "login required")
+
+
+@app.get("/bestpaints/api/meta")
+async def bp_api_meta(request: Request):
+    _bp_api_auth(request)
+    return bp_crm.meta()
+
+
+@app.get("/bestpaints/api/objects")
+async def bp_api_objects(request: Request, status: str | None = None):
+    _bp_api_auth(request)
+    return {"objects": bp_crm.list_objects(status)}
+
+
+@app.post("/bestpaints/api/objects")
+async def bp_api_create_object(request: Request):
+    _bp_api_auth(request)
+    data = await request.json()
+    obj = bp_crm.create_object(data if isinstance(data, dict) else {})
+    return obj
+
+
+@app.get("/bestpaints/api/objects/{oid}")
+async def bp_api_get_object(oid: str, request: Request):
+    _bp_api_auth(request)
+    obj = bp_crm.get_object(oid)
+    if not obj:
+        raise HTTPException(404, "not found")
+    return {"object": obj, "events": bp_crm.list_events(oid)}
+
+
+@app.post("/bestpaints/api/objects/{oid}/action")
+async def bp_api_action(oid: str, request: Request):
+    _bp_api_auth(request)
+    data = await request.json()
+    action = str((data or {}).get("action") or "")
+    try:
+        obj = bp_crm.transition(oid, action, data if isinstance(data, dict) else {})
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"object": obj, "events": bp_crm.list_events(oid)}
+
+
 @app.get("/bestpaints/{file_path:path}")
 async def bestpaints_files(file_path: str, request: Request):
+    if file_path.startswith("api/"):
+        raise HTTPException(404, "Not found")
     if file_path in ("login", "login.html"):
         return RedirectResponse("/bestpaints/login", status_code=303)
     if not is_authenticated(request):

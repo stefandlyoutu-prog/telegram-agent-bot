@@ -857,4 +857,58 @@ h3 .pct-pill { margin-left: 8px; vertical-align: middle; }
 .photo-btn.sm { padding: 6px 12px; font-size: 0.85rem; }
 .empty.soft.mini { padding: 8px 12px; font-size: 0.8rem; flex: 1; }
 
-
+/* === BestPaints CRM === */
+.crm-board { margin: 0 0 20px; }
+.crm-board-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 10px;
+}
+.crm-board-head .subhead { margin: 0; }
+.crm-create-wrap {
+  background: rgba(20,28,24,.92);
+  border: 1px solid rgba(154,173,162,.25);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.crm-create label, .crm-mgr {
+  display: block; margin: 10px 0; font-size: 13px; color: #9aada2;
+}
+.crm-create input, .crm-create select, .crm-mgr select {
+  display: block; width: 100%; margin-top: 4px;
+  padding: 10px 12px; border-radius: 10px;
+  border: 1px solid rgba(154,173,162,.35);
+  background: #0f1412; color: #e8f0ea; font: inherit;
+}
+.crm-list { display: flex; flex-direction: column; gap: 10px; }
+.crm-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px; border-radius: 14px;
+  background: rgba(20,28,24,.85);
+  border: 1px solid rgba(154,173,162,.2);
+}
+.crm-item h3 { margin: 0 0 4px; font-size: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.crm-item p { margin: 0; color: #9aada2; font-size: 13px; }
+.crm-pill {
+  display: inline-block; font-size: 11px; font-weight: 700;
+  padding: 3px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--crm-c) 28%, transparent);
+  color: var(--crm-c); border: 1px solid color-mix(in srgb, var(--crm-c) 55%, transparent);
+}
+.crm-escalated { color: #e07a6a; font-weight: 700; }
+.crm-actions {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 0 4px 16px;
+}
+.crm-actions .btn.danger {
+  background: #5a2a24; color: #ffc9c0; border-color: #e07a6a;
+}
+.crm-checklist {
+  margin: 8px 4px 16px; padding: 14px; border-radius: 14px;
+  background: rgba(20,28,24,.9); border: 1px solid rgba(154,173,162,.2);
+}
+.crm-check { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; color: #d7e4db; }
+.crm-events { list-style: none; padding: 0 4px 24px; margin: 0; }
+.crm-events li { padding: 8px 0; border-bottom: 1px solid rgba(154,173,162,.15); font-size: 13px; color: #d7e4db; }
+.crm-detail p { margin: 6px 0; color: #d7e4db; }
+.crm-empty { margin: 8px 0 16px; }

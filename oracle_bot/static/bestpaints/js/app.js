@@ -40,6 +40,13 @@ import {
   uid,
 } from "./calc.js";
 import * as store from "./storage.js";
+import {
+  fetchMeta,
+  mountHomeCrm,
+  mountDetail,
+  homeCrmSectionHtml,
+  doAction,
+} from "./crm.js";
 
 const PREVIEW_COLORS = [
   { id: "#c4a35a", label: "Золото" },
@@ -72,12 +79,18 @@ let catalog = null;
 let view = "home";
 let step = 0;
 let survey = null;
+let crmObjectId = null;
+let crmMetaCache = null;
 
 async function init() {
   catalog = await fetch("./data/catalog.json").then((r) => r.json());
   const params = new URLSearchParams(location.search);
   const id = params.get("id");
-  if (id) {
+  const crmId = params.get("crm");
+  if (crmId) {
+    crmObjectId = crmId;
+    view = "crm";
+  } else if (id) {
     const s = store.get(id);
     if (s) {
       survey = migrateSurvey(s);
@@ -96,6 +109,7 @@ async function init() {
     },
     goHome: () => goHome(),
     openId: (sid) => openSurvey(sid),
+    openCrm: (oid) => openCrm(oid),
   };
   render();
 }
@@ -107,9 +121,25 @@ function active() {
 function goHome() {
   view = "home";
   survey = null;
+  crmObjectId = null;
   history.replaceState({}, "", location.pathname);
   render();
 }
+
+function openCrm(oid) {
+  crmObjectId = oid;
+  view = "crm";
+  survey = null;
+  history.replaceState({}, "", `?crm=${encodeURIComponent(oid)}`);
+  render();
+}
+
+async function getCrmMeta() {
+  if (crmMetaCache) return crmMetaCache;
+  crmMetaCache = await fetchMeta();
+  return crmMetaCache;
+}
+
 
 function openSurvey(id) {
   survey = migrateSurvey(store.get(id) || emptySurvey());
@@ -354,8 +384,42 @@ function buildingsBarHtml() {
 
 function render() {
   if (view === "home") renderHome();
+  else if (view === "crm") renderCrm();
   else renderWizard();
 }
+
+function renderCrm() {
+  mountDetail({
+    root: app,
+    objectId: crmObjectId,
+    toast,
+    onBack: () => goHome(),
+    getMeta: getCrmMeta,
+    onOpenSurvey: async (obj) => {
+      // link or create local survey for constructor
+      let sid = obj.survey_local_id;
+      if (sid && store.get(sid)) {
+        openSurvey(sid);
+        return;
+      }
+      const s = emptySurvey();
+      s.title = obj.title || "";
+      s.client = s.client || {};
+      s.client.name = obj.client_name || "";
+      s.client.phone = obj.client_phone || "";
+      s.client.address = obj.address || "";
+      if (s.contract) s.contract.objectName = obj.title || "";
+      store.upsert(s);
+      try {
+        await doAction(obj.id, "link_survey", { survey_local_id: s.id });
+      } catch (e) {
+        toast(String(e.message || e));
+      }
+      openSurvey(s.id);
+    },
+  });
+}
+
 
 function renderHome() {
   const list = store.loadAll().slice().sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
@@ -364,16 +428,17 @@ function renderHome() {
     <header class="topbar">
       <div class="brand">
         <strong>BestPaints Survey</strong>
-        <span>Новый продукт · замер → конструктор → смета</span>
+        <span>CRM + замер → конструктор → смета</span>
       </div>
     </header>
+    ${homeCrmSectionHtml([])}
     <section class="hero-card">
-      <h1>Объекты</h1>
-      <p>Создайте новый объект или откройте существующий. Шаги: проект → замер → конструктор → договор и смета.</p>
-      <button class="btn primary block" id="btn-new" style="margin-top:14px">+ Новый объект</button>
+      <h1>Локальные замеры</h1>
+      <p>Офлайн-конструктор на устройстве. Для воронки (статусы, SMS) используйте «Объект CRM» выше.</p>
+      <button class="btn primary block" id="btn-new" style="margin-top:14px">+ Локальный замер</button>
     </section>
 
-    <h2 class="subhead">Ваши объекты</h2>
+    <h2 class="subhead">Локальные объекты</h2>
     <div class="survey-list">
       ${
         list.length
@@ -487,6 +552,13 @@ function renderHome() {
     clearTrash();
     toast("Корзина пуста");
     render();
+  });
+
+  mountHomeCrm({
+    root: app,
+    toast,
+    getMeta: getCrmMeta,
+    onOpenDetail: (oid) => openCrm(oid),
   });
 }
 

@@ -1,0 +1,14 @@
+{
+  "escalation_hours": 2,
+  "surveyors": [
+    {"id": "sv_ivanov", "name": "Иванов Алексей", "phone": "+79001112233", "note": "Север / Серебрянка"},
+    {"id": "sv_petrov", "name": "Петров Сергей", "phone": "+79004445566", "note": "Юг / Новая Москва"}
+  ],
+  "managers": [
+    {"id": "mg_smirnova", "name": "Смирнова Ольга", "phone": "+79007778899"}
+  ],
+  "zones": [
+    {"match": ["серебрян", "истра", "зеленоград", "солнечногор"], "surveyor_id": "sv_ivanov"},
+    {"match": ["коммунарк", "ватутинк", "троицк", "бутов"], "surveyor_id": "sv_petrov"}
+  ]
+}
