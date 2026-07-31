@@ -818,8 +818,7 @@ function nextLabel(stepId) {
     {
       client: "К строению →",
       building: "К замеру →",
-      walls: "К проёмам →",
-      openings: "Подшива и шов →",
+      walls: "К допам →",
       more: "В конструктор →",
       tech: "К договору →",
       site: "К смете →",
@@ -1097,7 +1096,7 @@ function wallBundleHtml(w, b) {
         </div>
       </div>
 
-      <button type="button" class="btn block wall-collapse-btn" data-wall-collapse>Готово · свернуть</button>
+      <button type="button" class="btn primary block wall-collapse-btn" data-wall-collapse>${doneLabel}</button>
     </section>`;
 }
 
@@ -1651,8 +1650,8 @@ function renderWalls(root) {
     ${
       num(b.measure.wallsArea) <= 0
         ? `<div class="callout danger compact" id="walls-need-measure">
-            Чтобы нажать «К проёмам» — введите <b>длину</b> и <b>высоту</b> активной стороны (или свою площадь).
-            Масштаб «по проекту» нужно применить кнопкой «→ в длину активной плоскости».
+            Чтобы идти дальше — введите <b>длину</b> и <b>высоту</b> хотя бы одной стороны (или свою площадь).
+            Проёмы и торцы заполняйте на каждой стороне здесь же.
           </div>`
         : ""
     }
@@ -1682,7 +1681,7 @@ function renderWalls(root) {
       o.width = String(meters);
       syncAreasFromLists(active());
       save();
-      toast(`Ширина проёма = ${meters} м → шаг Проёмы`);
+      toast(`Ширина проёма = ${meters} м`);
     },
   });
 
@@ -2324,14 +2323,26 @@ function renderMore(root) {
   const field = (label, path, mode = "decimal") =>
     `<div class="field"><label>${label}</label><input data-path="${path}" value="${esc(m[path.split(".").pop()] ?? "")}" inputmode="${mode}"></div>`;
 
+  const opCount = (m.openings || []).length;
+  const opArea = num(m.openingsArea);
+  const endsA = num(m.endsArea);
   root.innerHTML = `
     <h2 class="section-title">Элементы объекта</h2>
-    <p class="section-sub">Раскрывайте по одному: стены уже на шаге «Замер». Здесь — остальные объёмы (как в конструкторе смет).</p>
+    <p class="section-sub">Стены, проёмы и торцы — на шаге «Замер». Здесь подшива, шов и остальные объёмы.</p>
     ${tipBlock("more")}
+    <div class="callout compact">
+      С замера: проёмы <b>${opCount}</b> шт${opArea ? ` · ${opArea.toFixed(1)} м²` : ""}
+      ${endsA ? ` · торцы ${endsA.toFixed(2)} м²` : ""}
+      ${b.zones?.facade ? "" : ""}
+    </div>
     ${
       b.zones?.facade
         ? `
     <p class="crm-chip-label">Снаружи (фасад)</p>
+    ${el("Торцы (правка суммы)", endsA ? `${endsA} м²` : "со сторон", `
+      ${field("Sтор, м²", "building.measure.endsArea")}
+      ${field("Lтор, пог.м", "building.measure.endsLength")}
+    `)}
     ${el("Подшива", m.soffitArea ? `${m.soffitArea} м²` : "", field("Подшива, м²", "building.measure.soffitArea"))}
     ${el("Лобовая доска", m.fasciaArea ? `${m.fasciaArea} м²` : "", field("Лобовая, м²", "building.measure.fasciaArea"))}
     ${el("Свесы / крыльцо / лестница", "", `

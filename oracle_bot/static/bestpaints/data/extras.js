@@ -128,12 +128,11 @@ export const SCAFFOLD_OPTIONS = [
 export const STEPS = [
   { id: "client", title: "Проект", icon: "1", phase: "project", coach: "Название · клиент · адрес" },
   { id: "building", title: "Строение", icon: "2", phase: "measure", coach: "Тип · зоны · крыша" },
-  { id: "walls", title: "Замер", icon: "3", phase: "measure", coach: "Стороны по кругу" },
-  { id: "openings", title: "Проёмы", icon: "4", phase: "measure", coach: "Окна и двери" },
-  { id: "more", title: "Допы", icon: "5", phase: "measure", coach: "Подшива · шов · торцы" },
-  { id: "tech", title: "Конструктор", icon: "6", phase: "constructor", coach: "Технология и ЛКМ" },
-  { id: "site", title: "Договор", icon: "7", phase: "rest", coach: "Быт и реквизиты" },
-  { id: "estimate", title: "Смета", icon: "8", phase: "rest", coach: "Итог · PDF" },
+  { id: "walls", title: "Замер", icon: "3", phase: "measure", coach: "Стороны · проёмы · торцы" },
+  { id: "more", title: "Допы", icon: "4", phase: "measure", coach: "Подшива · шов · свесы" },
+  { id: "tech", title: "Конструктор", icon: "5", phase: "constructor", coach: "Технология и ЛКМ" },
+  { id: "site", title: "Договор", icon: "6", phase: "rest", coach: "Быт и реквизиты" },
+  { id: "estimate", title: "Смета", icon: "7", phase: "rest", coach: "Итог · PDF" },
 ];
 
 export const PHASE_LABELS = {
