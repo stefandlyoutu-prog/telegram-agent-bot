@@ -48,7 +48,7 @@ def _admin_ids() -> set[int]:
 
 
 def _lidarub_ids() -> set[int]:
-    """Who may create deals. Empty = any admin OR anyone if BESTPAINTS_LIDARUB_OPEN=1."""
+    """Who may create deals. Env BESTPAINTS_LIDARUB_IDS + staff.lidarubs with tg_id."""
     raw = os.getenv("BESTPAINTS_LIDARUB_IDS", "").strip()
     ids: set[int] = set()
     if raw:
@@ -56,17 +56,29 @@ def _lidarub_ids() -> set[int]:
             part = part.strip()
             if part.isdigit():
                 ids.add(int(part))
-    if not ids and os.getenv("BESTPAINTS_LIDARUB_OPEN", "0").strip() in ("1", "true", "yes"):
-        return set()  # open — allow all, checked separately
+    try:
+        staff = crm.load_staff()
+        for p in staff.get("lidarubs") or []:
+            tid = str(p.get("tg_id") or "").strip()
+            if tid.isdigit():
+                ids.add(int(tid))
+    except Exception:
+        pass
     if not ids:
         return _admin_ids()
-    return ids
+    return ids | _admin_ids()
 
 
 def _can_create(uid: int) -> bool:
-    if os.getenv("BESTPAINTS_LIDARUB_OPEN", "0").strip() in ("1", "true", "yes"):
+    """Только лидоруб/админ создаёт сделки. OPEN=1 — только для демо (не для прода)."""
+    if uid in _admin_ids():
         return True
-    return uid in _lidarub_ids()
+    if uid in _lidarub_ids():
+        return True
+    # OPEN больше не даёт создавать всем — только если явно BESTPAINTS_LIDARUB_OPEN=force
+    if os.getenv("BESTPAINTS_LIDARUB_OPEN", "0").strip().lower() in ("force", "all"):
+        return True
+    return False
 
 
 def _is_admin(uid: int) -> bool:

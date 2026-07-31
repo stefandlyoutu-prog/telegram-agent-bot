@@ -1,6 +1,33 @@
 /** BestPaints CRM — сделки Лидоруба, статусы, чек-листы, график. */
 
 const API = "/bestpaints/api";
+const CRM_ROLE_KEY = "bp_crm_role_v1";
+
+/** Роль в кабинете (общий пароль): кто создаёт сделки. */
+export function getCrmRole() {
+  const r = (localStorage.getItem(CRM_ROLE_KEY) || "surveyor").trim().toLowerCase();
+  return ["lidarub", "surveyor", "manager", "admin"].includes(r) ? r : "surveyor";
+}
+
+export function setCrmRole(role) {
+  localStorage.setItem(CRM_ROLE_KEY, role);
+}
+
+export function canCreateDeals() {
+  return ["lidarub", "admin"].includes(getCrmRole());
+}
+
+function monthPeriodOptions() {
+  const out = [];
+  const now = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleString("ru-RU", { month: "long", year: "numeric" });
+    out.push([`m:${ym}`, label.charAt(0).toUpperCase() + label.slice(1)]);
+  }
+  return out;
+}
 
 async function api(path, opts = {}) {
   const res = await fetch(`${API}${path}`, {
@@ -303,8 +330,25 @@ export function teamPanelHtml(meta) {
 }
 
 export function homeCrmSectionHtml() {
+  const role = getCrmRole();
+  const roles = [
+    ["lidarub", "Лидоруб"],
+    ["surveyor", "Замерщик"],
+    ["manager", "Менеджер"],
+    ["admin", "Админ"],
+  ];
   return `
   <section class="crm-shell" id="crm-shell">
+    <div class="crm-role-bar" id="crm-role-bar">
+      <span>Я в кабинете как:</span>
+      ${roles
+        .map(
+          ([id, label]) =>
+            `<button type="button" class="crm-role-chip ${role === id ? "on" : ""}" data-crm-role="${id}">${label}</button>`
+        )
+        .join("")}
+      <em class="hint" style="margin-left:auto">Сделки создаёт только лидоруб</em>
+    </div>
     <nav class="crm-tabs" role="tablist">
       <button type="button" class="crm-tab active" data-tab="deals">Сделки</button>
       <button type="button" class="crm-tab" data-tab="analytics">Аналитика</button>
@@ -319,8 +363,9 @@ export function homeCrmSectionHtml() {
             <h3>Сделки</h3>
             <p class="hint" id="crm-duty-hint">Загрузка графика…</p>
           </div>
-          <button type="button" class="btn primary" id="crm-toggle-create">+ Сделка</button>
+          <button type="button" class="btn primary" id="crm-toggle-create" ${canCreateDeals() ? "" : "hidden"}>+ Сделка</button>
         </div>
+        <p class="hint" id="crm-create-lock" ${canCreateDeals() ? "hidden" : ""}>Создание сделок — у лидоруба. Переключите роль выше, если вы лидоруб.</p>
         <div id="crm-create-wrap" class="crm-create-wrap" hidden></div>
         <div id="crm-filter-bar" class="crm-filter-bar" hidden></div>
         <div id="crm-deals-list"></div>
@@ -436,51 +481,12 @@ function analyticsHtml(data, period) {
   </div>`;
 }
 
-function payrollHtml(data, period) {
-  const people = data.by_surveyor || [];
-  return `
-  <div class="crm-panel-inner an-root zp-root">
-    <div class="crm-panel-head">
-      <div>
-        <h3>ЗП замерщиков</h3>
-        <p class="hint">${esc(data.from || "…")} → ${esc(data.to || "…")} · нажмите сделку — откроется объект</p>
-      </div>
-    </div>
-    <div class="an-periods" id="zp-periods">
-      ${[
-        ["7d", "7 дней"],
-        ["30d", "30 дней"],
-        ["month", "Месяц"],
-        ["all", "Всё"],
-      ]
-        .map(
-          ([id, label]) =>
-            `<button type="button" class="an-period ${period === id ? "on" : ""}" data-zp-period="${id}">${label}</button>`
-        )
-        .join("")}
-    </div>
-    <div class="an-hero">
-      <div class="an-hero-card win zp-total-card">
-        <span>Всего мотивация</span>
-        <strong>${esc(moneyFmt(data.total_payroll || 0))}</strong>
-        <em>${esc(String(people.length))} замерщиков</em>
-      </div>
-    </div>
-    <details class="an-more">
-      <summary>Правила мотивации</summary>
-      <ul class="zp-rules">
-        <li>На адресе, скидка <b>0%</b> → <b>5%</b> от суммы договора</li>
-        <li>На адресе, скидка <b>1–5%</b> → <b>3%</b></li>
-        <li>На адресе, скидка <b>6–10%</b> (и выше) → <b>2%</b></li>
-        <li>Не на адресе, а <b>из офиса</b> → <b>1%</b></li>
-      </ul>
-    </details>
-    <div class="zp-people">
-      ${
-        people
-          .map((p) => {
-            const deals = p.deals || [];
-            return `
+function zpPersonCards(people, emptyHint) {
+  if (!people.length) return `<p class="hint" style="padding:8px">${emptyHint}</p>`;
+  return people
+    .map((p) => {
+      const deals = p.deals || [];
+      return `
         <details class="zp-person el-card">
           <summary>
             <span>
@@ -506,7 +512,7 @@ function payrollHtml(data, period) {
                 </div>
                 <div class="zp-deal-meta">
                   Договор ${esc(moneyFmt(d.amount_total))}
-                  · скидка ${esc(String(d.discount_pct || 0))}%
+                  ${d.discount_pct != null ? ` · скидка ${esc(String(d.discount_pct || 0))}%` : ""}
                   · ${esc(d.place_label || "")}
                   · ставка ${esc(String(d.rate_pct))}%
                 </div>
@@ -518,10 +524,96 @@ function payrollHtml(data, period) {
             }
           </div>
         </details>`;
-          })
-          .join("") || `<p class="hint" style="padding:8px">Пока нет ЗП за период — нужны заключённые договоры с суммой.</p>`
+    })
+    .join("");
+}
+
+function payrollHtml(data, period, roleFilter = "surveyors") {
+  const surveyors = data.by_surveyor || [];
+  const managers = data.by_manager || [];
+  const months = monthPeriodOptions();
+  const periodBtns = [
+    ["7d", "7 дней"],
+    ["30d", "30 дней"],
+    ["month", "Этот месяц"],
+    ...months.slice(0, 4),
+    ["all", "Всё"],
+  ];
+  const showSv = roleFilter !== "managers";
+  const showMg = roleFilter !== "surveyors";
+  return `
+  <div class="crm-panel-inner an-root zp-root">
+    <div class="crm-panel-head">
+      <div>
+        <h3>ЗП · мотивация</h3>
+        <p class="hint">${esc(data.from || "…")} → ${esc(data.to || "…")} · нажмите сделку — откроется объект</p>
+      </div>
+    </div>
+    <div class="an-periods" id="zp-periods">
+      ${periodBtns
+        .map(
+          ([id, label]) =>
+            `<button type="button" class="an-period ${period === id ? "on" : ""}" data-zp-period="${id}">${label}</button>`
+        )
+        .join("")}
+    </div>
+    <div class="zp-role-tabs" id="zp-role-tabs">
+      ${[
+        ["surveyors", "Замерщики"],
+        ["managers", "Менеджеры"],
+        ["all", "Все"],
+      ]
+        .map(
+          ([id, label]) =>
+            `<button type="button" class="crm-role-chip ${roleFilter === id ? "on" : ""}" data-zp-role="${id}">${label}</button>`
+        )
+        .join("")}
+    </div>
+    <div class="an-hero">
+      ${
+        showSv
+          ? `<div class="an-hero-card win zp-total-card">
+        <span>Замерщики</span>
+        <strong>${esc(moneyFmt(data.total_payroll || 0))}</strong>
+        <em>${esc(String(surveyors.length))} чел.</em>
+      </div>`
+          : ""
+      }
+      ${
+        showMg
+          ? `<div class="an-hero-card zp-total-card">
+        <span>Менеджеры</span>
+        <strong>${esc(moneyFmt(data.total_manager_payroll || 0))}</strong>
+        <em>${esc(String(managers.length))} чел. · ${esc(String((data.manager_rules || [])[0]?.rate_pct ?? 1))}%</em>
+      </div>`
+          : ""
       }
     </div>
+    <details class="an-more">
+      <summary>Правила мотивации</summary>
+      <ul class="zp-rules">
+        <li><b>Замерщик</b> на адресе, скидка <b>0%</b> → <b>5%</b></li>
+        <li>На адресе, скидка <b>1–5%</b> → <b>3%</b> · <b>6–10%+</b> → <b>2%</b></li>
+        <li>Из офиса → <b>1%</b></li>
+        <li><b>Менеджер</b> с заключённого договора → <b>${esc(String((data.manager_rules || [])[0]?.rate_pct ?? 1))}%</b> (если назначен на сделку)</li>
+      </ul>
+    </details>
+    ${
+      showSv
+        ? `<h4 class="subhead" style="margin:12px 0 6px">Замерщики</h4>
+    <div class="zp-people" data-zp-group="surveyors">
+      ${zpPersonCards(surveyors, "Пока нет ЗП замерщиков за период — нужны заключённые договоры с суммой.")}
+    </div>`
+        : ""
+    }
+    ${
+      showMg
+        ? `<h4 class="subhead" style="margin:16px 0 6px">Менеджеры</h4>
+    <div class="zp-people" data-zp-group="managers">
+      ${zpPersonCards(managers, "Нет ЗП менеджеров: нужны заключённые сделки с назначенным менеджером.")}
+    </div>`
+        : ""
+    }
   </div>`;
 }
 
@@ -611,6 +703,33 @@ export async function mountHomeCrm(ctx) {
 
   paintDeals();
 
+  let zpRoleFilter = "surveyors";
+
+  function syncCreateUi() {
+    const toggle = root.querySelector("#crm-toggle-create");
+    const lock = root.querySelector("#crm-create-lock");
+    const wrap = root.querySelector("#crm-create-wrap");
+    const ok = canCreateDeals();
+    if (toggle) toggle.hidden = !ok;
+    if (lock) lock.hidden = ok;
+    if (!ok && wrap) {
+      wrap.hidden = true;
+      wrap.innerHTML = "";
+    }
+  }
+
+  root.querySelectorAll("[data-crm-role]").forEach((btn) => {
+    btn.onclick = () => {
+      setCrmRole(btn.getAttribute("data-crm-role"));
+      root.querySelectorAll("[data-crm-role]").forEach((b) => {
+        b.classList.toggle("on", b.getAttribute("data-crm-role") === getCrmRole());
+      });
+      syncCreateUi();
+      toast(`Роль: ${btn.textContent}`);
+    };
+  });
+  syncCreateUi();
+
   const showTab = (name) => {
     root.querySelectorAll(".crm-tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
     root.querySelectorAll(".crm-tab-panel").forEach((p) => {
@@ -641,15 +760,19 @@ export async function mountHomeCrm(ctx) {
     if (dutyEl) dutyEl.textContent = `На смене сегодня: ${d}`;
   }
 
-  async function renderPayroll(period) {
+  async function renderPayroll(period, roleFilter = zpRoleFilter) {
     const panel = root.querySelector("#crm-panel-payroll");
     if (!panel) return;
+    zpRoleFilter = roleFilter || "surveyors";
     panel.innerHTML = `<p class="hint" style="padding:12px">Считаем ЗП…</p>`;
     try {
       const data = await fetchPayroll(period);
-      panel.innerHTML = payrollHtml(data, period);
+      panel.innerHTML = payrollHtml(data, period, zpRoleFilter);
       panel.querySelectorAll("[data-zp-period]").forEach((btn) => {
-        btn.onclick = () => renderPayroll(btn.getAttribute("data-zp-period"));
+        btn.onclick = () => renderPayroll(btn.getAttribute("data-zp-period"), zpRoleFilter);
+      });
+      panel.querySelectorAll("[data-zp-role]").forEach((btn) => {
+        btn.onclick = () => renderPayroll(period, btn.getAttribute("data-zp-role"));
       });
       panel.querySelectorAll("[data-crm-open]").forEach((btn) => {
         btn.onclick = (ev) => {
@@ -822,6 +945,10 @@ export async function mountHomeCrm(ctx) {
   const wrap = root.querySelector("#crm-create-wrap");
   if (toggle && wrap) {
     toggle.onclick = async () => {
+      if (!canCreateDeals()) {
+        toast("Сделки создаёт только лидоруб");
+        return;
+      }
       if (!wrap.hidden && wrap.innerHTML) {
         wrap.hidden = true;
         return;
@@ -831,6 +958,10 @@ export async function mountHomeCrm(ctx) {
       wrap.hidden = false;
       wrap.querySelector("#crm-create-form").onsubmit = async (e) => {
         e.preventDefault();
+        if (!canCreateDeals()) {
+          toast("Сделки создаёт только лидоруб");
+          return;
+        }
         const fd = new FormData(e.target);
         const payload = Object.fromEntries(fd.entries());
         try {

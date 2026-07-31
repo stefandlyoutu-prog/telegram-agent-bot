@@ -54,6 +54,35 @@ export function wallsAreaOf(list, zoneFilter = null) {
   );
 }
 
+/**
+ * Площадь торцов / перерубов на одной стороне.
+ * Выступ ~0.2 м; при «с боками» ×3 (торец + 2 бока), как на объекте.
+ * Приоритет: ручная м² → длина пог.м × глубина → кол-во × высота × глубина.
+ */
+export function wallEndsAreaOf(side) {
+  if (!side) return 0;
+  const manual = num(side.endsAreaManual);
+  if (manual > 0) return round2(manual);
+  const on = side.endsOn || num(side.endsCount) > 0 || num(side.endsLength) > 0;
+  if (!on) return 0;
+  const depth = num(side.endsDepth, 0.2) || 0.2;
+  const mul = side.endsWithSides ? 3 : 1;
+  const len = num(side.endsLength);
+  if (len > 0) return round2(len * depth * mul);
+  const count = num(side.endsCount);
+  const H = num(side.height) || num(side.ridge) || 0;
+  if (count > 0 && H > 0) return round2(count * H * depth * mul);
+  return 0;
+}
+
+export function endsAreaFromWalls(list) {
+  return round2((list || []).reduce((s, w) => s + wallEndsAreaOf(w), 0));
+}
+
+export function trimLengthFromWalls(list) {
+  return round2((list || []).reduce((s, w) => s + Math.max(0, num(w.trimLength)), 0));
+}
+
 /** Sобщ = (Sст − Sок/дв + Sтор) × K */
 export function calcWallArea(m, zoneFilter = null) {
   const wallsList = m.walls || [];
@@ -64,7 +93,8 @@ export function calcWallArea(m, zoneFilter = null) {
   const openings = zoneFilter
     ? openingsAreaOf(openingsList)
     : num(m.openingsArea) || openingsAreaOf(m.openings || []);
-  const endsArea = zoneFilter === "interior" ? 0 : num(m.endsArea);
+  const fromWalls = zoneFilter === "interior" ? 0 : endsAreaFromWalls(wallsList);
+  const endsArea = zoneFilter === "interior" ? 0 : fromWalls > 0 ? fromWalls : num(m.endsArea);
   const k = zoneFilter === "interior" ? 1 : num(m.roundCoef, 1) || 1;
   const sides = zoneFilter === "interior" ? 1 : Math.max(1, num(m.paintSides, 1) || 1);
   if (sides > 1) walls = round2(walls * sides);
@@ -107,6 +137,10 @@ export function syncAreasFromLists(buildingOrSurvey) {
   m.paintSides = b.kind === "fence" && b.fenceBothSides ? 2 : 1;
   m.wallsArea = wallsAreaOf(m.walls);
   m.openingsArea = openingsAreaOf(m.openings);
+  const endsWalls = endsAreaFromWalls(m.walls);
+  if (endsWalls > 0) m.endsArea = endsWalls;
+  const trimWalls = trimLengthFromWalls(m.walls);
+  if (trimWalls > 0) m.trimLength = trimWalls;
   m.facadeArea = calcWallArea(m, "facade").total;
   m.interiorArea = calcWallArea(m, "interior").total;
   return calcWallArea(m);

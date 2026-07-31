@@ -1436,6 +1436,23 @@ def _period_bounds(period: str, date_from: str | None = None, date_to: str | Non
     p = (period or "30d").strip().lower()
     if p in ("all", "всё", "vse"):
         return None, None, "", today.isoformat()
+    # Конкретный календарный месяц: m:YYYY-MM
+    if p.startswith("m:") and len(p) >= 9:
+        try:
+            y_s, m_s = p[2:].split("-", 1)
+            y, mo = int(y_s), int(m_s)
+            d0 = date(y, mo, 1)
+            if mo == 12:
+                d1 = date(y + 1, 1, 1) - timedelta(days=1)
+            else:
+                d1 = date(y, mo + 1, 1) - timedelta(days=1)
+            if d1 > today:
+                d1 = today
+            start = datetime(d0.year, d0.month, d0.day, tzinfo=TZ)
+            end = datetime(d1.year, d1.month, d1.day, 23, 59, 59, tzinfo=TZ)
+            return start.timestamp(), end.timestamp(), d0.isoformat(), d1.isoformat()
+        except ValueError:
+            pass
     if p in ("today", "день", "1d"):
         d0 = today
     elif p in ("7d", "week", "неделя"):
@@ -1470,6 +1487,24 @@ PAYROLL_RULES = [
     {"id": "onsite_over_10", "place": "on_site", "discount_min": 10.0001, "discount_max": 100, "rate_pct": 2, "label": "На адресе · скидка >10% → 2%"},
     {"id": "office", "place": "office", "discount_min": 0, "discount_max": 100, "rate_pct": 1, "label": "Из офиса → 1%"},
 ]
+
+# Мотивация менеджера с заключённого договора (ставка из env или 1%)
+MANAGER_PAYROLL_RULES = [
+    {"id": "manager_default", "rate_pct": float(os.getenv("BESTPAINTS_MANAGER_RATE_PCT", "1") or "1"), "label": "Менеджер · % от суммы договора"},
+]
+
+
+def calc_manager_commission(*, amount_total: float, rate_pct: float | None = None) -> dict[str, Any]:
+    total = max(0.0, float(amount_total or 0))
+    rate = float(rate_pct if rate_pct is not None else (os.getenv("BESTPAINTS_MANAGER_RATE_PCT", "1") or "1"))
+    commission = round(total * rate / 100.0, 2)
+    return {
+        "rate_pct": rate,
+        "commission": commission,
+        "rule": f"Менеджер → {rate:g}%",
+        "rule_id": "manager_default",
+        "amount_total": total,
+    }
 
 
 def _infer_signed_place(obj: dict[str, Any]) -> str:
@@ -1533,7 +1568,7 @@ def calc_surveyor_commission(
 
 
 def payroll(*, period: str = "30d", date_from: str | None = None, date_to: str | None = None) -> dict[str, Any]:
-    """ЗП замерщиков: сумма мотивации и кликабельная история сделок."""
+    """ЗП замерщиков и менеджеров: сумма мотивации и кликабельная история сделок."""
     init_db()
     ts_from, ts_to, label_from, label_to = _period_bounds(period, date_from, date_to)
     objs = list_objects(include_deleted=False)
@@ -1552,7 +1587,9 @@ def payroll(*, period: str = "30d", date_from: str | None = None, date_to: str |
 
     won = [o for o in objs if o.get("status") in WON_STATUSES and in_period(outcome_ts(o))]
     buckets: dict[str, dict[str, Any]] = {}
+    mgr_buckets: dict[str, dict[str, Any]] = {}
     grand = 0.0
+    grand_mgr = 0.0
     for o in won:
         total = float(o.get("amount_total") or 0)
         if total <= 0:
@@ -1581,27 +1618,62 @@ def payroll(*, period: str = "30d", date_from: str | None = None, date_to: str |
         b["sum_contracts"] += total
         b["sum_payroll"] += calc["commission"]
         grand += calc["commission"]
-        b["deals"].append(
-            {
-                "id": o["id"],
-                "title": o.get("title") or "",
-                "address": o.get("address") or "",
-                "measure_date": o.get("measure_date") or "",
-                "status": o.get("status"),
-                "status_label": o.get("status_label") or "",
-                "amount_total": total,
-                "discount_pct": float(o.get("discount_pct") or 0),
-                "signed_place": calc["signed_place"],
-                "place_label": calc["place_label"],
-                "rate_pct": calc["rate_pct"],
-                "commission": calc["commission"],
-                "rule": calc["rule"],
-                "contract_at": o.get("contract_at"),
-            }
-        )
+        deal_row = {
+            "id": o["id"],
+            "title": o.get("title") or "",
+            "address": o.get("address") or "",
+            "measure_date": o.get("measure_date") or "",
+            "status": o.get("status"),
+            "status_label": o.get("status_label") or "",
+            "amount_total": total,
+            "discount_pct": float(o.get("discount_pct") or 0),
+            "signed_place": calc["signed_place"],
+            "place_label": calc["place_label"],
+            "rate_pct": calc["rate_pct"],
+            "commission": calc["commission"],
+            "rule": calc["rule"],
+            "contract_at": o.get("contract_at"),
+        }
+        b["deals"].append(deal_row)
+
+        mname = (o.get("manager_name") or "").strip()
+        mid = (o.get("manager_id") or "").strip()
+        if mname or mid:
+            mcalc = calc_manager_commission(amount_total=total)
+            mkey = mid or mname
+            mb = mgr_buckets.setdefault(
+                mkey,
+                {
+                    "manager_id": mid,
+                    "name": mname or "Без менеджера",
+                    "deals_count": 0,
+                    "sum_contracts": 0.0,
+                    "sum_payroll": 0.0,
+                    "deals": [],
+                },
+            )
+            mb["deals_count"] += 1
+            mb["sum_contracts"] += total
+            mb["sum_payroll"] += mcalc["commission"]
+            grand_mgr += mcalc["commission"]
+            mb["deals"].append(
+                {
+                    **deal_row,
+                    "rate_pct": mcalc["rate_pct"],
+                    "commission": mcalc["commission"],
+                    "rule": mcalc["rule"],
+                    "place_label": "Менеджер",
+                }
+            )
 
     by_surveyor = sorted(buckets.values(), key=lambda x: (-x["sum_payroll"], -x["deals_count"]))
     for b in by_surveyor:
+        b["sum_contracts"] = round(b["sum_contracts"], 2)
+        b["sum_payroll"] = round(b["sum_payroll"], 2)
+        b["deals"].sort(key=lambda d: -(d.get("contract_at") or 0))
+
+    by_manager = sorted(mgr_buckets.values(), key=lambda x: (-x["sum_payroll"], -x["deals_count"]))
+    for b in by_manager:
         b["sum_contracts"] = round(b["sum_contracts"], 2)
         b["sum_payroll"] = round(b["sum_payroll"], 2)
         b["deals"].sort(key=lambda d: -(d.get("contract_at") or 0))
@@ -1611,8 +1683,11 @@ def payroll(*, period: str = "30d", date_from: str | None = None, date_to: str |
         "from": label_from,
         "to": label_to,
         "rules": PAYROLL_RULES,
+        "manager_rules": MANAGER_PAYROLL_RULES,
         "total_payroll": round(grand, 2),
+        "total_manager_payroll": round(grand_mgr, 2),
         "by_surveyor": by_surveyor,
+        "by_manager": by_manager,
     }
 
 

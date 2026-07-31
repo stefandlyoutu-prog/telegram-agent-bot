@@ -30,6 +30,7 @@ import {
   syncAreasFromLists,
   coefForMaterial,
   wallAreaOf,
+  wallEndsAreaOf,
   calcWallArea,
   formulaHtml,
   totalAreas,
@@ -39,6 +40,11 @@ import {
   num,
   uid,
 } from "./calc.js";
+
+/** Помехи, которые удобно считать на каждой стороне фасада */
+const WALL_ATTENTION = ATTENTION_ELEMENTS.filter((el) =>
+  ["lights", "antennas", "ac", "chimneys", "wiring", "garlands", "decor", "cable_duct"].includes(el.id)
+);
 import * as store from "./storage.js";
 import {
   fetchMeta,
@@ -938,6 +944,7 @@ function ensureActiveWall(b) {
     b.activeWallId = "";
     return null;
   }
+  if (b._wallCollapsed) return null;
   if (!walls.some((w) => w.id === b.activeWallId)) {
     b.activeWallId = walls[0].id;
   }
@@ -947,9 +954,120 @@ function ensureActiveWall(b) {
 function setActiveWall(wallId) {
   const b = active();
   b.activeWallId = wallId;
+  b._wallCollapsed = false;
   save();
   paintWallsList();
   refreshWallViz();
+}
+
+function collapseActiveWall() {
+  const b = active();
+  b.activeWallId = "";
+  b._wallCollapsed = true;
+  save();
+  paintWallsList();
+  refreshWallViz();
+}
+
+function syncWallAttentionToSurvey(b) {
+  if (!survey.attention) survey.attention = {};
+  for (const el of WALL_ATTENTION) {
+    const sum = (b.measure?.walls || []).reduce((s, w) => s + num(w.attention?.[el.id]), 0);
+    if (sum > 0) survey.attention[el.id] = sum;
+  }
+}
+
+function wallOpeningsOf(b, wallId) {
+  return (b.measure.openings || []).filter((o) => o.wallId === wallId);
+}
+
+function wallBundleHtml(w, b) {
+  const endsA = wallEndsAreaOf(w);
+  const ops = wallOpeningsOf(b, w.id);
+  const att = w.attention || {};
+  return `
+    <section class="wall-bundle">
+      <h4 class="wall-bundle-title">На этой стороне · сразу всё</h4>
+      <p class="hint wall-bundle-hint">Торцы, проёмы, наличники и помехи — чтобы не обходить дом по кругу.</p>
+
+      <div class="wall-bundle-block">
+        <label class="wall-check">
+          <input type="checkbox" data-wf="endsOn" ${w.endsOn || num(w.endsCount) || num(w.endsLength) ? "checked" : ""} />
+          Торцы / перерубы
+        </label>
+        <div class="wall-ends-grid" ${!(w.endsOn || num(w.endsCount) || num(w.endsLength)) ? "hidden" : ""} data-ends-box>
+          <div class="field"><label>Выступ, м</label>
+            <input data-wf="endsDepth" value="${esc(w.endsDepth ?? "0.2")}" inputmode="decimal" placeholder="0.2"></div>
+          <div class="field"><label>Кол-во торцов</label>
+            <input data-wf="endsCount" value="${esc(w.endsCount)}" inputmode="numeric" placeholder="2"></div>
+          <div class="field"><label>Или длина, пог.м</label>
+            <input data-wf="endsLength" value="${esc(w.endsLength)}" inputmode="decimal" placeholder="авто × высота"></div>
+          <div class="field"><label>Вручную, м²</label>
+            <input data-wf="endsAreaManual" value="${esc(w.endsAreaManual)}" inputmode="decimal"></div>
+          <label class="wall-check span2">
+            <input type="checkbox" data-wf="endsWithSides" ${w.endsWithSides ? "checked" : ""} />
+            С боками (+площадь, ×3)
+          </label>
+          <div class="wall-ends-sum">Площадь торцов: <b data-ends-sum>${endsA ? endsA.toFixed(2) : "—"}</b> м²</div>
+        </div>
+      </div>
+
+      <div class="wall-bundle-block">
+        <div class="wall-bundle-row">
+          <strong>Проёмы на стороне</strong>
+          <div class="wall-bundle-actions">
+            <button type="button" class="btn ghost sm" data-wall-add-op="Окно">+ окно</button>
+            <button type="button" class="btn ghost sm" data-wall-add-op="${b.kind === "garage" ? "Ворота" : "Дверь"}">+ ${b.kind === "garage" ? "ворота" : "дверь"}</button>
+          </div>
+        </div>
+        <div class="wall-ops-inline" data-wall-ops>
+          ${
+            ops.length
+              ? ops
+                  .map((o) => {
+                    const oa = Math.round(num(o.width) * num(o.height) * 100) / 100;
+                    return `
+              <div class="wall-op-row" data-oid="${o.id}">
+                <input class="wall-op-label" data-of="label" value="${esc(o.label)}" />
+                <input data-of="width" value="${esc(o.width)}" inputmode="decimal" placeholder="Ш, м" />
+                <input data-of="height" value="${esc(o.height)}" inputmode="decimal" placeholder="В, м" />
+                <span class="wall-op-area">${oa ? oa.toFixed(1) : "—"}</span>
+                <button type="button" class="btn ghost sm" data-wall-op-del="${o.id}" title="Удалить">✕</button>
+              </div>`;
+                  })
+                  .join("")
+              : `<p class="hint soft">Нет проёмов — добавьте окно/дверь на этой стороне</p>`
+          }
+        </div>
+      </div>
+
+      <div class="wall-bundle-block">
+        <div class="field">
+          <label>Наличники на стороне, пог.м</label>
+          <input data-wf="trimLength" value="${esc(w.trimLength)}" inputmode="decimal" placeholder="суммируется в допы">
+        </div>
+      </div>
+
+      <div class="wall-bundle-block">
+        <strong>Помехи на стороне</strong>
+        <div class="wall-att-grid">
+          ${WALL_ATTENTION.map((el) => {
+            const v = att[el.id] || 0;
+            return `
+            <div class="wall-att-item">
+              <span>${el.label}</span>
+              <div class="counter sm">
+                <button type="button" data-wall-att-dec="${el.id}">−</button>
+                <input data-wall-att="${el.id}" value="${v}" inputmode="numeric">
+                <button type="button" data-wall-att-inc="${el.id}">+</button>
+              </div>
+            </div>`;
+          }).join("")}
+        </div>
+      </div>
+
+      <button type="button" class="btn block wall-collapse-btn" data-wall-collapse>Свернуть сторону</button>
+    </section>`;
 }
 
 function refreshWallViz() {
@@ -1591,7 +1709,8 @@ function paintWallsList() {
         <div class="wall-card-head">
           <span class="wc-idx on">${i + 1}</span>
           <input class="wall-label" data-f="label" value="${esc(w.label)}" placeholder="Название стороны">
-          <button type="button" class="btn ghost" data-del="${w.id}" ${walls.length <= 1 ? "disabled" : ""}>✕</button>
+          <button type="button" class="btn ghost sm" data-wall-collapse title="Свернуть без удаления">Свернуть</button>
+          <button type="button" class="btn ghost" data-del="${w.id}" ${walls.length <= 1 ? "disabled" : ""} title="Удалить сторону">✕</button>
         </div>
         <p class="wall-step-hint">${sideHint(i, b.kind)}</p>
         <div class="wall-meta">
@@ -1646,6 +1765,7 @@ function paintWallsList() {
             : ""
         }
         ${wallPhotosHtml(w)}
+        ${wallBundleHtml(w, b)}
         <details class="wall-extra">
           <summary>Материал стороны (если отличается)</summary>
           <div class="wall-meta materials">
@@ -1695,6 +1815,11 @@ function paintWallsList() {
           if (areaEl) {
             const a = wallAreaOf(wall);
             areaEl.textContent = `${a ? a.toFixed(1) : "—"} м²`;
+          }
+          const endsEl = card.querySelector("[data-ends-sum]");
+          if (endsEl) {
+            const ea = wallEndsAreaOf(wall);
+            endsEl.textContent = ea ? ea.toFixed(2) : "—";
           }
           updateWallsSum();
           refreshBadge();
@@ -1753,6 +1878,102 @@ function paintWallsList() {
       paintWallsList();
       refreshBadge();
     };
+  });
+  list.querySelectorAll("[data-wall-collapse]").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      collapseActiveWall();
+    };
+  });
+  list.querySelectorAll(".wall-card.active [data-wf]").forEach((inp) => {
+    const card = inp.closest(".wall-card.active");
+    const id = card?.dataset.wid;
+    const ev = inp.type === "checkbox" || inp.tagName === "SELECT" ? "change" : "input";
+    inp.addEventListener(ev, () => {
+      const wall = b.measure.walls.find((x) => x.id === id);
+      if (!wall) return;
+      const key = inp.dataset.wf;
+      if (inp.type === "checkbox") wall[key] = inp.checked;
+      else wall[key] = inp.value;
+      if (key === "endsOn" && inp.checked && !wall.endsDepth) wall.endsDepth = "0.2";
+      syncAreasFromLists(b);
+      save();
+      if (key === "endsOn") {
+        paintWallsList();
+        return;
+      }
+      const sumEl = card.querySelector("[data-ends-sum]");
+      if (sumEl) {
+        const a = wallEndsAreaOf(wall);
+        sumEl.textContent = a ? a.toFixed(2) : "—";
+      }
+      updateWallsSum();
+      refreshBadge();
+    });
+  });
+  list.querySelectorAll("[data-wall-add-op]").forEach((btn) => {
+    btn.onclick = () => {
+      const card = btn.closest(".wall-card.active");
+      const wallId = card?.dataset.wid || b.activeWallId;
+      b.measure.openings.push({
+        id: uid(),
+        label: btn.dataset.wallAddOp || "Окно",
+        width: "",
+        height: "",
+        zone: b.zones?.facade ? "facade" : "interior",
+        wallId: wallId || "",
+        needsWarm: false,
+        note: "",
+      });
+      syncAreasFromLists(b);
+      save();
+      paintWallsList();
+      refreshBadge();
+    };
+  });
+  list.querySelectorAll("[data-wall-op-del]").forEach((btn) => {
+    btn.onclick = () => {
+      b.measure.openings = (b.measure.openings || []).filter((o) => o.id !== btn.dataset.wallOpDel);
+      syncAreasFromLists(b);
+      save();
+      paintWallsList();
+      refreshBadge();
+    };
+  });
+  list.querySelectorAll(".wall-op-row [data-of]").forEach((inp) => {
+    inp.addEventListener("input", () => {
+      const row = inp.closest(".wall-op-row");
+      const op = (b.measure.openings || []).find((o) => o.id === row?.dataset.oid);
+      if (!op) return;
+      op[inp.dataset.of] = inp.value;
+      syncAreasFromLists(b);
+      save();
+      const area = Math.round(num(op.width) * num(op.height) * 100) / 100;
+      const areaEl = row.querySelector(".wall-op-area");
+      if (areaEl) areaEl.textContent = area ? area.toFixed(1) : "—";
+      updateWallsSum();
+      refreshBadge();
+    });
+  });
+  list.querySelectorAll("[data-wall-att-inc], [data-wall-att-dec], [data-wall-att]").forEach((el) => {
+    const apply = () => {
+      const card = el.closest(".wall-card.active");
+      const wall = b.measure.walls.find((x) => x.id === card?.dataset.wid);
+      if (!wall) return;
+      if (!wall.attention) wall.attention = {};
+      if (el.dataset.wallAttInc) {
+        wall.attention[el.dataset.wallAttInc] = num(wall.attention[el.dataset.wallAttInc]) + 1;
+      } else if (el.dataset.wallAttDec) {
+        wall.attention[el.dataset.wallAttDec] = Math.max(0, num(wall.attention[el.dataset.wallAttDec]) - 1);
+      } else if (el.dataset.wallAtt) {
+        wall.attention[el.dataset.wallAtt] = num(el.value);
+      }
+      syncWallAttentionToSurvey(b);
+      save();
+      if (el.dataset.wallAttInc || el.dataset.wallAttDec) paintWallsList();
+    };
+    if (el.tagName === "BUTTON") el.onclick = apply;
+    else el.onchange = apply;
   });
   list.querySelectorAll("[data-wall-photo]").forEach((inp) => {
     inp.onchange = async () => {
@@ -1843,11 +2064,12 @@ function renderOpenings(root) {
       <button type="button" class="btn" id="btn-add-door">+ Дверь / ворота</button>
     </div>
     <h3 class="subhead">Торцы</h3>
+    <p class="hint">Лучше заполнять на каждой стороне (шаг «Стены») — здесь сумма. Можно поправить вручную, если сторон ещё нет.</p>
     <div class="grid two">
       <div class="field">
         <label>Sтор, м²</label>
         <input data-path="building.measure.endsArea" value="${esc(b.measure.endsArea)}" inputmode="decimal">
-        <span class="field-tip">Добавляется к площади фасада</span>
+        <span class="field-tip">Σ по сторонам или вручную</span>
       </div>
       <div class="field">
         <label>Lтор, пог.м</label>
