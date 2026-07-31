@@ -746,6 +746,13 @@ h3 .pct-pill { margin-left: 8px; vertical-align: middle; }
   border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface);
   transition: opacity .2s ease, border-color .2s ease;
 }
+.flow-step-main { min-width: 0; }
+.flow-step-cap {
+  display: block; width: 100%; text-align: left;
+  background: transparent; border: 0; padding: 2px 0 4px;
+  color: var(--text); font-weight: 700; font-size: 0.92rem; cursor: pointer;
+}
+.flow-step:not(.open) .flow-step-cap { color: var(--muted); font-weight: 600; }
 .flow-step:not(.open) .flow-step-body { display: none; }
 .flow-step.locked {
   opacity: 0.45; border-style: dashed;
@@ -760,8 +767,10 @@ h3 .pct-pill { margin-left: 8px; vertical-align: middle; }
 .flow-step:not(.open) .flow-step-num {
   background: rgba(196,163,90,0.18); color: var(--accent);
 }
+.flow-step.open { border-color: rgba(196,163,90,0.45); }
 .flow-step.locked .flow-step-num { background: var(--line); color: var(--muted); }
 .flow-step-body { min-width: 0; }
+.flow-step .flow-next { margin-top: 14px; width: 100%; }
 .flow-step .reveal { animation: flowIn .25s ease; }
 @keyframes flowIn {
   from { opacity: 0; transform: translateY(6px); }

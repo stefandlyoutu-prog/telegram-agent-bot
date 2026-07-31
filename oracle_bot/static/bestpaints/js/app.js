@@ -860,11 +860,17 @@ function canLeaveStep(stepId) {
   if (stepId === "building") {
     const b = active();
     if (!b.name?.trim()) {
+      setBuildingFlow(b, 1);
+      save();
+      paintBuildingFlow(document.getElementById("step-body") || document, 1);
       return blockLeave("Укажите название строения.", {
         focus: '[data-path="building.name"]',
       });
     }
     if (!b.zones?.facade && !b.zones?.interior) {
+      setBuildingFlow(b, 2);
+      save();
+      paintBuildingFlow(document.getElementById("step-body") || document, 2);
       return blockLeave("Выберите зону работ: снаружи и/или внутри.", {
         focus: '[data-zone="facade"]',
       });
@@ -1268,9 +1274,29 @@ function renderClient(root) {
 }
 
 /* ——— 2. Строение ——— */
+function buildingFlowOf(b) {
+  const n = Number(b?._buildingFlow);
+  return Number.isFinite(n) && n >= 1 && n <= 4 ? n : 1;
+}
+
+function setBuildingFlow(b, n) {
+  b._buildingFlow = Math.max(1, Math.min(4, Number(n) || 1));
+}
+
+function paintBuildingFlow(root, openN) {
+  root.querySelectorAll(".flow-step[data-flow]").forEach((s) => {
+    s.classList.toggle("open", Number(s.dataset.flow) === openN);
+  });
+}
+
+function flowNextBtn(next, label) {
+  return `<button type="button" class="btn primary flow-next" data-flow-next="${esc(String(next))}">${esc(label)}</button>`;
+}
+
 function renderBuilding(root) {
   const b = active();
   const roof = ROOF_TYPES.find((r) => r.id === b.roofType) || ROOF_TYPES[0];
+  const flow = buildingFlowOf(b);
 
   root.innerHTML = `
     <div class="building-toolbar">
@@ -1281,109 +1307,122 @@ function renderBuilding(root) {
           : ""
       }
     </div>
-    <p class="section-sub">Что красим на участке. После этого — замер сторон.</p>
+    <p class="section-sub">Что красим на участке. После этого — замер сторон. Выбор не прыгает сам — жмите «Далее».</p>
     ${tipBlock("building")}
 
-    <div class="flow-step open" data-flow="1">
+    <div class="flow-step ${flow === 1 ? "open" : ""}" data-flow="1">
       <button type="button" class="flow-step-num" data-flow-tog="1">1</button>
-      <div class="flow-step-body">
-        <div class="field">
-          <label>Название строения</label>
-          <input data-path="building.name" value="${esc(b.name)}" placeholder="Дом / Баня / Гараж…">
-        </div>
-        <label class="hint" style="display:block;margin:12px 0 8px">Тип объекта</label>
-        <div class="choice-grid compact">
-          ${OBJECT_KINDS.map(
-            (k) => `
-            <button type="button" class="choice ${b.kind === k.id ? "selected" : ""}" data-kind="${k.id}">
-              <strong>${k.title}</strong><span>${k.hint}</span>
-            </button>`
-          ).join("")}
+      <div class="flow-step-main">
+        <button type="button" class="flow-step-cap" data-flow-tog="1">Тип объекта</button>
+        <div class="flow-step-body">
+          <div class="field">
+            <label>Название строения</label>
+            <input data-path="building.name" value="${esc(b.name)}" placeholder="Дом / Баня / Гараж…">
+          </div>
+          <label class="hint" style="display:block;margin:12px 0 8px">Тип объекта</label>
+          <div class="choice-grid compact">
+            ${OBJECT_KINDS.map(
+              (k) => `
+              <button type="button" class="choice ${b.kind === k.id ? "selected" : ""}" data-kind="${k.id}">
+                <strong>${k.title}</strong><span>${k.hint}</span>
+              </button>`
+            ).join("")}
+          </div>
+          ${flowNextBtn(2, "Далее →")}
         </div>
       </div>
     </div>
 
-    <div class="flow-step" data-flow="2">
+    <div class="flow-step ${flow === 2 ? "open" : ""}" data-flow="2">
       <button type="button" class="flow-step-num" data-flow-tog="2">2</button>
-      <div class="flow-step-body">
-        <label class="hint" style="display:block;margin:0 0 8px">Зоны работ · фасад и/или интерьер</label>
-        <div class="zone-toggles">
-          ${WORK_ZONES.map(
-            (z) => `
-            <label class="choice zone-check ${b.zones?.[z.id] ? "selected" : ""}">
-              <input type="checkbox" data-zone="${z.id}" ${b.zones?.[z.id] ? "checked" : ""}>
-              <span><strong>${z.title}</strong><br><span class="hint">${z.hint}</span></span>
-            </label>`
-          ).join("")}
-        </div>
-        <p class="hint">Стены — на шаге «Замер». Подшива, лобовая, столбы, потолки — на шаге «Допы».</p>
-        ${
-          b.kind === "fence"
-            ? `<label class="check-inline" style="margin-top:12px;display:flex">
-                <input type="checkbox" id="fence-both" ${b.fenceBothSides ? "checked" : ""}>
-                Красим забор с двух сторон (×2 к площади)
+      <div class="flow-step-main">
+        <button type="button" class="flow-step-cap" data-flow-tog="2">Зоны работ · фасад и/или интерьер</button>
+        <div class="flow-step-body">
+          <div class="zone-toggles">
+            ${WORK_ZONES.map(
+              (z) => `
+              <label class="choice zone-check ${b.zones?.[z.id] ? "selected" : ""}">
+                <input type="checkbox" data-zone="${z.id}" ${b.zones?.[z.id] ? "checked" : ""}>
+                <span><strong>${z.title}</strong><br><span class="hint">${z.hint}</span></span>
               </label>`
-            : `<label class="check-inline" style="margin-top:12px;display:flex">
-                <input type="checkbox" id="plinth-skip" ${b.plinthSkip ? "checked" : ""}>
-                Цоколь камень/кирпич — не красим
-              </label>
-              ${b.plinthSkip ? `<div class="field" style="margin-top:8px"><label>Заметка по цоколю</label><input data-path="building.measure.plinthNote" value="${esc(b.measure.plinthNote)}" placeholder="высота / материал"></div>` : ""}`
-        }
+            ).join("")}
+          </div>
+          <p class="hint">Стены — на шаге «Замер». Подшива, лобовая, столбы, потолки — на шаге «Допы».</p>
+          ${
+            b.kind === "fence"
+              ? `<label class="check-inline" style="margin-top:12px;display:flex">
+                  <input type="checkbox" id="fence-both" ${b.fenceBothSides ? "checked" : ""}>
+                  Красим забор с двух сторон (×2 к площади)
+                </label>`
+              : `<label class="check-inline" style="margin-top:12px;display:flex">
+                  <input type="checkbox" id="plinth-skip" ${b.plinthSkip ? "checked" : ""}>
+                  Цоколь камень/кирпич — не красим
+                </label>
+                ${b.plinthSkip ? `<div class="field" style="margin-top:8px"><label>Заметка по цоколю</label><input data-path="building.measure.plinthNote" value="${esc(b.measure.plinthNote)}" placeholder="высота / материал"></div>` : ""}`
+          }
+          ${flowNextBtn(3, "Далее →")}
+        </div>
       </div>
     </div>
 
-    <div class="flow-step" data-flow="3">
+    <div class="flow-step ${flow === 3 ? "open" : ""}" data-flow="3">
       <button type="button" class="flow-step-num" data-flow-tog="3">3</button>
-      <div class="flow-step-body">
-        <label class="hint" style="display:block;margin:0 0 8px">Крыша / силуэт</label>
-        <div class="choice-grid compact">
-          ${ROOF_TYPES.map(
-            (r) => `
-            <button type="button" class="choice ${b.roofType === r.id ? "selected" : ""}" data-roof="${r.id}">
-              <strong>${r.title}</strong><span>${r.tip}</span>
-            </button>`
-          ).join("")}
+      <div class="flow-step-main">
+        <button type="button" class="flow-step-cap" data-flow-tog="3">Крыша / силуэт</button>
+        <div class="flow-step-body">
+          <div class="choice-grid compact">
+            ${ROOF_TYPES.map(
+              (r) => `
+              <button type="button" class="choice ${b.roofType === r.id ? "selected" : ""}" data-roof="${r.id}">
+                <strong>${r.title}</strong><span>${r.tip}</span>
+              </button>`
+            ).join("")}
+          </div>
+          <div class="callout ok" id="roof-tip">${escapeHtml(roof.tip)}</div>
+          ${flowNextBtn(4, "Далее →")}
         </div>
-        <div class="callout ok">${escapeHtml(roof.tip)}</div>
       </div>
     </div>
 
-    <div class="flow-step" data-flow="4">
+    <div class="flow-step ${flow === 4 ? "open" : ""}" data-flow="4">
       <button type="button" class="flow-step-num" data-flow-tog="4">4</button>
-      <div class="flow-step-body">
-        <label class="hint" style="display:block;margin:0 0 8px">Покрытие и материал</label>
-        <div class="choice-grid">
-          ${HOUSE_TYPES.map(
-            (t) => `
-            <button type="button" class="choice ${b.houseType === t.id ? "selected" : ""}" data-htype="${t.id}">
-              <strong>${t.title}</strong><span>${t.hint}</span>
-            </button>`
-          ).join("")}
-        </div>
-        <div class="grid two" style="margin-top:14px">
-          <div class="field">
-            <label>Материал</label>
-            <select data-path="building.material" id="mat-select">
-              ${MATERIAL_OPTIONS.map(
-                (m) => `<option value="${m.id}" ${b.material === m.id ? "selected" : ""}>${m.label}</option>`
-              ).join("")}
-            </select>
+      <div class="flow-step-main">
+        <button type="button" class="flow-step-cap" data-flow-tog="4">Покрытие и материал</button>
+        <div class="flow-step-body">
+          <div class="choice-grid">
+            ${HOUSE_TYPES.map(
+              (t) => `
+              <button type="button" class="choice ${b.houseType === t.id ? "selected" : ""}" data-htype="${t.id}">
+                <strong>${t.title}</strong><span>${t.hint}</span>
+              </button>`
+            ).join("")}
           </div>
-          <div class="field">
-            <label>Сечение / Ø</label>
-            <input data-path="building.materialSize" value="${esc(b.materialSize)}" placeholder="200×200 / Ø240">
+          <div class="grid two" style="margin-top:14px">
+            <div class="field">
+              <label>Материал</label>
+              <select data-path="building.material" id="mat-select">
+                ${MATERIAL_OPTIONS.map(
+                  (m) => `<option value="${m.id}" ${b.material === m.id ? "selected" : ""}>${m.label}</option>`
+                ).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Сечение / Ø</label>
+              <input data-path="building.materialSize" value="${esc(b.materialSize)}" placeholder="200×200 / Ø240">
+            </div>
           </div>
+          <div class="callout" id="k-hint"></div>
+          <h3 class="subhead">Габариты (по желанию)</h3>
+          <div class="grid two">
+            <div class="field"><label>Длина, м</label><input data-path="building.dims.length" value="${esc(b.dims?.length)}" inputmode="decimal"></div>
+            <div class="field"><label>Ширина, м</label><input data-path="building.dims.width" value="${esc(b.dims?.width)}" inputmode="decimal"></div>
+            <div class="field"><label>Высота до конька</label><input data-path="building.dims.heightRidge" value="${esc(b.dims?.heightRidge)}" inputmode="decimal"></div>
+            <div class="field"><label>Высота до фронтона</label><input data-path="building.dims.heightGable" value="${esc(b.dims?.heightGable)}" inputmode="decimal"></div>
+          </div>
+          ${vizCard(b)}
+          ${photosHtml(b)}
+          ${flowNextBtn("walls", "К замеру →")}
         </div>
-        <div class="callout" id="k-hint"></div>
-        <h3 class="subhead">Габариты (по желанию)</h3>
-        <div class="grid two">
-          <div class="field"><label>Длина, м</label><input data-path="building.dims.length" value="${esc(b.dims?.length)}" inputmode="decimal"></div>
-          <div class="field"><label>Ширина, м</label><input data-path="building.dims.width" value="${esc(b.dims?.width)}" inputmode="decimal"></div>
-          <div class="field"><label>Высота до конька</label><input data-path="building.dims.heightRidge" value="${esc(b.dims?.heightRidge)}" inputmode="decimal"></div>
-          <div class="field"><label>Высота до фронтона</label><input data-path="building.dims.heightGable" value="${esc(b.dims?.heightGable)}" inputmode="decimal"></div>
-        </div>
-        ${vizCard(b)}
-        ${photosHtml(b)}
       </div>
     </div>
   `;
@@ -1392,14 +1431,34 @@ function renderBuilding(root) {
   bindVizColors(root);
   bindPhotos(root, b);
   updateKHint();
+
+  const openFlow = (n) => {
+    setBuildingFlow(b, n);
+    save();
+    paintBuildingFlow(root, buildingFlowOf(b));
+  };
+
   root.querySelectorAll("[data-flow-tog]").forEach((btn) => {
+    btn.onclick = () => openFlow(btn.getAttribute("data-flow-tog"));
+  });
+  root.querySelectorAll("[data-flow-next]").forEach((btn) => {
     btn.onclick = () => {
-      const id = btn.getAttribute("data-flow-tog");
-      const step = root.querySelector(`.flow-step[data-flow="${id}"]`);
-      if (!step) return;
-      const was = step.classList.contains("open");
-      root.querySelectorAll(".flow-step").forEach((s) => s.classList.remove("open"));
-      if (!was) step.classList.add("open");
+      const next = btn.getAttribute("data-flow-next");
+      if (next === "walls") {
+        flushVisibleFields();
+        const leaveId = "building";
+        if (!canLeaveStep(leaveId)) return;
+        const idx = STEPS.findIndex((s) => s.id === "walls");
+        if (idx >= 0) {
+          step = idx;
+          render();
+        } else {
+          $("#btn-next")?.click();
+        }
+        return;
+      }
+      openFlow(next);
+      root.querySelector(`.flow-step[data-flow="${next}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     };
   });
 
@@ -1432,6 +1491,7 @@ function renderBuilding(root) {
 
   root.querySelectorAll("[data-kind]").forEach((btn) => {
     btn.onclick = () => {
+      setBuildingFlow(active(), 1);
       applyKindPreset(active(), btn.dataset.kind);
       active().measure.roundCoef = coefForMaterial(active().material);
       save();
@@ -1440,9 +1500,11 @@ function renderBuilding(root) {
   });
   root.querySelectorAll("[data-roof]").forEach((btn) => {
     btn.onclick = () => {
-      active().roofType = btn.dataset.roof;
+      const cur = active();
+      setBuildingFlow(cur, 3);
+      cur.roofType = btn.dataset.roof;
       if (["gable", "broken"].includes(btn.dataset.roof)) {
-        const walls = active().measure.walls || [];
+        const walls = cur.measure.walls || [];
         const ends = walls.filter((w) => /главн|задн|фронтон|а\b|в\b/i.test(w.label || ""));
         const targets = ends.length >= 2 ? ends.slice(0, 2) : [walls[0], walls[2]].filter(Boolean);
         for (const w of targets) {
@@ -1450,22 +1512,32 @@ function renderBuilding(root) {
         }
       }
       save();
-      render();
+      // без полного render — только подсветка и подсказка
+      root.querySelectorAll("[data-roof]").forEach((el) => {
+        el.classList.toggle("selected", el.dataset.roof === btn.dataset.roof);
+      });
+      const tip = ROOF_TYPES.find((r) => r.id === btn.dataset.roof);
+      const tipEl = root.querySelector("#roof-tip");
+      if (tipEl && tip) tipEl.textContent = tip.tip;
     };
   });
   root.querySelectorAll("[data-htype]").forEach((btn) => {
     btn.onclick = () => {
-      active().houseType = btn.dataset.htype;
-      active().tech.techId = defaultTechId(active().houseType, active().condition, active().material);
+      const cur = active();
+      setBuildingFlow(cur, 4);
+      cur.houseType = btn.dataset.htype;
+      cur.tech.techId = defaultTechId(cur.houseType, cur.condition, cur.material);
       save();
-      render();
+      root.querySelectorAll("[data-htype]").forEach((el) => {
+        el.classList.toggle("selected", el.dataset.htype === btn.dataset.htype);
+      });
     };
   });
   root.querySelectorAll("[data-zone]").forEach((inp) => {
     inp.onchange = () => {
       active().zones[inp.dataset.zone] = inp.checked;
+      inp.closest(".zone-check")?.classList.toggle("selected", inp.checked);
       save();
-      render();
     };
   });
   $("#fence-both", root)?.addEventListener("change", (e) => {
@@ -1476,6 +1548,7 @@ function renderBuilding(root) {
     toast(e.target.checked ? "Площадь забора ×2" : "Одна сторона");
   });
   $("#plinth-skip", root)?.addEventListener("change", (e) => {
+    setBuildingFlow(active(), 2);
     active().plinthSkip = e.target.checked;
     save();
     render();
