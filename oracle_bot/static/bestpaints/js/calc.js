@@ -83,6 +83,28 @@ export function trimLengthFromWalls(list) {
   return round2((list || []).reduce((s, w) => s + Math.max(0, num(w.trimLength)), 0));
 }
 
+/** Сумма числового поля со всех сторон → в measure */
+export function sumWallField(list, key) {
+  return round2((list || []).reduce((s, w) => s + Math.max(0, num(w?.[key])), 0));
+}
+
+/** Поля допов, которые считаем по сторонам и суммируем в measure */
+export const WALL_EXTRA_FIELDS = [
+  ["soffitArea", "soffitArea"],
+  ["fasciaArea", "fasciaArea"],
+  ["overhangArea", "overhangArea"],
+  ["porchArea", "porchArea"],
+  ["stairsArea", "stairsArea"],
+  ["trimLength", "trimLength"],
+  ["doborLength", "doborLength"],
+  ["gutterLength", "gutterLength"],
+  ["sillLength", "sillLength"],
+  ["railingsArea", "railingsArea"],
+  ["warmLength", "warmSeamTotal"],
+  ["ceilingArea", "ceilingArea"],
+  ["floorArea", "floorArea"],
+];
+
 /** Sобщ = (Sст − Sок/дв + Sтор) × K */
 export function calcWallArea(m, zoneFilter = null) {
   const wallsList = m.walls || [];
@@ -139,8 +161,10 @@ export function syncAreasFromLists(buildingOrSurvey) {
   m.openingsArea = openingsAreaOf(m.openings);
   const endsWalls = endsAreaFromWalls(m.walls);
   if (endsWalls > 0) m.endsArea = endsWalls;
-  const trimWalls = trimLengthFromWalls(m.walls);
-  if (trimWalls > 0) m.trimLength = trimWalls;
+  for (const [wallKey, measureKey] of WALL_EXTRA_FIELDS) {
+    const sum = sumWallField(m.walls, wallKey);
+    if (sum > 0) m[measureKey] = sum;
+  }
   m.facadeArea = calcWallArea(m, "facade").total;
   m.interiorArea = calcWallArea(m, "interior").total;
   return calcWallArea(m);

@@ -803,13 +803,12 @@ function renderWizard() {
     client: renderClient,
     building: renderBuilding,
     walls: renderWalls,
-    openings: renderOpenings,
-    more: renderMore,
     tech: renderTech,
     site: renderSite,
     estimate: renderEstimate,
   };
-  map[stepId](body);
+  const renderStep = map[stepId] || renderWalls;
+  renderStep(body);
   bindKeypad(body);
 }
 
@@ -818,8 +817,7 @@ function nextLabel(stepId) {
     {
       client: "К строению →",
       building: "К замеру →",
-      walls: "К допам →",
-      more: "В конструктор →",
+      walls: "В конструктор →",
       tech: "К договору →",
       site: "К смете →",
     }[stepId] || "Далее"
@@ -1015,10 +1013,11 @@ function wallBundleHtml(w, b) {
   const doneLabel = next
     ? `Готово · ${escapeHtml(next.label || "следующая сторона")} →`
     : "Готово · свернуть";
+  const isInterior = (w.zone || "facade") === "interior";
   return `
     <section class="wall-bundle">
       <h4 class="wall-bundle-title">На этой стороне · сразу всё</h4>
-      <p class="hint wall-bundle-hint">Торцы, проёмы, наличники и помехи — чтобы не обходить дом по кругу.</p>
+      <p class="hint wall-bundle-hint">Стоя у фасада заполните всё по этой стороне — потом переходите к следующей. Отдельного шага «Допы» нет.</p>
 
       <div class="wall-bundle-block">
         <label class="wall-check">
@@ -1072,9 +1071,39 @@ function wallBundleHtml(w, b) {
       </div>
 
       <div class="wall-bundle-block">
-        <div class="field">
-          <label>Наличники на стороне, пог.м</label>
-          <input data-wf="trimLength" value="${esc(w.trimLength)}" inputmode="decimal" placeholder="суммируется в допы">
+        <strong>${isInterior ? "Элементы внутри на стороне" : "Допы на стороне"}</strong>
+        <div class="wall-ends-grid">
+          ${
+            isInterior
+              ? `
+          <div class="field"><label>Потолок, м²</label>
+            <input data-wf="ceilingArea" value="${esc(w.ceilingArea)}" inputmode="decimal"></div>
+          <div class="field"><label>Пол, м²</label>
+            <input data-wf="floorArea" value="${esc(w.floorArea)}" inputmode="decimal"></div>`
+              : `
+          <div class="field"><label>Подшива, м²</label>
+            <input data-wf="soffitArea" value="${esc(w.soffitArea)}" inputmode="decimal"></div>
+          <div class="field"><label>Лобовая, м²</label>
+            <input data-wf="fasciaArea" value="${esc(w.fasciaArea)}" inputmode="decimal"></div>
+          <div class="field"><label>Свес, м²</label>
+            <input data-wf="overhangArea" value="${esc(w.overhangArea)}" inputmode="decimal"></div>
+          <div class="field"><label>Наличники, пог.м</label>
+            <input data-wf="trimLength" value="${esc(w.trimLength)}" inputmode="decimal"></div>
+          <div class="field"><label>Доборы, пог.м</label>
+            <input data-wf="doborLength" value="${esc(w.doborLength)}" inputmode="decimal"></div>
+          <div class="field"><label>Водосток, пог.м</label>
+            <input data-wf="gutterLength" value="${esc(w.gutterLength)}" inputmode="decimal"></div>
+          <div class="field"><label>Отлив, пог.м</label>
+            <input data-wf="sillLength" value="${esc(w.sillLength)}" inputmode="decimal"></div>
+          <div class="field"><label>Тёплый шов, пог.м</label>
+            <input data-wf="warmLength" value="${esc(w.warmLength)}" inputmode="decimal" placeholder="на этой стороне"></div>
+          <div class="field"><label>Крыльцо / вход, м²</label>
+            <input data-wf="porchArea" value="${esc(w.porchArea)}" inputmode="decimal" placeholder="если на этой стороне"></div>
+          <div class="field"><label>Лестница, м²</label>
+            <input data-wf="stairsArea" value="${esc(w.stairsArea)}" inputmode="decimal"></div>
+          <div class="field"><label>Ограждения, м²</label>
+            <input data-wf="railingsArea" value="${esc(w.railingsArea)}" inputmode="decimal"></div>`
+          }
         </div>
       </div>
 
@@ -1650,8 +1679,8 @@ function renderWalls(root) {
     ${
       num(b.measure.wallsArea) <= 0
         ? `<div class="callout danger compact" id="walls-need-measure">
-            Чтобы идти дальше — введите <b>длину</b> и <b>высоту</b> хотя бы одной стороны (или свою площадь).
-            Проёмы и торцы заполняйте на каждой стороне здесь же.
+            Чтобы идти дальше — введите <b>длину</b> и <b>высоту</b> хотя бы одной стороны.
+            На стороне же: проёмы, торцы, подшива/шов/наличники, помехи.
           </div>`
         : ""
     }
