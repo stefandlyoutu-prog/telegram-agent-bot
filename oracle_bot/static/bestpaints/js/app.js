@@ -966,8 +966,29 @@ function setActiveWall(wallId) {
   refreshWallViz();
 }
 
+function nextWallAfter(b, wallId) {
+  const walls = b.measure?.walls || [];
+  const i = walls.findIndex((w) => w.id === wallId);
+  if (i < 0) return null;
+  const after = walls.slice(i + 1);
+  const before = walls.slice(0, i);
+  return (
+    after.find((w) => wallAreaOf(w) <= 0) ||
+    before.find((w) => wallAreaOf(w) <= 0) ||
+    after[0] ||
+    null
+  );
+}
+
 function collapseActiveWall() {
   const b = active();
+  const curId = b.activeWallId;
+  const next = nextWallAfter(b, curId);
+  if (next) {
+    setActiveWall(next.id);
+    document.getElementById("walls-list")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
   b.activeWallId = "";
   b._wallCollapsed = true;
   save();
@@ -991,6 +1012,10 @@ function wallBundleHtml(w, b) {
   const endsA = wallEndsAreaOf(w);
   const ops = wallOpeningsOf(b, w.id);
   const att = w.attention || {};
+  const next = nextWallAfter(b, w.id);
+  const doneLabel = next
+    ? `Готово · ${escapeHtml(next.label || "следующая сторона")} →`
+    : "Готово · свернуть";
   return `
     <section class="wall-bundle">
       <h4 class="wall-bundle-title">На этой стороне · сразу всё</h4>
@@ -1072,7 +1097,7 @@ function wallBundleHtml(w, b) {
         </div>
       </div>
 
-      <button type="button" class="btn block wall-collapse-btn" data-wall-collapse>Свернуть сторону</button>
+      <button type="button" class="btn block wall-collapse-btn" data-wall-collapse>Готово · свернуть</button>
     </section>`;
 }
 
@@ -1591,11 +1616,6 @@ function renderWalls(root) {
 
     <div id="walls-list" class="walls-list"></div>
 
-    <div class="wall-nav no-print">
-      <button type="button" class="btn" id="btn-prev-side">← Сторона</button>
-      <button type="button" class="btn primary" id="btn-next-side">След. сторона →</button>
-    </div>
-
     <details class="premium-details">
       <summary>K и масштаб по проекту</summary>
       <div class="grid two" style="margin-top:10px">
@@ -1666,9 +1686,6 @@ function renderWalls(root) {
     },
   });
 
-  $("#btn-prev-side", root).onclick = () => stepWall(-1);
-  $("#btn-next-side", root).onclick = () => stepWall(1);
-
   $("#coef-preset", root).onchange = (e) => {
     const opt = ROUND_COEF.find((c) => c.id === e.target.value);
     if (opt?.value != null) {
@@ -1687,17 +1704,6 @@ function renderWalls(root) {
     refreshBadge();
     updateWallsSum();
   };
-}
-
-function stepWall(dir) {
-  const b = active();
-  const walls = b.measure.walls || [];
-  if (!walls.length) return;
-  ensureActiveWall(b);
-  const i = walls.findIndex((w) => w.id === b.activeWallId);
-  const next = walls[(i + dir + walls.length) % walls.length];
-  setActiveWall(next.id);
-  document.getElementById("walls-list")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function paintSideStrip() {
