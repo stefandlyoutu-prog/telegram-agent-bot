@@ -1412,13 +1412,7 @@ function renderBuilding(root) {
             </div>
           </div>
           <div class="callout" id="k-hint"></div>
-          <h3 class="subhead">Габариты (по желанию)</h3>
-          <div class="grid two">
-            <div class="field"><label>Длина, м</label><input data-path="building.dims.length" value="${esc(b.dims?.length)}" inputmode="decimal"></div>
-            <div class="field"><label>Ширина, м</label><input data-path="building.dims.width" value="${esc(b.dims?.width)}" inputmode="decimal"></div>
-            <div class="field"><label>Высота до конька</label><input data-path="building.dims.heightRidge" value="${esc(b.dims?.heightRidge)}" inputmode="decimal"></div>
-            <div class="field"><label>Высота до фронтона</label><input data-path="building.dims.heightGable" value="${esc(b.dims?.heightGable)}" inputmode="decimal"></div>
-          </div>
+          <p class="hint" style="margin:12px 0 4px">Длину и высоту сторон вводите на следующем шаге «Замер» — здесь габариты не нужны.</p>
           ${vizCard(b)}
           ${photosHtml(b)}
           ${flowNextBtn("walls", "К замеру →")}
