@@ -1402,3 +1402,21 @@ h3 .pct-pill { margin-left: 8px; vertical-align: middle; }
 .zp-deal-top b { color: #8fbf7a; white-space: nowrap; }
 .zp-deal-meta { color: var(--muted); font-size: 0.8rem; }
 .zp-deal-rule { color: var(--accent); font-size: 0.78rem; margin-top: 2px; }
+
+
+/* Чертёж → замер */
+.drawings-card, .scale-card {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line, #d5ddd7);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fffef9, #f7f5f0);
+}
+.drawings-card .scale-head,
+.scale-card .scale-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.dw-result .table { font-size: 0.85rem; }

@@ -351,6 +351,35 @@ def _bp_api_auth(request: Request):
         raise HTTPException(401, "login required")
 
 
+
+import base64
+import binascii
+from oracle_bot.bestpaints_drawings import parse_drawing_bytes  # noqa: E402
+
+
+@app.post("/bestpaints/api/parse-drawing")
+async def bp_api_parse_drawing(request: Request):
+    """AI: чертёж заказчика → стены/проёмы для замера."""
+    _bp_api_auth(request)
+    data = await request.json()
+    data_url = str((data or {}).get("imageDataUrl") or "")
+    hint = str((data or {}).get("hint") or "")
+    if not data_url.startswith("data:") or "," not in data_url:
+        raise HTTPException(400, "Нужен imageDataUrl (data URL)")
+    try:
+        raw_b64 = data_url.split(",", 1)[1]
+        image = base64.b64decode(raw_b64, validate=False)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(400, f"Битый data URL: {e}") from e
+    try:
+        result = await parse_drawing_bytes(image, hint=hint)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    except Exception as e:
+        raise HTTPException(502, f"Vision недоступен: {e}") from e
+    return result
+
+
 @app.get("/bestpaints/api/meta")
 async def bp_api_meta(request: Request):
     _bp_api_auth(request)

@@ -19,6 +19,7 @@ import { shareTelegram, shareWhatsApp, copyShareText, nativeShare } from "./shar
 import { compressImageFile, photosHtml, wallPhotosHtml } from "./photos.js";
 import { bindKeypad } from "./keypad.js";
 import { scalePanelHtml, bindScalePanel } from "./scale.js";
+import { drawingsPanelHtml, bindDrawingsPanel } from "./drawings.js";
 import { softDelete, listTrash, removeTrash, getTrash, askDelete, clearTrash } from "./trash.js";
 import {
   emptySurvey,
@@ -1644,8 +1645,10 @@ function renderWalls(root) {
 
     <div id="walls-list" class="walls-list"></div>
 
-    <details class="premium-details">
-      <summary>K и масштаб по проекту</summary>
+    <details class="premium-details" open>
+      <summary>Чертёж заказчика и масштаб</summary>
+      ${drawingsPanelHtml(survey._drawings || {})}
+      <div style="height:12px"></div>
       <div class="grid two" style="margin-top:10px">
         <div class="field">
           <label>Коэффициент K (фасад)</label>
@@ -1711,6 +1714,24 @@ function renderWalls(root) {
       syncAreasFromLists(active());
       save();
       toast(`Ширина проёма = ${meters} м`);
+    },
+  });
+
+  bindDrawingsPanel(root, {
+    getBuilding: () => active(),
+    getState: () => survey._drawings || {},
+    setState: (st) => {
+      survey._drawings = st;
+      save();
+    },
+    toast,
+    onApplied: (r) => {
+      syncAreasFromLists(active());
+      save();
+      paintWallsList();
+      refreshBadge();
+      render();
+      toast(`Из чертежа: ${r.walls} стен, ${r.openings} проёмов`);
     },
   });
 
@@ -3044,8 +3065,11 @@ function renderEstimate(root) {
       финал ${money((est.total * num(survey.estimate.payments?.final, 10)) / 100)}
     </div>
 
+    <div class="callout ok no-print">
+      <b>PDF-презентация:</b> смета + почему выбран ЛКМ/технология + разложение цены по сторонам + гарантия и «вау»-визуализация дома.
+    </div>
     <div class="share-row no-print">
-      <button class="btn primary" id="btn-pdf">PDF для клиента ★</button>
+      <button class="btn primary" id="btn-pdf">PDF-презентация для клиента ★</button>
       <button class="btn" id="btn-tg">Telegram</button>
       <button class="btn" id="btn-wa">WhatsApp</button>
       <button class="btn" id="btn-copy">Копировать</button>

@@ -837,3 +837,65 @@ export function applyKindPreset(building, kind) {
 export function defaultWalls() {
   return wallsForPreset("box4", uid);
 }
+
+
+/** Продукт ЛКМ по paintId brand::id */
+export function findPaintProduct(catalog, paintId) {
+  if (!paintId || !catalog) return null;
+  const [brand, ...rest] = String(paintId).split("::");
+  const key = rest.join("::");
+  return (
+    catalog[brand]?.products.find(
+      (p) => p.id === key || p.name === key || p.displayName === key
+    ) || null
+  );
+}
+
+/**
+ * Разложение стоимости фасадной покраски по сторонам (пропорционально площади).
+ */
+export function sideCostBreakdown(building, catalog) {
+  if (!building?.zones?.facade) return [];
+  syncAreasFromLists(building);
+  const walls = (building.measure?.walls || []).filter((w) => (w.zone || "facade") !== "interior");
+  const facade = calcWallArea(building.measure, "facade");
+  const product = findPaintProduct(catalog, building.tech?.paintId);
+  const techId = Number(building.tech?.techId) || 4;
+  const item = product?.items?.find((i) => i.tech === techId);
+  const priceM2 = item ? Number(item.price) || 0 : 0;
+  const totalPaint = facade.total * priceM2;
+  const wallAreas = walls.map((w) => {
+    const gross = wallAreaOf(w);
+    const opens = (building.measure.openings || [])
+      .filter((o) => o.wallId === w.id)
+      .reduce((s, o) => s + num(o.width) * num(o.height), 0);
+    const ends = num(w.endsLength) ? num(w.endsLength) : 0;
+    // доля от фасада по «вкладу» стены (грубо: площадь стены)
+    return { wall: w, gross, opens, ends, net: Math.max(0, gross - opens) };
+  });
+  const sumGross = wallAreas.reduce((s, x) => s + x.gross, 0) || 1;
+  const k = num(building.measure.roundCoef, 1) || 1;
+  return wallAreas.map((x) => {
+    const share = x.gross / sumGross;
+    const paintSum = round2(totalPaint * share);
+    const endsSum = round2(x.ends * 1100);
+    return {
+      label: x.wall.label,
+      shape: x.wall.shape || "rect",
+      length: num(x.wall.length),
+      height: num(x.wall.height),
+      gross: round2(x.gross),
+      opens: round2(x.opens),
+      net: round2(x.net),
+      share,
+      paintSum,
+      endsSum,
+      total: round2(paintSum + endsSum),
+      priceM2,
+      techId,
+      k,
+      note: x.wall.note || "",
+      photos: (x.wall.photos || []).length,
+    };
+  });
+}
