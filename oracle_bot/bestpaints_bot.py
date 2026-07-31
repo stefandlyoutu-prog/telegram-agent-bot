@@ -391,7 +391,11 @@ async def cmd_zamer(message: Message, state: FSMContext):
     if not _enabled() or not message.from_user:
         return
     if not _can_create(message.from_user.id):
-        await message.answer("Нет доступа Лидоруба. Попросите админа добавить ваш Telegram ID.")
+        await message.answer(
+            "Создавать сделки может только лидоруб.\n"
+            "Админ: добавьте вас в «Команда → Лидорубы» (с Telegram ID) "
+            "или в BESTPAINTS_LIDARUB_IDS."
+        )
         return
     today = crm.today_str()
     duty = crm.on_duty("surveyor", today)
