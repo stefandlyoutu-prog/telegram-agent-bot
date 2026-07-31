@@ -1086,7 +1086,8 @@ export function detailHtml(obj, events, meta) {
   const statusOpts = (meta?.statuses || [])
     .map((s) => `<option value="${esc(s.id)}" ${s.id === obj.status ? "selected" : ""}>${esc(s.label)}</option>`)
     .join("");
-  const showMoney = ["on_site", "contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed"].includes(
+  // На этапе «На адресе / смета» сумму не показываем — только после исхода (заключил / не заключил)
+  const showMoney = ["contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed"].includes(
     obj.status
   );
   const assignHtml = assignSurveyorHtml(obj, meta);
@@ -1147,7 +1148,7 @@ export function detailHtml(obj, events, meta) {
       <button type="button" class="btn primary" id="crm-save-money">Сохранить в аналитику</button>
     </section>
   </details>`
-      : `<p class="hint crm-money-later">Сумма появится после статуса «На адресе» / сметы — сейчас рано.</p>`
+      : ""
   }
 
   ${audioHtml(obj) ? `<details class="crm-fold"><summary>Аудио Лидоруба</summary>${audioHtml(obj)}</details>` : ""}
