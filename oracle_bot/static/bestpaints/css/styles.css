@@ -1305,6 +1305,58 @@ h3 .pct-pill { margin-left: 8px; vertical-align: middle; }
   font-size: 0.88rem;
 }
 .sticky-acts { position: sticky; top: 52px; z-index: 15; background: rgba(15,20,18,.92); padding: 8px 0; backdrop-filter: blur(6px); }
+.crm-assign-box {
+  margin: 8px 0 14px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(196,163,90,0.4);
+  background: rgba(196,163,90,0.08);
+}
+.crm-assign-box h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+.crm-assign-box .hint { margin: 0 0 12px; }
+.crm-assign-manual {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+}
+.crm-assign-manual label,
+.crm-assign-new-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.crm-assign-manual select,
+.crm-assign-new-form input {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+.crm-assign-new {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.crm-assign-new summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--accent2);
+  user-select: none;
+}
+.crm-assign-new-form {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
 .an-hero-card { cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit; }
 .an-kpi-btn { cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit; border: 0; }
 .an-funnel-row {

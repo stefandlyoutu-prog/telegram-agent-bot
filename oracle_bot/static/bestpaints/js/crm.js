@@ -121,10 +121,10 @@ function personLine(p) {
 
 /** Кнопки следующего шага по статусу */
 const NEXT_ACTIONS = {
-  created: [
-    { action: "reassign_surveyor", label: "Назначить из графика", primary: true },
+  created: [], // назначение — отдельная панель (график / список / новый)
+  assigned: [
+    { action: "accept", label: "Взял в работу", primary: true },
   ],
-  assigned: [{ action: "accept", label: "Взял в работу", primary: true }],
   accepted: [{ action: "confirm_visit", label: "Выезд подтверждён", primary: true }],
   visit_confirmed: [
     { action: "start_measure", label: "На адресе · начинаю замер", primary: true },
@@ -1030,6 +1030,54 @@ function audioHtml(obj) {
     .join("")}</ul><p class="hint">Прослушать: откройте переписку с ботом или попросите админа выгрузить.</p></div>`;
 }
 
+/** Назначение замерщика: график / список команды / создать нового */
+function assignSurveyorHtml(obj, meta) {
+  const needsAssign = obj.status === "created" || !obj.surveyor_id;
+  const canReassign = ["created", "assigned", "accepted", "visit_confirmed"].includes(obj.status);
+  if (!canReassign) return "";
+  const duty = meta?.on_duty_surveyors || [];
+  const all = meta?.staff?.surveyors || [];
+  const dutyIds = new Set(duty.map((s) => s.id));
+  const opts = all
+    .map((s) => {
+      const mark = dutyIds.has(s.id) ? " · в графике" : "";
+      const nick = nickOf(s);
+      return `<option value="${esc(s.id)}" ${s.id === obj.surveyor_id ? "selected" : ""}>${esc(s.name)}${nick ? " " + esc(nick) : ""}${esc(mark)}</option>`;
+    })
+    .join("");
+  const title = needsAssign ? "Назначить замерщика" : "Переназначить замерщика";
+  return `
+  <section class="crm-assign-box" id="crm-assign-box">
+    <h3>${esc(title)}</h3>
+    <p class="hint">Сейчас: <strong>${esc(obj.surveyor_name || "не назначен")}</strong>
+      ${duty.length ? ` · в графике сегодня: ${esc(duty.map((s) => s.name).join(", "))}` : " · в графике сегодня никого"}</p>
+
+    <button type="button" class="btn primary block" id="crm-assign-from-schedule">Назначить из графика</button>
+
+    <div class="crm-assign-manual">
+      <label>Вручную из списка
+        <select id="crm-assign-sv">
+          <option value="">— выберите замерщика —</option>
+          ${opts || ""}
+        </select>
+      </label>
+      <button type="button" class="btn block" id="crm-assign-manual" ${all.length ? "" : "disabled"}>Назначить выбранного</button>
+    </div>
+
+    <details class="crm-assign-new" ${all.length ? "" : "open"}>
+      <summary>+ Создать нового замерщика и назначить</summary>
+      <div class="crm-assign-new-form">
+        <label>Имя<input id="crm-new-sv-name" required placeholder="Иван" /></label>
+        <div class="crm-form-row">
+          <label>Телефон<input id="crm-new-sv-phone" type="tel" placeholder="+7…" /></label>
+          <label>Telegram @<input id="crm-new-sv-tg" placeholder="nick" /></label>
+        </div>
+        <button type="button" class="btn primary block" id="crm-assign-create">Создать и назначить</button>
+      </div>
+    </details>
+  </section>`;
+}
+
 export function detailHtml(obj, events, meta) {
   const actions = NEXT_ACTIONS[obj.status] || [];
   const mgrOpts = (meta?.staff?.managers || [])
@@ -1041,6 +1089,7 @@ export function detailHtml(obj, events, meta) {
   const showMoney = ["on_site", "contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed"].includes(
     obj.status
   );
+  const assignHtml = assignSurveyorHtml(obj, meta);
   return `
   <header class="topbar">
     <div class="brand">
@@ -1049,6 +1098,8 @@ export function detailHtml(obj, events, meta) {
     </div>
     <button type="button" class="btn ghost" id="crm-back">← К списку</button>
   </header>
+
+  ${assignHtml}
 
   <div class="crm-actions sticky-acts">
     ${actions
@@ -1198,6 +1249,53 @@ export async function mountDetail(ctx) {
       toast(String(err.message || err));
     }
   }
+
+  root.querySelector("#crm-assign-from-schedule")?.addEventListener("click", () => {
+    runAction("reassign_surveyor", {});
+  });
+  root.querySelector("#crm-assign-manual")?.addEventListener("click", () => {
+    const sid = root.querySelector("#crm-assign-sv")?.value;
+    if (!sid) {
+      toast("Выберите замерщика из списка");
+      return;
+    }
+    runAction("reassign_surveyor", { surveyor_id: sid });
+  });
+  root.querySelector("#crm-assign-create")?.addEventListener("click", async () => {
+    const name = (root.querySelector("#crm-new-sv-name")?.value || "").trim();
+    const phone = (root.querySelector("#crm-new-sv-phone")?.value || "").trim();
+    const tg = String(root.querySelector("#crm-new-sv-tg")?.value || "")
+      .replace(/^@/, "")
+      .trim();
+    if (!name) {
+      toast("Укажите имя замерщика");
+      return;
+    }
+    try {
+      const staff = await upsertStaffPerson({
+        role: "surveyor",
+        name,
+        phone,
+        tg_username: tg,
+      });
+      const people = staff.surveyors || [];
+      const person =
+        staff.person ||
+        people.find((p) => (p.name || "").trim() === name && (!tg || (p.tg_username || "") === tg)) ||
+        people.find((p) => (p.name || "").trim() === name) ||
+        people[people.length - 1];
+      if (!person?.id) {
+        toast("Создали в команде, но не нашли id — назначьте из списка");
+        await refresh();
+        return;
+      }
+      await doAction(objectId, "reassign_surveyor", { surveyor_id: person.id });
+      toast(`Назначен ${person.name}`);
+      await refresh();
+    } catch (err) {
+      toast(String(err.message || err));
+    }
+  });
 
   root.querySelectorAll("[data-crm-act]").forEach((btn) => {
     btn.onclick = () => runAction(btn.getAttribute("data-crm-act"));

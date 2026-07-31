@@ -167,7 +167,22 @@ def upsert_person(role: str, person: dict[str, Any]) -> dict[str, Any]:
     if not replaced:
         people.append(base)
     staff[key] = people
-    return save_staff(staff)
+    saved = save_staff(staff)
+    # удобно для UI: вернуть и человека, и весь staff (обратная совместимость — ключи staff на верхнем уровне)
+    pid = base["id"]
+    person = next((p for p in (saved.get(key) or []) if p.get("id") == pid), base)
+    if not replaced:
+        # мог смержиться по tg_username с другим id
+        for p in saved.get(key) or []:
+            if base.get("tg_username") and p.get("tg_username") == base["tg_username"]:
+                person = p
+                break
+            if (p.get("name") or "") == (base.get("name") or "") and p is person:
+                person = p
+    out = dict(saved)
+    out["person"] = person
+    out["role"] = role
+    return out
 
 
 def delete_person(role: str, person_id: str) -> dict[str, Any]:
@@ -1332,7 +1347,9 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         if not person:
             person, reason = pick_surveyor_from_schedule(obj.get("measure_date") or today_str(), obj.get("address") or "")
             if not person:
-                raise ValueError("график замерщиков пуст")
+                raise ValueError(
+                    "В графике никого нет — выберите замерщика из списка или создайте нового на карточке сделки"
+                )
         else:
             reason = "manual"
         updates["surveyor_id"] = person["id"]
