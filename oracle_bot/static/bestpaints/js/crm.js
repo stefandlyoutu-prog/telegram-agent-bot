@@ -1125,17 +1125,14 @@ export async function mountHomeCrm(ctx) {
 }
 
 function checklistHtml(obj, meta) {
-  const signedish = ["contract_signed", "closed"].includes(obj.status);
   const declinedish = ["contract_declined", "manager_assigned", "manager_accepted"].includes(obj.status);
   let items = [];
-  if (obj.status === "contract_signed" || (signedish && obj.status !== "closed" && !declinedish)) {
+  if (obj.status === "contract_signed") {
     items = meta?.checklists?.signed || [];
-  } else if (declinedish || obj.status === "contract_signed") {
-    items = obj.status === "contract_signed" ? meta?.checklists?.signed || [] : meta?.checklists?.declined || [];
-  }
-  if (obj.status === "contract_signed") items = meta?.checklists?.signed || [];
-  if (declinedish) items = meta?.checklists?.declined || [];
-  if (obj.status === "closed" && Object.keys(obj.checklist || {}).length) {
+  } else if (declinedish) {
+    items = meta?.checklists?.declined || [];
+  } else if (obj.status === "closed" && Object.keys(obj.checklist || {}).length) {
+    // после закрытия статус уже не хранит «заключён/не заключён» — определяем по сохранённым полям чек-листа
     items = Object.keys(obj.checklist).some((k) => ["video", "tz", "contract_scan"].includes(k))
       ? meta?.checklists?.signed || []
       : meta?.checklists?.declined || [];
@@ -1145,7 +1142,6 @@ function checklistHtml(obj, meta) {
   const up = obj.uploads || {};
   return `
   <div class="crm-checklist">
-    <h3>Чек-лист</h3>
     ${items
       .map(
         (it) => `
@@ -1170,7 +1166,7 @@ function checklistHtml(obj, meta) {
 function audioHtml(obj) {
   const list = obj.audio || [];
   if (!list.length) return "";
-  return `<div class="crm-audio"><h3>Аудио от Лидоруба</h3><ul>${list
+  return `<div class="crm-audio"><ul>${list
     .map((a, i) => `<li>#${i + 1} ${esc(a.name || "audio")} <span class="hint">(file_id в Telegram)</span></li>`)
     .join("")}</ul><p class="hint">Прослушать: откройте переписку с ботом или попросите админа выгрузить.</p></div>`;
 }
@@ -1288,6 +1284,8 @@ export function detailHtml(obj, events, meta) {
   const primary = actions.filter((a) => a.primary);
   const secondary = actions.filter((a) => !a.primary);
   const assignHtml = assignSurveyorHtml(obj, meta);
+  const audio = audioHtml(obj);
+  const checklist = checklistHtml(obj, meta);
 
   return `
   <header class="topbar">
@@ -1352,8 +1350,8 @@ export function detailHtml(obj, events, meta) {
       : ""
   }
 
-  ${audioHtml(obj) ? `<details class="crm-fold"><summary>Аудио Лидоруба</summary>${audioHtml(obj)}</details>` : ""}
-  ${checklistHtml(obj, meta) ? `<details class="crm-fold"><summary>Чек-лист</summary>${checklistHtml(obj, meta)}</details>` : ""}
+  ${audio ? `<details class="crm-fold"><summary>Аудио Лидоруба</summary>${audio}</details>` : ""}
+  ${checklist ? `<details class="crm-fold"><summary>Чек-лист</summary>${checklist}</details>` : ""}
 
   <details class="crm-fold" ${showCabinet ? "" : ""} id="crm-cabinet-fold">
     <summary>Кабинет клиента</summary>
@@ -1494,7 +1492,7 @@ export async function mountDetail(ctx) {
           return;
         }
       } catch { /* fallthrough */ }
-      toast("Откройте конструктор по этой сделке, сохраните смету — затем снова «Открыть кабинет»");
+      toast("Откройте конструктор по этой сделке, сохраните смету — затем снова «Открыть / обновить»");
       return;
     }
     try {
