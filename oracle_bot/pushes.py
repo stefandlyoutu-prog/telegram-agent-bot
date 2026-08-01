@@ -135,27 +135,29 @@ def schedule_topic_morning(user_id: int) -> None:
 def schedule_after_limit(user_id: int, module: str) -> None:
     if has_full_access(user_id):
         return
-    ctx = json.dumps({"module": module}, ensure_ascii=False)
-    db.schedule_push(user_id, "limit_hit", delay_hours=3, context=ctx)
+    cont_id = db.latest_locked_continuation(user_id)
+    ctx = json.dumps({"module": module, "cont_id": cont_id}, ensure_ascii=False)
+    # Быстрее дожим: через ~1 ч с прямой кнопкой оплаты (cont_id в контексте)
+    db.schedule_push(user_id, "limit_hit", delay_hours=1.0, context=ctx)
     st = db.referral_stats(user_id)
     if st["credits"] == 0 and st["invited"] == 0:
-        db.schedule_push(user_id, "referral_nudge", delay_hours=6, context=ctx)
+        db.schedule_push(user_id, "referral_nudge", delay_hours=4, context=ctx)
 
 
 def schedule_after_teaser(user_id: int, module: str, cont_id: int) -> None:
     if has_full_access(user_id):
         return
     ctx = json.dumps({"module": module, "cont_id": cont_id}, ensure_ascii=False)
-    db.schedule_push(user_id, "unlock_tease", delay_hours=0.25, context=ctx)
+    db.schedule_push(user_id, "unlock_tease", delay_hours=0.2, context=ctx)
 
 
 def schedule_payment_recovery(user_id: int, cont_id: int) -> None:
-    """Если открыл оплату, но не заплатил — напоминание через 20 мин."""
+    """Если открыл оплату, но не заплатил — напоминание через ~10 мин."""
     if has_full_access(user_id) or db.has_paid(user_id, "deep_unlock"):
         return
     ctx = json.dumps({"cont_id": cont_id}, ensure_ascii=False)
     db.cancel_pushes(user_id, ["pay_recovery"])
-    db.schedule_push(user_id, "pay_recovery", delay_hours=0.33, context=ctx)
+    db.schedule_push(user_id, "pay_recovery", delay_hours=0.17, context=ctx)
 
 
 def schedule_welcome_series(user_id: int) -> None:

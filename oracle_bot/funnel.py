@@ -21,12 +21,19 @@ def format_teaser(teaser: str) -> str:
 
     first = ORACLE_DEEP_FIRST_PRICE_RUB
     regular = ORACLE_DEEP_PRICE_RUB
+    from oracle_bot.config import ORACLE_PREMIUM_PRICE_RUB
+    from oracle_bot.paywall import stars_enabled
+
     price_hint = f"{first}₽ (первый раз)" if first < regular else f"{regular}₽"
+    if stars_enabled():
+        premium_hint = f"⭐ Премиум {ORACLE_PREMIUM_STARS}⭐ / 30 д"
+    else:
+        premium_hint = f"⭐ Премиум {ORACLE_PREMIUM_PRICE_RUB}₽ / 30 д"
     return (
         f"{teaser}\n\n"
         "────────────\n"
-        "🔒 <b>Сценарий 2</b> — что изменится и конкретные шаги, если работать с картой.\n"
-        f"Открой за <b>{price_hint}</b> · ⭐ Премиум {ORACLE_PREMIUM_STARS}⭐ / 30 д"
+        "🔒 <b>Сценарий 2</b> — что изменится и конкретные шаги на 2 недели.\n"
+        f"⚡ Открой сейчас за <b>{price_hint}</b> · {premium_hint}"
     )
 
 

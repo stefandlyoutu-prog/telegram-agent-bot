@@ -214,7 +214,8 @@ def _premium_line(user_id: int) -> str:
 
 
 def _limit_text() -> str:
-    from oracle_bot.paywall import referral_primary
+    from oracle_bot.paywall import referral_primary, stars_enabled
+    from oracle_bot.config import ORACLE_DEEP_FIRST_PRICE_RUB
 
     if referral_primary():
         return (
@@ -223,11 +224,19 @@ def _limit_text() -> str:
             "и можно открыть 🔓 продолжение.\n"
             "Команда /ref — ссылка для отправки."
         )
+    if stars_enabled():
+        return (
+            "Лимит бесплатных чтений на сегодня исчерпан.\n\n"
+            f"🔓 Сценарий 2 — от <b>{ORACLE_DEEP_FIRST_PRICE_RUB}₽</b> (или {ORACLE_DEEP_STARS}⭐)\n"
+            f"⭐ Премиум — безлимит 30 дней · {ORACLE_PREMIUM_PRICE_RUB}₽\n"
+            f"🎁 Или /ref — +{ORACLE_REFERRAL_BONUS} расклада за друга"
+        )
     return (
-        "Лимит бесплатных чтений в этом разделе на сегодня исчерпан.\n\n"
-        f"🎁 <b>Пригласи друга</b> — +{ORACLE_REFERRAL_BONUS} бонусных расклада за каждого "
-        "(команда /ref).\n"
-        f"🔓 Или открой продолжение за {ORACLE_DEEP_STARS}⭐ · ⭐ Премиум — безлимит на 30 дней."
+        "Лимит бесплатных чтений на сегодня исчерпан.\n\n"
+        f"🔓 <b>Сценарий 2</b> — конкретные шаги на 2 недели от "
+        f"<b>{ORACLE_DEEP_FIRST_PRICE_RUB}₽</b> (карта / СБП)\n"
+        f"⭐ <b>Премиум 30 дней</b> — все разделы без 🔒 · <b>{ORACLE_PREMIUM_PRICE_RUB}₽</b>\n\n"
+        f"🎁 Нет денег сейчас — /ref: +{ORACLE_REFERRAL_BONUS} расклада за друга"
     )
 
 

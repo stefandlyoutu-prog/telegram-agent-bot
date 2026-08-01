@@ -14,7 +14,7 @@ ORACLE_DEEP_STARS = int(os.getenv("ORACLE_DEEP_STARS", "29"))
 # Оплата звёздами выключена по умолчанию — приём только в рублях (Робокасса).
 # Чтобы вернуть Stars, выстави ORACLE_STARS_ENABLED=1
 ORACLE_STARS_ENABLED = os.getenv("ORACLE_STARS_ENABLED", "0").strip() in {"1", "true", "True"}
-ORACLE_FREE_PER_DAY = int(os.getenv("ORACLE_FREE_PER_DAY", "2"))
+ORACLE_FREE_PER_DAY = int(os.getenv("ORACLE_FREE_PER_DAY", "1"))
 # paywall: stars (по умолчанию после эксперимента) | referral
 ORACLE_PAYWALL_MODE = os.getenv("ORACLE_PAYWALL_MODE", "stars").strip().lower()
 # До этой даты (YYYY-MM-DD) — referral вместо Stars (3-дневный тест)

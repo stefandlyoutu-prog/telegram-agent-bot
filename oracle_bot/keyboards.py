@@ -88,21 +88,36 @@ def kb_referral(user_id: int) -> InlineKeyboardMarkup:
 
 
 def kb_limit_reached(user_id: int) -> InlineKeyboardMarkup:
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=f"🎁 Пригласить друга (+{ORACLE_REFERRAL_BONUS})",
-                callback_data="mod:referral",
-            )
-        ],
-    ]
-    if stars_enabled():
+    from oracle_bot import storage as _db
+    from oracle_bot.config import ORACLE_PREMIUM_PRICE_RUB
+
+    rows: list[list[InlineKeyboardButton]] = []
+    cont_id = _db.latest_locked_continuation(user_id)
+    if cont_id:
+        price = (
+            ORACLE_DEEP_FIRST_PRICE_RUB
+            if not _db.has_paid(user_id, "deep_unlock")
+            else ORACLE_DEEP_PRICE_RUB
+        )
         rows.append([
-            InlineKeyboardButton(text="Премиум", callback_data="mod:premium"),
-            InlineKeyboardButton(text="Меню", callback_data="nav:menu"),
+            InlineKeyboardButton(
+                text=f"🔓 Сценарий 2 · {price}₽",
+                callback_data=f"deep:{cont_id}",
+            )
         ])
-    else:
-        rows.append([InlineKeyboardButton(text="Меню", callback_data="nav:menu")])
+    rows.append([
+        InlineKeyboardButton(
+            text=f"⭐ Премиум 30д · {ORACLE_PREMIUM_PRICE_RUB}₽",
+            callback_data="mod:premium",
+        )
+    ])
+    rows.append([
+        InlineKeyboardButton(
+            text=f"🎁 Пригласить друга (+{ORACLE_REFERRAL_BONUS})",
+            callback_data="mod:referral",
+        )
+    ])
+    rows.append([InlineKeyboardButton(text="Меню", callback_data="nav:menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

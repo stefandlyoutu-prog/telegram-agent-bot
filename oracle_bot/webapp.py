@@ -815,6 +815,7 @@ async def api_admin_hot_recovery(
     limit: int = Query(30),
     intent_only: int = Query(0),
     flash_price: int | None = Query(None),
+    hours: int | None = Query(None),
 ):
     """Дожим лидов. intent_only=1 — только payment_intent; flash_price=29 — спеццена."""
     if user_id <= 0 or not is_admin_user(user_id):
@@ -825,12 +826,13 @@ async def api_admin_hot_recovery(
     if not _bot:
         raise HTTPException(503, "Бот не инициализирован")
     fp = flash_price if flash_price and flash_price > 0 else None
+    window = hours if hours and hours > 0 else (720 if intent_only else 168)
     result = await run_hot_recovery(
         _bot,
-        limit=min(limit, 50),
+        limit=min(limit, 80),
         intent_only=bool(intent_only),
         flash_price=fp,
-        hours=168 if intent_only else 72,
+        hours=min(window, 720),
     )
     try:
         from oracle_bot.admin_notify import notify_admins

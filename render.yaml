@@ -36,7 +36,9 @@ services:
       - key: ORACLE_CHANNEL_POSTS_ENABLED
         value: "1"
       - key: ORACLE_FREE_PER_DAY
-        value: "2"
+        value: "1"
+      - key: ORACLE_DEEP_FIRST_PRICE_RUB
+        value: "19"
       - key: ORACLE_PAYWALL_EXPERIMENT_UNTIL
         value: "2026-06-24"
       - key: ORACLE_PROMO_CHANNELS
