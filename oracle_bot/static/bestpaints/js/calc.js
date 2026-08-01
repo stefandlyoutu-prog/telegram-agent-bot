@@ -366,6 +366,15 @@ export function emptyBuilding(overrides = {}) {
       colorSameOrDarker: true,
       compatibilityTest: false,
       techIdInterior: 4,
+      // По умолчанию подшива и лобовая красятся так же, как стены.
+      // Если нужна другая технология/ЛКМ на этих элементах — soffitSame/fasciaSame = false,
+      // и берутся soffitTechId/soffitPaintId или fasciaTechId/fasciaPaintId.
+      soffitSame: true,
+      soffitTechId: null,
+      soffitPaintId: "",
+      fasciaSame: true,
+      fasciaTechId: null,
+      fasciaPaintId: "",
     },
     previewColor: "#c4a35a",
     photos: [],
@@ -584,6 +593,20 @@ export function totalAreas(survey) {
   };
 }
 
+/**
+ * Технология и ЛКМ для подшивы/лобовой: по умолчанию как у стен, но можно
+ * выбрать отдельно (например, стены — 2 прохода, подшива — 1 проход другим составом).
+ */
+export function zoneTechPaint(b, zone) {
+  const same = b.tech?.[`${zone}Same`] !== false;
+  const techId = Number(b.tech?.[`${zone}TechId`]);
+  const paintId = b.tech?.[`${zone}PaintId`];
+  if (!same && techId && paintId) {
+    return { techId, paintId };
+  }
+  return { techId: b.tech.techId, paintId: b.tech.paintId };
+}
+
 function paintLine(catalog, paintId, techId, qty, label) {
   if (!paintId || !techId || qty <= 0) return null;
   const [brand, ...rest] = paintId.split("::");
@@ -618,20 +641,22 @@ export function buildEstimate(state, catalog) {
       if (line) lines.push(line);
 
       const soffit = num(b.measure.soffitArea);
+      const soffitZone = zoneTechPaint(b, "soffit");
       const soffitLine = paintLine(
         catalog,
-        b.tech.paintId,
-        b.tech.techId,
+        soffitZone.paintId,
+        soffitZone.techId,
         soffit,
         `${prefix}Подшива`
       );
       if (soffitLine) lines.push(soffitLine);
 
       const fascia = num(b.measure.fasciaArea);
+      const fasciaZone = zoneTechPaint(b, "fascia");
       const fasciaLine = paintLine(
         catalog,
-        b.tech.paintId,
-        b.tech.techId,
+        fasciaZone.paintId,
+        fasciaZone.techId,
         fascia,
         `${prefix}Лобовая`
       );

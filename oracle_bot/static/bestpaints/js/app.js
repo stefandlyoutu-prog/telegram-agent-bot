@@ -40,6 +40,7 @@ import {
   migrateSurvey,
   getActiveBuilding,
   applyKindPreset,
+  zoneTechPaint,
   num,
   uid,
 } from "./calc.js";
@@ -2563,6 +2564,68 @@ function renderMore(root) {
 }
 
 /* ——— 5. Технология ——— */
+/**
+ * Блок «своя технология/ЛКМ» для подшивы или лобовой доски: по умолчанию
+ * элемент красится как стены; если техника/материал должны отличаться
+ * (например, стены — 2 прохода, подшива — 1 проход другим составом),
+ * заказчик/замерщик включает переключатель и выбирает отдельно.
+ */
+function zoneOverrideHtml(b, zone, label, area, rec, coatWant) {
+  if (!(Number(area) > 0)) return "";
+  const isSame = b.tech[`${zone}Same`] !== false;
+  const techId = Number(b.tech[`${zone}TechId`]) || b.tech.techId;
+  const paints = listAllowedPaints(catalog, {
+    scope: "facade",
+    houseType: b.houseType,
+    condition: b.condition,
+    techId,
+    coatingWant: coatWant,
+    materialId: b.material,
+  });
+  const paintId = paints.some((p) => p.id === b.tech[`${zone}PaintId`]) ? b.tech[`${zone}PaintId`] : "";
+  return `
+    <div class="zone-override" data-zone="${zone}" style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)">
+      <label class="check-inline">
+        <input type="checkbox" data-zone-diff="${zone}" ${!isSame ? "checked" : ""}>
+        <span><strong>${escapeHtml(label)}</strong> — своя технология и ЛКМ <span class="hint">(сейчас как стены · ${Number(area).toFixed(0)} м²)</span></span>
+      </label>
+      ${
+        !isSame
+          ? `
+      <div class="choice-grid compact" style="margin-top:10px">
+        ${rec
+          .map(
+            (t) => `
+          <button type="button" class="choice ${techId === t.id ? "selected" : ""}" data-zone-tech-zone="${zone}" data-zone-tech-id="${t.id}">
+            <strong>${t.title}${t.isBase ? " ★" : ""}</strong>
+            <span>${t.desc}</span>
+          </button>`
+          )
+          .join("")}
+      </div>
+      <div class="paint-grid" style="margin-top:10px">
+        ${paints
+          .map((p) => {
+            const item = p.items.find((i) => i.tech === techId);
+            const sum = item && area ? money(item.price * Number(area)) : "—";
+            return `
+            <button type="button" class="paint-card ${paintId === p.id ? "selected" : ""}" data-zone-paint-zone="${zone}" data-zone-paint-id="${esc(p.id)}">
+              <div class="paint-card-top">
+                <span class="paint-brand">${escapeHtml(p.brand)}</span>
+                <span class="paint-coat">${p.opacity === "opaque" ? "Укрывной" : "Полупрозрачный"}</span>
+              </div>
+              <strong class="paint-name">${escapeHtml(shortName(p.name))}</strong>
+              <span class="paint-total">${item ? `${money(item.price)}/м² → <b>${sum}</b>` : "нет цены"}</span>
+            </button>`;
+          })
+          .join("")}
+      </div>
+      ${!paints.length ? `<p class="hint">Нет допустимых ЛКМ для техн. ${techId} — выберите другую технологию выше.</p>` : ""}`
+          : ""
+      }
+    </div>`;
+}
+
 function renderTech(root) {
   const b = active();
   syncAreasFromLists(b);
@@ -2698,7 +2761,9 @@ function renderTech(root) {
         Полупрозрачные — от бюджетного к премиальному:
         ${SEMI_LADDER.map((x) => `${escapeHtml(x.tip)} <span class="hint">(${escapeHtml(x.label.toLowerCase())})</span>`).join(" → ")}
       </div>
-      ${techCompareHtml(b, catalog)}`,
+      ${techCompareHtml(b, catalog)}
+      ${zoneOverrideHtml(b, "soffit", "Подшива", b.measure.soffitArea, rec, coatWant)}
+      ${zoneOverrideHtml(b, "fascia", "Лобовая доска", b.measure.fasciaArea, rec, coatWant)}`,
             true
           )
         : ""
@@ -2792,6 +2857,34 @@ function renderTech(root) {
   root.querySelectorAll("[data-paint-int]").forEach((btn) => {
     btn.onclick = () => {
       active().tech.paintIdInterior = btn.dataset.paintInt;
+      save();
+      render();
+    };
+  });
+  root.querySelectorAll("[data-zone-diff]").forEach((cb) => {
+    cb.onchange = () => {
+      const zone = cb.dataset.zoneDiff;
+      const t = active().tech;
+      t[`${zone}Same`] = !cb.checked;
+      if (cb.checked && !t[`${zone}TechId`]) t[`${zone}TechId`] = t.techId;
+      save();
+      render();
+    };
+  });
+  root.querySelectorAll("[data-zone-tech-zone]").forEach((btn) => {
+    btn.onclick = () => {
+      const zone = btn.dataset.zoneTechZone;
+      const t = active().tech;
+      t[`${zone}TechId`] = Number(btn.dataset.zoneTechId);
+      t[`${zone}PaintId`] = ""; // сброс: старый ЛКМ может не подходить под новую технику
+      save();
+      render();
+    };
+  });
+  root.querySelectorAll("[data-zone-paint-zone]").forEach((btn) => {
+    btn.onclick = () => {
+      const zone = btn.dataset.zonePaintZone;
+      active().tech[`${zone}PaintId`] = btn.dataset.zonePaintId;
       save();
       render();
     };
