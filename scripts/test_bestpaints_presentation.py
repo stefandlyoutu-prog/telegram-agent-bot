@@ -34,7 +34,7 @@ app = (BP / "js/app.js").read_text(encoding="utf-8")
 ok("bindDrawingsPanel" in app, "drawings bound")
 ok("/bestpaints/api/parse-drawing" in (BP / "js/drawings.js").read_text(encoding="utf-8"), "client API path")
 ok("parse-drawing" in Path(__file__).resolve().parents[1].joinpath("oracle_bot/webapp.py").read_text(encoding="utf-8"), "server route")
-ok("bp-survey-v49" in (BP / "sw.js").read_text(encoding="utf-8"), "cache v49")
+ok("bp-survey-v50" in (BP / "sw.js").read_text(encoding="utf-8"), "cache v50")
 
 print("ALL PASSED" if not failed else f"{failed} FAILURES")
 sys.exit(1 if failed else 0)

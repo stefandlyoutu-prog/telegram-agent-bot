@@ -206,31 +206,65 @@ export function boardHtml(objects) {
     .join("")}</div>`;
 }
 
+const CREATE_DRAFT_KEY = "bp_crm_create_draft_v1";
+
+function loadCreateDraft() {
+  try {
+    return JSON.parse(sessionStorage.getItem(CREATE_DRAFT_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function saveCreateDraft(form) {
+  if (!form) return;
+  const fd = new FormData(form);
+  const data = Object.fromEntries(fd.entries());
+  try {
+    sessionStorage.setItem(CREATE_DRAFT_KEY, JSON.stringify(data));
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearCreateDraft() {
+  try {
+    sessionStorage.removeItem(CREATE_DRAFT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function createFormHtml(meta) {
+  const draft = loadCreateDraft() || {};
   const surv = (meta?.staff?.surveyors || [])
-    .map((s) => `<option value="${esc(s.id)}">${esc(s.name)}${nickOf(s) ? " " + nickOf(s) : ""}</option>`)
+    .map((s) => {
+      const sel = draft.surveyor_id && draft.surveyor_id === s.id ? "selected" : "";
+      return `<option value="${esc(s.id)}" ${sel}>${esc(s.name)}${nickOf(s) ? " " + nickOf(s) : ""}</option>`;
+    })
     .join("");
-  const today = meta?.today || "";
+  const today = draft.measure_date || meta?.today || "";
   const duty = (meta?.on_duty_surveyors || []).map((s) => s.name).join(", ") || "никого в графике";
+  const v = (k) => esc(draft[k] || "");
   return `
-  <form class="crm-create" id="crm-create-form">
+  <form class="crm-create" id="crm-create-form" method="post" action="#" novalidate>
     <h3>Новая сделка</h3>
     <p class="hint">Сегодня на смене: ${esc(duty)}</p>
-    <label>Название<input name="title" required placeholder="Как в CRM" /></label>
-    <label>Квалификация<textarea name="qualification" rows="2" placeholder="Кратко"></textarea></label>
-    <label>Адрес<input name="address" required /></label>
+    <label>Название<input name="title" required placeholder="Как в CRM" value="${v("title")}" autocomplete="off" /></label>
+    <label>Квалификация<textarea name="qualification" rows="2" placeholder="Кратко">${v("qualification")}</textarea></label>
+    <label>Адрес<input name="address" required value="${v("address")}" autocomplete="off" /></label>
     <label>Дата замера<input name="measure_date" type="date" value="${esc(today)}" /></label>
     <div class="crm-form-row">
-      <label>Клиент<input name="client_name" /></label>
-      <label>Телефон<input name="client_phone" type="tel" /></label>
+      <label>Клиент<input name="client_name" value="${v("client_name")}" autocomplete="name" /></label>
+      <label>Телефон<input name="client_phone" type="tel" value="${v("client_phone")}" autocomplete="tel" /></label>
     </div>
     <label>Замерщик
-      <select name="surveyor_id">
+      <select name="surveyor_id" id="crm-create-surveyor">
         <option value="">Авто из графика</option>
         ${surv}
       </select>
     </label>
-    <button type="submit" class="btn primary block">Создать</button>
+    <button type="button" class="btn primary block" id="crm-create-submit">Создать</button>
   </form>`;
 }
 
@@ -347,7 +381,7 @@ export function homeCrmSectionHtml() {
             `<button type="button" class="crm-role-chip ${role === id ? "on" : ""}" data-crm-role="${id}">${label}</button>`
         )
         .join("")}
-      <em class="hint" style="margin-left:auto">Сделки создаёт только лидоруб</em>
+      <em class="hint" style="margin-left:auto">Сделки: лидоруб или админ</em>
     </div>
     <nav class="crm-tabs" role="tablist">
       <button type="button" class="crm-tab active" data-tab="deals">Сделки</button>
@@ -1002,38 +1036,80 @@ export async function mountHomeCrm(ctx) {
 
   const toggle = root.querySelector("#crm-toggle-create");
   const wrap = root.querySelector("#crm-create-wrap");
+
+  function bindCreateForm(form) {
+    if (!form) return;
+    const submitCreate = async () => {
+      if (!canCreateDeals()) {
+        toast("Сделки создаёт лидоруб или админ");
+        return;
+      }
+      if (!form.reportValidity()) return;
+      const fd = new FormData(form);
+      const payload = Object.fromEntries(fd.entries());
+      try {
+        const obj = await createObject(payload);
+        clearCreateDraft();
+        toast(obj.status === "created" ? "Создано без графика" : `→ ${obj.surveyor_name}`);
+        wrap.hidden = true;
+        wrap.innerHTML = "";
+        objects = await fetchObjects();
+        paintDeals();
+      } catch (err) {
+        toast(String(err.message || err));
+      }
+    };
+
+    // Черновик: выбор замерщика / ввод не теряются при случайном reload
+    form.addEventListener("input", () => saveCreateDraft(form));
+    form.addEventListener("change", () => saveCreateDraft(form));
+    // Нативный submit (Enter / баг select на мобиле) не должен уводить со страницы
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    form.querySelector("#crm-create-submit")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      submitCreate();
+    });
+    // Enter в полях → сохранить черновик, не «отправить форму»
+    form.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "TEXTAREA") return;
+      e.preventDefault();
+      saveCreateDraft(form);
+    });
+  }
+
   if (toggle && wrap) {
+    // Если был черновик — сразу показать форму после reload
+    if (loadCreateDraft() && canCreateDeals()) {
+      getMeta()
+        .then((m) => {
+          wrap.innerHTML = createFormHtml(m);
+          wrap.hidden = false;
+          bindCreateForm(wrap.querySelector("#crm-create-form"));
+        })
+        .catch(() => {});
+    }
+
     toggle.onclick = async () => {
       if (!canCreateDeals()) {
-        toast("Сделки создаёт только лидоруб");
+        toast("Сделки создаёт лидоруб или админ");
         return;
       }
       if (!wrap.hidden && wrap.innerHTML) {
+        const form = wrap.querySelector("#crm-create-form");
+        if (form) saveCreateDraft(form);
         wrap.hidden = true;
         return;
       }
       const m = await getMeta();
       wrap.innerHTML = createFormHtml(m);
       wrap.hidden = false;
-      wrap.querySelector("#crm-create-form").onsubmit = async (e) => {
-        e.preventDefault();
-        if (!canCreateDeals()) {
-          toast("Сделки создаёт только лидоруб");
-          return;
-        }
-        const fd = new FormData(e.target);
-        const payload = Object.fromEntries(fd.entries());
-        try {
-          const obj = await createObject(payload);
-          toast(obj.status === "created" ? "Создано без графика" : `→ ${obj.surveyor_name}`);
-          wrap.hidden = true;
-          wrap.innerHTML = "";
-          objects = await fetchObjects();
-          paintDeals();
-        } catch (err) {
-          toast(String(err.message || err));
-        }
-      };
+      bindCreateForm(wrap.querySelector("#crm-create-form"));
     };
   }
 }

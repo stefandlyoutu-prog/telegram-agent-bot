@@ -19,22 +19,18 @@
       rel="stylesheet"
     />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <link rel="stylesheet" href="./css/styles.css?v=49" />
+    <link rel="stylesheet" href="./css/styles.css?v=50" />
   </head>
   <body>
     <div class="app" id="app">
       <p style="color:#9aada2;padding:24px">Загрузка…</p>
     </div>
-    <script type="module" src="./js/app.js?v=49"></script>
+    <script type="module" src="./js/app.js?v=50"></script>
     <script>
       if ("serviceWorker" in navigator) {
-        var refreshing = false;
-        navigator.serviceWorker.addEventListener("controllerchange", function () {
-          if (refreshing) return;
-          refreshing = true;
-          window.location.reload();
-        });
-        navigator.serviceWorker.register("./sw.js?v=49").then(function (reg) {
+        // Без location.reload(): иначе при деплое/обновлении SW стирается форма сделки.
+        // Новый кэш подхватывается network-first + skipWaiting.
+        navigator.serviceWorker.register("./sw.js?v=50").then(function (reg) {
           reg.update();
           if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
           reg.addEventListener("updatefound", function () {
