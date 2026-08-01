@@ -2679,7 +2679,10 @@ function renderTech(root) {
           })
           .join("")}
       </div>
-      <div class="callout">${SEMI_LADDER.map((x) => x.tip).join(" → ")}</div>
+      <div class="callout">
+        Полупрозрачные — от бюджетного к премиальному:
+        ${SEMI_LADDER.map((x) => `${escapeHtml(x.tip)} <span class="hint">(${escapeHtml(x.label.toLowerCase())})</span>`).join(" → ")}
+      </div>
       ${techCompareHtml(b, catalog)}`,
             true
           )

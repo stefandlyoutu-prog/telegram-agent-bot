@@ -159,7 +159,7 @@ function escapeXml(s) {
     .replace(/"/g, "&quot;");
 }
 
-/** Сравнение технологий на текущей площади — «почему база дороже» */
+/** Сравнение технологий подготовки на текущей площади: цена и гарантия по вариантам */
 export function techCompareHtml(building, catalog) {
   const area = calcWallArea(building.measure, "facade").total;
   if (area <= 0 || !building.tech?.paintId) {
@@ -190,18 +190,36 @@ export function techCompareHtml(building, catalog) {
   if (rows.length < 2) return "";
 
   const selected = building.tech.techId;
-  const base = rows.find((r) => r.t.id === 4) || rows[rows.length - 1];
+  // База — техн.4 для нового дома, техн.5 для ранее окрашенного (см. recommendTechs).
+  const preferredId = building.houseType === "new" ? 4 : 5;
+  const base = rows.find((r) => r.t.id === preferredId) || rows.find((r) => r.t.isBase) || rows[rows.length - 1];
+  const cheaper = rows.filter((r) => r.sum < base.sum).sort((a, b) => b.sum - a.sum)[0];
+  const pricier = rows.filter((r) => r.sum > base.sum).sort((a, b) => a.sum - b.sum)[0];
+
+  const tips = [];
+  if (cheaper) {
+    tips.push(
+      `«${cheaper.t.short}» дешевле на ${money(base.sum - cheaper.sum)}, но гарантия ${yearsLabel(cheaper.item.guarantee)} вместо ${yearsLabel(base.item.guarantee)} на «${base.t.short}»`
+    );
+  }
+  if (pricier) {
+    const reason =
+      pricier.t.id === 5
+        ? "на ранее окрашенном доме старое покрытие снимают полностью, иначе новый слой не приляжет"
+        : "это более глубокая подготовка поверхности";
+    tips.push(`«${pricier.t.short}» дороже на ${money(pricier.sum - base.sum)} — ${reason}`);
+  }
 
   return `
     <div class="compare-tech">
       <h3 class="subhead">Сравнение на ${area.toFixed(0)} м² · ${escapeXml(product.name.split(" - ")[0])}</h3>
-      <p class="section-sub">Почему база (2 прохода) дороже — и что теряете, удешевляя.</p>
+      <p class="section-sub">Что входит в подготовку на этой площади — цена и гарантия по вариантам.</p>
       <div class="compare-rows">
         ${rows
           .map((r) => {
             const diff = r.sum - base.sum;
             const isSel = r.t.id === selected;
-            const isBase = r.t.isBase;
+            const isBase = r.t.id === base.t.id;
             return `
             <div class="compare-row ${isSel ? "selected" : ""} ${isBase ? "base" : ""}">
               <div>
@@ -216,9 +234,19 @@ export function techCompareHtml(building, catalog) {
           })
           .join("")}
       </div>
-      <div class="callout ok">Клиенту: «На теневых зонах можно упростить подготовку — на южном фасаде база держит гарантию».</div>
+      ${tips.length ? `<div class="callout ok">Клиенту: ${tips.join(". ")}.</div>` : ""}
     </div>
   `;
+}
+
+function yearsLabel(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return String(n ?? "—");
+  const mod10 = v % 10;
+  const mod100 = v % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${v} год`;
+  if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return `${v} года`;
+  return `${v} лет`;
 }
 
 /** Расход ЛКМ roughly: 1 л / 7.5 м² на 2 слоя (из описания ЛКМ BestPaints) */
