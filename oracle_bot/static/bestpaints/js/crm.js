@@ -355,6 +355,7 @@ export function homeCrmSectionHtml() {
       <button type="button" class="crm-tab" data-tab="payroll">ЗП</button>
       <button type="button" class="crm-tab" data-tab="schedule">График</button>
       <button type="button" class="crm-tab" data-tab="team">Команда</button>
+      <button type="button" class="crm-tab" data-tab="cabinets">Кабинеты</button>
     </nav>
     <div class="crm-tab-panels">
       <div class="crm-tab-panel" id="crm-panel-deals" data-panel="deals">
@@ -374,6 +375,7 @@ export function homeCrmSectionHtml() {
       <div class="crm-tab-panel" id="crm-panel-payroll" data-panel="payroll" hidden></div>
       <div class="crm-tab-panel" id="crm-panel-schedule" data-panel="schedule" hidden></div>
       <div class="crm-tab-panel" id="crm-panel-team" data-panel="team" hidden></div>
+      <div class="crm-tab-panel" id="crm-panel-cabinets" data-panel="cabinets" hidden></div>
     </div>
   </section>`;
 }
@@ -617,6 +619,61 @@ function payrollHtml(data, period, roleFilter = "surveyors") {
   </div>`;
 }
 
+
+async function loadCabinetsPanel(root, toast) {
+  const panel = root.querySelector("#crm-panel-cabinets");
+  if (!panel) return;
+  panel.innerHTML = `<div class="crm-panel-inner"><h3>Кабинеты клиентов</h3><p class="hint">Все кабинеты · логи изменений видны в карточке сделки</p><div id="crm-cab-list">Загрузка…</div></div>`;
+  try {
+    const pack = await api("/cabinets");
+    const list = pack.cabinets || [];
+    const el = panel.querySelector("#crm-cab-list");
+    if (!list.length) {
+      el.innerHTML = `<p class="hint">Пока нет кабинетов. Откройте из карточки сделки после сметы.</p>`;
+      return;
+    }
+    el.innerHTML = `<div class="crm-deals">${list
+      .map((c) => {
+        const o = c.object || {};
+        return `<button type="button" class="crm-deal" data-cab-open="${esc(c.id)}" data-crm-open="${esc(c.object_id)}">
+          <div class="crm-deal-title">${esc(c.client_name || o.title || "Клиент")} · ${esc(c.client_phone)}</div>
+          <div class="crm-deal-meta">${esc(o.address || "")} · ${esc(o.surveyor_name || "—")} · ${esc(c.status)}
+          ${Number(o.amount_total) > 0 ? ` · ${esc(moneyFmt(o.amount_total))}` : ""}</div>
+        </button>`;
+      })
+      .join("")}</div>
+      <details class="crm-fold" style="margin-top:12px"><summary>Лог выбранного кабинета</summary>
+        <ul class="crm-events" id="crm-cab-log-view"><li class="hint">Нажмите кабинет</li></ul>
+      </details>`;
+    el.querySelectorAll("[data-cab-open]").forEach((btn) => {
+      btn.onclick = async () => {
+        const id = btn.getAttribute("data-cab-open");
+        const oid = btn.getAttribute("data-crm-open");
+        try {
+          const detail = await api(`/cabinets/${encodeURIComponent(id)}`);
+          const logs = detail.logs || [];
+          const box = panel.querySelector("#crm-cab-log-view");
+          if (box) {
+            box.innerHTML = logs
+              .slice(0, 60)
+              .map((e) => `<li><span class="hint">${fmtTs(e.created_at)}</span> <b>${esc(e.actor_type)}</b> · ${esc(e.message)}</li>`)
+              .join("") || "<li class='hint'>Пусто</li>";
+          }
+          // also allow jump to deal
+          if (oid && typeof window.__bpOpenCrmDeal === "function") {
+            /* optional */
+          }
+          toast(`${detail.cabinet?.client_name || "Кабинет"} · ${logs.length} записей лога`);
+        } catch (e) {
+          toast(String(e.message || e));
+        }
+      };
+    });
+  } catch (e) {
+    panel.querySelector("#crm-cab-list").textContent = String(e.message || e);
+  }
+}
+
 export async function mountHomeCrm(ctx) {
   const { root, toast, onOpenDetail, getMeta } = ctx;
   const shell = root.querySelector("#crm-shell");
@@ -751,6 +808,7 @@ export async function mountHomeCrm(ctx) {
       if (tab.dataset.tab === "team") await renderTeam();
       if (tab.dataset.tab === "analytics") await renderAnalytics("30d");
       if (tab.dataset.tab === "payroll") await renderPayroll("30d");
+      if (tab.dataset.tab === "cabinets") await loadCabinetsPanel(root, toast);
     };
   });
 
@@ -1167,6 +1225,20 @@ export function detailHtml(obj, events, meta) {
     </div>
   </details>
 
+  <details class="crm-fold" open id="crm-cabinet-fold">
+    <summary>Кабинет клиента</summary>
+    <section class="crm-money-box" id="crm-cabinet-box">
+      <p class="hint">Ссылка для клиента: вход по телефону, можно менять технологию/ЛКМ. Все правки пишутся в лог.</p>
+      <div id="crm-cabinet-info" class="hint">Загрузка…</div>
+      <div class="crm-actions" style="margin-top:10px">
+        <button type="button" class="btn primary" id="crm-cab-open">Открыть / обновить кабинет</button>
+        <button type="button" class="btn ghost" id="crm-cab-copy" hidden>Копировать ссылку</button>
+        <button type="button" class="btn ghost" id="crm-cab-revoke" hidden>Отозвать</button>
+      </div>
+      <ul class="crm-events" id="crm-cabinet-logs" style="margin-top:12px"></ul>
+    </section>
+  </details>
+
   <details class="crm-fold">
     <summary>История</summary>
     <ul class="crm-events">
@@ -1197,6 +1269,126 @@ export async function mountDetail(ctx) {
   root.querySelector("#crm-back").onclick = onBack;
 
   const refresh = () => mountDetail(ctx);
+
+  // Кабинет клиента
+  let cabLink = "";
+  async function loadCabinetBox() {
+    const info = root.querySelector("#crm-cabinet-info");
+    const logsEl = root.querySelector("#crm-cabinet-logs");
+    const copyBtn = root.querySelector("#crm-cab-copy");
+    const revokeBtn = root.querySelector("#crm-cab-revoke");
+    if (!info) return;
+    try {
+      const pack = await api(`/objects/${encodeURIComponent(objectId)}/cabinet`);
+      const cab = pack.cabinet;
+      if (!cab) {
+        info.textContent = "Кабинет ещё не открыт. Нужны смета в конструкторе и телефон клиента.";
+        if (copyBtn) copyBtn.hidden = true;
+        if (revokeBtn) revokeBtn.hidden = true;
+        if (logsEl) logsEl.innerHTML = "";
+        return;
+      }
+      info.innerHTML = `<strong>${esc(cab.client_name || "Клиент")}</strong> · ${esc(cab.client_phone)}
+        · статус ${esc(cab.status)} · код <b>${esc(cab.access_code || "—")}</b>
+        <div class="hint" style="margin-top:6px">Клиент входит по ссылке + телефону или телефону + коду.</div>`;
+      if (copyBtn) copyBtn.hidden = false;
+      if (revokeBtn) revokeBtn.hidden = cab.status !== "active";
+      cabLink = ""; // заполняется после open/refresh
+      if (logsEl) {
+        logsEl.innerHTML = (pack.logs || [])
+          .slice(0, 40)
+          .map((e) => `<li><span class="hint">${fmtTs(e.created_at)}</span> <b>${esc(e.actor_type)}</b> · ${esc(e.message)}</li>`)
+          .join("") || "<li class='hint'>Лог пуст</li>";
+      }
+    } catch (e) {
+      info.textContent = String(e.message || e);
+    }
+  }
+  loadCabinetBox();
+
+  root.querySelector("#crm-cab-open")?.addEventListener("click", async () => {
+    // Нужен survey из localStorage по survey_local_id или через callback
+    const sid = obj.survey_local_id;
+    let survey = null;
+    try {
+      const raw = localStorage.getItem("bp_surveys_v1");
+      const list = raw ? JSON.parse(raw) : [];
+      survey = list.find((s) => s.id === sid) || null;
+    } catch { /* ignore */ }
+    if (!survey) {
+      // если кабинет уже есть — обновим ссылку с серверной сметы
+      try {
+        const existing = await api(`/objects/${encodeURIComponent(objectId)}/cabinet`);
+        if (existing.cabinet) {
+          const refreshed = await api(`/cabinets/${encodeURIComponent(existing.cabinet.id)}/refresh-link`, {
+            method: "POST",
+            body: "{}",
+          });
+          cabLink = refreshed.link || "";
+          toast("Ссылка обновлена из серверной сметы");
+          const info = root.querySelector("#crm-cabinet-info");
+          if (info) {
+            info.innerHTML = `<strong>Ссылка:</strong> <a href="${esc(cabLink)}" target="_blank" rel="noopener">${esc(cabLink)}</a>
+              <div>Код: <b>${esc(refreshed.access_code || "")}</b></div>`;
+          }
+          root.querySelector("#crm-cab-copy").hidden = false;
+          await loadCabinetBox();
+          return;
+        }
+      } catch { /* fallthrough */ }
+      toast("Откройте конструктор по этой сделке, сохраните смету — затем снова «Открыть кабинет»");
+      return;
+    }
+    try {
+      // snapshot totals if possible — client sends raw survey; server stores slim
+      const res = await api(`/objects/${encodeURIComponent(objectId)}/cabinet`, {
+        method: "POST",
+        body: JSON.stringify({ survey, created_from: "crm", actor_id: getCrmRole() }),
+      });
+      cabLink = res.link || "";
+      toast("Кабинет готов");
+      const info = root.querySelector("#crm-cabinet-info");
+      if (info) {
+        info.innerHTML = `<strong>Ссылка:</strong> <a href="${esc(cabLink)}" target="_blank" rel="noopener">${esc(cabLink)}</a>
+          <div>Код доступа: <b>${esc(res.access_code || "")}</b> · тел. ${esc(res.phone || "")}</div>`;
+      }
+      root.querySelector("#crm-cab-copy").hidden = false;
+      root.querySelector("#crm-cab-revoke").hidden = false;
+      await loadCabinetBox();
+      if (cabLink) {
+        // keep link visible
+        const info2 = root.querySelector("#crm-cabinet-info");
+        if (info2) info2.innerHTML += `<div style="margin-top:8px"><a href="${esc(cabLink)}" target="_blank">${esc(cabLink)}</a></div>`;
+      }
+    } catch (e) {
+      toast(String(e.message || e));
+    }
+  });
+  root.querySelector("#crm-cab-copy")?.addEventListener("click", async () => {
+    if (!cabLink) {
+      toast("Сначала нажмите «Открыть / обновить кабинет» чтобы получить свежую ссылку");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(cabLink);
+      toast("Ссылка скопирована");
+    } catch {
+      prompt("Ссылка:", cabLink);
+    }
+  });
+  root.querySelector("#crm-cab-revoke")?.addEventListener("click", async () => {
+    try {
+      const pack = await api(`/objects/${encodeURIComponent(objectId)}/cabinet`);
+      if (!pack.cabinet) return;
+      await api(`/cabinets/${encodeURIComponent(pack.cabinet.id)}/revoke`, { method: "POST", body: "{}" });
+      toast("Кабинет отозван");
+      cabLink = "";
+      await loadCabinetBox();
+    } catch (e) {
+      toast(String(e.message || e));
+    }
+  });
+
 
   const subEl = root.querySelector("#crm-money-sub");
   const discEl = root.querySelector("#crm-money-disc");

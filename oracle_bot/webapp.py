@@ -335,7 +335,13 @@ async def bestpaints_logout():
 @app.get("/bestpaints")
 @app.get("/bestpaints/")
 async def bestpaints_index(request: Request):
-    if not is_authenticated(request):
+    public_ok = (
+        file_path in ("cabinet.html", "cabinet", "login.html")
+        or file_path.startswith("js/")
+        or file_path.startswith("css/")
+        or file_path.startswith("data/")
+    )
+    if not is_authenticated(request) and not public_ok:
         return RedirectResponse("/bestpaints/login", status_code=303)
     return FileResponse(BP_STATIC / "index.html")
 
@@ -344,6 +350,9 @@ async def bestpaints_index(request: Request):
 from oracle_bot import bestpaints_crm as bp_crm  # noqa: E402
 
 bp_crm.init_db()
+from oracle_bot import bestpaints_cabinets as bp_cab  # noqa: E402
+
+bp_cab.init_db()
 
 
 def _bp_api_auth(request: Request):
@@ -527,6 +536,177 @@ async def bp_api_payroll(
         return bp_crm.payroll(period=period, date_from=date_from, date_to=date_to)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+
+
+
+
+# ── BestPaints client cabinets (public + staff) ─────────────────────
+from fastapi.responses import JSONResponse  # noqa: E402
+
+
+@app.get("/bestpaints/c/{token}")
+async def bp_cabinet_magic(token: str, request: Request):
+    """Magic-link → страница кабинета клиента."""
+    pack = bp_cab.resolve_magic_token(token)
+    if not pack:
+        return FileResponse(BP_STATIC / "cabinet.html", headers={"X-BP-Cabinet": "invalid"})
+    # cabinet.html читает token из path через JS location
+    return FileResponse(BP_STATIC / "cabinet.html")
+
+
+@app.get("/bestpaints/cabinet")
+@app.get("/bestpaints/cabinet/")
+async def bp_cabinet_app():
+    return FileResponse(BP_STATIC / "cabinet.html")
+
+
+@app.post("/bestpaints/api/client/login")
+async def bp_client_login(request: Request):
+    data = await request.json()
+    try:
+        result = bp_cab.client_login(
+            phone=str((data or {}).get("phone") or ""),
+            token=str((data or {}).get("token") or ""),
+            access_code=str((data or {}).get("access_code") or ""),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    resp = JSONResponse({"ok": True, "cabinet": {
+        "id": result["cabinet"]["id"],
+        "client_name": result["cabinet"].get("client_name") or "",
+        "client_phone": result["cabinet"].get("client_phone") or "",
+    }})
+    secure = os.getenv("ORACLE_CLOUD", "").strip() in ("1", "true", "yes")
+    resp.set_cookie(
+        bp_cab.COOKIE_NAME,
+        result["cookie"],
+        max_age=bp_cab.COOKIE_MAX_AGE,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/bestpaints",
+    )
+    return resp
+
+
+@app.post("/bestpaints/api/client/logout")
+async def bp_client_logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(bp_cab.COOKIE_NAME, path="/bestpaints")
+    return resp
+
+
+def _bp_client_auth(request: Request):
+    pack = bp_cab.verify_client_session(request.cookies.get(bp_cab.COOKIE_NAME))
+    if not pack:
+        raise HTTPException(401, "client login required")
+    return pack
+
+
+@app.get("/bestpaints/api/client/me")
+async def bp_client_me(request: Request):
+    pack = _bp_client_auth(request)
+    return bp_cab.client_get_bundle(pack["cabinet"])
+
+
+@app.put("/bestpaints/api/client/survey")
+async def bp_client_save_survey(request: Request):
+    pack = _bp_client_auth(request)
+    data = await request.json()
+    survey = (data or {}).get("survey")
+    if not isinstance(survey, dict):
+        raise HTTPException(400, "survey required")
+    try:
+        saved = bp_cab.client_save_survey(
+            pack["cabinet"],
+            survey,
+            phone=pack["session"].get("phone") or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    return {
+        "ok": True,
+        "version": saved["version"],
+        "changes": saved.get("changes") or [],
+        "survey": saved["payload"],
+    }
+
+
+@app.post("/bestpaints/api/objects/{oid}/cabinet")
+async def bp_open_cabinet(oid: str, request: Request):
+    """Staff: создать/обновить кабинет клиента и вернуть ссылку."""
+    _bp_api_auth(request)
+    data = await request.json()
+    survey = (data or {}).get("survey")
+    if not isinstance(survey, dict):
+        raise HTTPException(400, "Нужен survey JSON из конструктора")
+    base = str(request.base_url).rstrip("/")
+    # на Render за прокси base может быть http — предпочитаем public env
+    try:
+        result = bp_cab.create_or_refresh_cabinet(
+            object_id=oid,
+            survey=survey,
+            created_from=str((data or {}).get("created_from") or "estimate"),
+            actor_type="staff",
+            actor_id=str((data or {}).get("actor_id") or "staff"),
+            base_url=bp_cab.public_base_url(base),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    return result
+
+
+@app.get("/bestpaints/api/objects/{oid}/cabinet")
+async def bp_get_object_cabinet(oid: str, request: Request):
+    _bp_api_auth(request)
+    cab = bp_cab.get_cabinet_by_object(oid)
+    if not cab:
+        return {"cabinet": None, "logs": []}
+    logs = bp_cab.list_change_logs(cabinet_id=cab["id"], limit=100)
+    return {"cabinet": cab, "logs": logs}
+
+
+@app.get("/bestpaints/api/cabinets")
+async def bp_list_cabinets(request: Request, status: str | None = None):
+    _bp_api_auth(request)
+    return {"cabinets": bp_cab.list_cabinets(status=status)}
+
+
+@app.get("/bestpaints/api/cabinets/{cab_id}")
+async def bp_cabinet_detail(cab_id: str, request: Request):
+    _bp_api_auth(request)
+    cab = bp_cab.get_cabinet(cab_id)
+    if not cab:
+        raise HTTPException(404, "cabinet not found")
+    survey = bp_cab.get_survey(cab.get("survey_id") or "")
+    logs = bp_cab.list_change_logs(cabinet_id=cab_id, limit=200)
+    obj = bp_crm.get_object(cab["object_id"], include_deleted=True)
+    return {"cabinet": cab, "object": obj, "survey": (survey or {}).get("payload"), "version": (survey or {}).get("version"), "logs": logs}
+
+
+@app.post("/bestpaints/api/cabinets/{cab_id}/revoke")
+async def bp_cabinet_revoke(cab_id: str, request: Request):
+    _bp_api_auth(request)
+    return {"cabinet": bp_cab.revoke_cabinet(cab_id)}
+
+
+@app.post("/bestpaints/api/cabinets/{cab_id}/refresh-link")
+async def bp_cabinet_refresh_link(cab_id: str, request: Request):
+    _bp_api_auth(request)
+    cab = bp_cab.get_cabinet(cab_id)
+    if not cab:
+        raise HTTPException(404, "not found")
+    survey = bp_cab.get_survey(cab.get("survey_id") or "")
+    if not survey:
+        raise HTTPException(400, "нет сметы в кабинете")
+    base = str(request.base_url).rstrip("/")
+    result = bp_cab.create_or_refresh_cabinet(
+        object_id=cab["object_id"],
+        survey=survey["payload"],
+        created_from="refresh",
+        base_url=bp_cab.public_base_url(base),
+    )
+    return result
 
 
 @app.get("/bestpaints/{file_path:path}")

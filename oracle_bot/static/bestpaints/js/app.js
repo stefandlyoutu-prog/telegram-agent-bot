@@ -3069,6 +3069,7 @@ function renderEstimate(root) {
       <b>PDF-презентация:</b> смета + почему выбран ЛКМ/технология + разложение цены по сторонам + гарантия и «вау»-визуализация дома.
     </div>
     <div class="share-row no-print">
+      <button class="btn primary" id="btn-cabinet">Кабинет клиенту ★</button>
       <button class="btn primary" id="btn-pdf">PDF-презентация для клиента ★</button>
       <button class="btn" id="btn-tg">Telegram</button>
       <button class="btn" id="btn-wa">WhatsApp</button>
@@ -3089,6 +3090,42 @@ function renderEstimate(root) {
     paintCustomLines(root);
   };
   root.querySelector("[data-path='estimate.discountPct']")?.addEventListener("change", () => render());
+  $("#btn-cabinet", root)?.addEventListener("click", async () => {
+    const crmId = survey?.notes?.crmId || new URLSearchParams(location.search).get("crm");
+    if (!crmId) {
+      toast("Сначала откройте смету из сделки CRM — нужен телефон клиента в сделке");
+      return;
+    }
+    try {
+      const est = buildEstimate(survey, catalog);
+      const payload = JSON.parse(JSON.stringify(survey));
+      payload._estimateSnapshot = {
+        subtotal: est.subtotal,
+        discountPct: est.discountPct,
+        total: est.total,
+        areas: est.areas,
+        area_m2: est.areas?.paintTotal,
+      };
+      const res = await fetch(`/bestpaints/api/objects/${encodeURIComponent(crmId)}/cabinet`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ survey: payload, created_from: "estimate", actor_id: "surveyor" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || data.message || "Не удалось открыть кабинет");
+      const link = data.link || "";
+      const msg = `Кабинет готов.\nКод: ${data.access_code}\n${link}`;
+      try {
+        await navigator.clipboard.writeText(link);
+        toast("Ссылка кабинета скопирована");
+      } catch { /* ignore */ }
+      prompt("Ссылка клиенту (скопируйте):", link);
+      console.log(msg);
+    } catch (e) {
+      toast(String(e.message || e));
+    }
+  });
   $("#btn-pdf", root).onclick = () => openClientReport(survey, catalog);
   $("#btn-tg", root).onclick = () => shareTelegram(survey, catalog);
   $("#btn-wa", root).onclick = () => shareWhatsApp(survey, catalog);

@@ -1,0 +1,33 @@
+
+.cabinet-body { background: #e8ebe8; min-height: 100vh; }
+.cab-shell { max-width: 720px; margin: 0 auto; padding: 16px 14px 80px; }
+.cab-hero {
+  background: linear-gradient(135deg, #151b18, #2a332c 55%, #3a2f18);
+  color: #f4efe4; border-radius: 18px; padding: 22px 18px; margin-bottom: 14px;
+}
+.cab-hero h1 { font-family: Unbounded, system-ui, sans-serif; font-size: 1.25rem; margin: 0 0 6px; }
+.cab-hero p { margin: 0; opacity: .85; font-size: .92rem; }
+.cab-card {
+  background: #fff; border-radius: 14px; padding: 14px; margin-bottom: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.06);
+}
+.cab-card h2 { font-size: 1rem; margin: 0 0 10px; font-family: Unbounded, system-ui, sans-serif; }
+.cab-login { max-width: 420px; margin: 40px auto; }
+.cab-kpi { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+.cab-kpi div { background: #f7f5f0; border-radius: 10px; padding: 10px; }
+.cab-kpi b { display: block; font-size: 1.1rem; margin-top: 4px; }
+.cab-sticky {
+  position: sticky; bottom: 0; background: rgba(232,235,232,.95); backdrop-filter: blur(8px);
+  padding: 10px; display: flex; gap: 8px; justify-content: center; z-index: 5;
+}
+.cab-choice { display: grid; gap: 8px; }
+.cab-choice button {
+  text-align: left; border: 1px solid #d5ddd7; background: #fff; border-radius: 12px;
+  padding: 12px; cursor: pointer; font: inherit;
+}
+.cab-choice button.selected { border-color: #9a7b32; box-shadow: 0 0 0 2px rgba(154,123,50,.25); }
+.cab-choice button strong { display: block; margin-bottom: 4px; }
+.cab-choice button span { color: #5a6b60; font-size: .85rem; }
+.cab-muted { color: #5a6b60; font-size: .85rem; }
+.cab-error { background: #fdecea; color: #8a2b2b; padding: 10px 12px; border-radius: 10px; margin: 8px 0; }
+.cab-ok { background: #e7f6ec; color: #1f5a35; padding: 10px 12px; border-radius: 10px; margin: 8px 0; }
