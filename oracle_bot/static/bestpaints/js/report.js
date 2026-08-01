@@ -155,7 +155,8 @@ function buildReportHtml(survey, catalog) {
   }
   .wow h2 { color:#f0e2b8; margin:0 0 8px; font-size:1.2rem; position:relative; z-index:1; }
   .wow h2::before { display:none; }
-  .wow p { margin:0; opacity:.92; line-height:1.55; position:relative; z-index:1; max-width:78%; }
+  .wow p { margin:0; opacity:.92; line-height:1.55; position:relative; z-index:1; }
+  .wow.has-seal h2, .wow.has-seal p { max-width:74%; }
   .wow .seal {
     position:absolute; right:20px; top:20px; width:64px; height:64px; border-radius:50%;
     display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
@@ -230,11 +231,11 @@ function buildReportHtml(survey, catalog) {
       </div>
     </div>
 
-    <div class="wow">
+    <div class="wow has-seal">
       <div class="seal"><b>${warranty}</b><span>лет гарантии</span></div>
       <h2>${esc(paintPitch.headline)}</h2>
       <p>${esc(paintPitch.wow)}</p>
-      <p style="margin-top:10px;font-size:.9rem;opacity:.85;max-width:78%">${esc(WOW_LINES[0])}</p>
+      <p style="margin-top:10px;font-size:.9rem;opacity:.85">${esc(WOW_LINES[0])}</p>
     </div>
 
     <div class="meta">
