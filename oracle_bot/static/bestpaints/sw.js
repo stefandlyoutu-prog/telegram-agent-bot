@@ -1,4 +1,4 @@
-const CACHE = "bp-survey-v47";
+const CACHE = "bp-survey-v48";
 const ASSETS = [
   "./",
   "./index.html",
@@ -41,6 +41,10 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+self.addEventListener("message", (e) => {
+  if (e.data && e.data.type === "SKIP_WAITING") self.skipWaiting();
+});
+
 function shouldBypassCache(url) {
   const path = url.pathname || "";
   if (path.includes("/api/")) return true;
@@ -48,6 +52,8 @@ function shouldBypassCache(url) {
   if (/\.pdf$/i.test(path)) return true;
   if (path.endsWith("/login") || path.endsWith("/logout")) return true;
   if (path.endsWith("/sw.js")) return true;
+  if (path.endsWith("/index.html") || path.endsWith("/cabinet.html")) return true;
+  if (path.endsWith("/bestpaints") || path.endsWith("/bestpaints/")) return true;
   return false;
 }
 
@@ -67,8 +73,9 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
+  // network-first: всегда тянем свежее, кэш только как офлайн-запас
   e.respondWith(
-    fetch(req)
+    fetch(req, { cache: "no-cache" })
       .then((res) => {
         if (res && res.ok) {
           const copy = res.clone();

@@ -538,7 +538,7 @@ function renderHome() {
   $("#btn-new").onclick = () => newSurvey();
   $("#btn-demo-morozov")?.addEventListener("click", async () => {
     try {
-      const res = await fetch("/bestpaints/data/demo-survey-morozov-stepan.json?v=47", {
+      const res = await fetch("/bestpaints/data/demo-survey-morozov-stepan.json?v=48", {
         credentials: "same-origin",
       });
       if (!res.ok) throw new Error("Демо-файл недоступен");

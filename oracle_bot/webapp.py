@@ -337,7 +337,14 @@ async def bestpaints_logout():
 async def bestpaints_index(request: Request):
     if not is_authenticated(request):
         return RedirectResponse("/bestpaints/login", status_code=303)
-    return FileResponse(BP_STATIC / "index.html")
+    return FileResponse(
+        BP_STATIC / "index.html",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 # ── BestPaints CRM API ──────────────────────────────────────────────
@@ -821,21 +828,28 @@ async def bestpaints_files(file_path: str, request: Request):
     )
     if not is_authenticated(request) and not public_ok:
         return RedirectResponse("/bestpaints/login", status_code=303)
+    _bp_nocache = {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
     # default document
     if not file_path or file_path.endswith("/"):
-        return FileResponse(BP_STATIC / "index.html")
+        return FileResponse(BP_STATIC / "index.html", headers=_bp_nocache)
     path = _bp_safe_file(file_path)
     headers = {}
     if file_path in ("cabinet.html", "cabinet") or file_path.startswith("js/cabinet"):
         headers.update(_bp_cabinet_headers())
 
     low = file_path.lower()
-    if low.endswith(".pdf") or low.startswith("docs/") or low.endswith("sw.js"):
-        headers = {
-            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        }
+    if (
+        low.endswith(".pdf")
+        or low.startswith("docs/")
+        or low.endswith("sw.js")
+        or low.endswith(".html")
+        or low in ("cabinet", "index.html", "cabinet.html", "login.html")
+    ):
+        headers.update(_bp_nocache)
     media = None
     if low.endswith(".pdf"):
         media = "application/pdf"
