@@ -183,6 +183,9 @@ async def _post_json(payload: dict, *, timeout_sec: int = 180) -> dict:
         "Authorization": f"Bearer {LLM_API_KEY}",
         "Content-Type": "application/json",
     }
+    if "openrouter.ai" in (LLM_BASE_URL or "").lower():
+        headers["HTTP-Referer"] = "https://moracul.ru"
+        headers["X-Title"] = "BestPaints / Moracul"
     from bot.services.http_client import (
         format_client_error,
         llm_connection_modes,
@@ -404,6 +407,24 @@ async def chat_completion(
 
 
 def _normalize_model(model: str) -> str:
+    m = (model or "").strip()
+    if not m:
+        return m
+    # OpenRouter / provider-prefixed slugs: openai/gpt-4o-mini
+    if "/" in m:
+        return m
+    from bot.config import LLM_BASE_URL
+
+    if "openrouter.ai" in (LLM_BASE_URL or "").lower():
+        openrouter_aliases = {
+            "gpt-4o-mini": "openai/gpt-4o-mini",
+            "gpt-4o": "openai/gpt-4o",
+            "gpt-5.4-mini": "openai/gpt-4o-mini",
+            "gpt-5.4": "openai/gpt-4o",
+            "claude-haiku": "anthropic/claude-3.5-haiku",
+            "claude-sonnet": "anthropic/claude-sonnet-4",
+        }
+        return openrouter_aliases.get(m, m if m.startswith("openai/") else f"openai/{m}")
     aliases = {
         "gpt-4o-mini": "gpt-5.4-mini",
         "gpt-4o": "gpt-5.4",
@@ -411,7 +432,7 @@ def _normalize_model(model: str) -> str:
         "claude-sonnet": "claude-sonnet-4.6",
         "claude-opus": "claude-opus-4.7",
     }
-    return aliases.get(model, model)
+    return aliases.get(m, m)
 
 
 def looks_like_vision_refusal(text: str) -> bool:

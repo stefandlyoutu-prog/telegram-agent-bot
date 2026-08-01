@@ -91,10 +91,12 @@ USER_PROMPT = """Разбери отчёт / бланк замера / заме�
 Правила:
 - Числа в метрах / м² / пог.м как в бланке. Запятую → точка.
 - Не выдумывай размеры: если нечитаемо — null и понизь confidence.
+- Стены: колонка «Пл.ст.» = areaManual (м²), обычно 4–60 м². «295» без точки часто = 29.5.
+- Не путай колонки: наличники/доборы не клади в areaManual. «Блок-хаус»/«брус» — material, не адрес.
 - Стены: если есть только площадь стены (Пл.ст.) без L×H — areaManual + shape=custom.
 - Проёмы: если есть только площадь окон/дверей — openingsArea (м²), без фейковых width/height.
 - Торцы / наличники / доборы / раскладка / водосток / отливы / подшива / потолки — в поля стены или measure.
-- Материал: beam|log|hand_log|imit|block|board|other (блок-хаус → block, брус → beam).
+- Материал: beam|log|hand_log|imit|block|board|other (блок-хаус → block, брус → beam; оба → block + materialSize брус).
 - houseType: new|non_film|film (старое покрытие → film или non_film по смыслу; новый дом → new).
 - removalDifficulty: easy|normal|hard|full_strip.
 - site.housing: none|yes|need (аренда/бытовка → need; есть жильё у заказчика → yes; нет → none).
@@ -424,11 +426,57 @@ async def parse_report_text(text: str, *, hint: str = "") -> dict[str, Any]:
     try:
         raw = json.loads(_strip_json(raw_text))
     except json.JSONDecodeError as e:
-        logger.warning("report text JSON fail: %s | %s", e, (raw_text or "")[:400])
-        raise ValueError("Модель вернула не JSON по тексту отчёта") from e
+        logger.warning("report text JSON fail, retry: %s | %s", e, (raw_text or "")[:300])
+        fix_user = (
+            "Исправь в валидный JSON без markdown. Только объект схемы отчёта замера.\n\n"
+            + (raw_text or "")[:8000]
+        )
+        raw_text2 = await _report_chat(fix_user)
+        try:
+            raw = json.loads(_strip_json(raw_text2))
+        except json.JSONDecodeError as e2:
+            logger.warning("report text JSON fail2: %s | %s", e2, (raw_text2 or "")[:300])
+            raise ValueError("Модель вернула не JSON по тексту отчёта") from e2
     if not isinstance(raw, dict):
         raise ValueError("Неожиданный ответ распознавания отчёта")
     return normalize_report(raw)
+
+
+def enhance_report_image(image: bytes) -> bytes:
+    """Контраст/резкость для рукописных бланков (Pillow, если есть)."""
+    try:
+        from io import BytesIO
+
+        from PIL import Image, ImageEnhance, ImageOps
+
+        im = Image.open(BytesIO(image))
+        g = ImageOps.grayscale(im)
+        g = ImageOps.autocontrast(g, cutoff=2)
+        g = ImageEnhance.Contrast(g).enhance(1.55)
+        g = ImageEnhance.Sharpness(g).enhance(1.7)
+        w, h = g.size
+        if max(w, h) < 1800:
+            g = g.resize((int(w * 1.5), int(h * 1.5)), Image.Resampling.LANCZOS)
+        buf = BytesIO()
+        g.convert("RGB").save(buf, format="JPEG", quality=92, optimize=True)
+        out = buf.getvalue()
+        return out if len(out) > 200 else image
+    except Exception as e:
+        logger.info("report image enhance skip: %s", e)
+        return image
+
+
+OCR_PASS_PROMPT = """Это рукописный бланк замерщика BestPaints («Отчет по замеру») на русском.
+Выпиши СЫРОЙ читаемый текст. Не выдумывай поля, которых нет.
+Обязательно отдельно:
+A) Заказчик, телефон, адрес объекта (не материал!), дата, замерщик
+B) Материал дома (брус/блок-хаус/…) / старое покрытие / снятие — отдельно от адреса
+C) Светильники и кабель-канал (кол-во; суммы вида 11+1 оставляй как 11+1)
+D) Быт: жильё/аренда, туалет, душ, вода, электричество, когда начать
+E) Таблица «Результаты замеров» построчно 1..N строго в формате:
+   строка N: Пл.ст.=…; торцы=…; окна/двери=…; наличн=…; доборы=…; раскл=…; водосток=…; отлив=…; заметка=…
+Для Пл.ст. пиши десятичную точку, если она видна (6.6, 29.5). Не переноси числа из соседних колонок в Пл.ст.
+Ответ обычным текстом."""
 
 
 async def parse_report_image(image: bytes, *, hint: str = "") -> dict[str, Any]:
@@ -436,8 +484,36 @@ async def parse_report_image(image: bytes, *, hint: str = "") -> dict[str, Any]:
         raise ValueError("Пустое или слишком маленькое изображение отчёта")
     if len(image) > 12 * 1024 * 1024:
         raise ValueError("Файл больше 12 МБ — сожмите фото бланка")
-    data_url = to_data_url(image, detect_mime(image))
-    user = _merge_hint(USER_PROMPT, hint)
+
+    enhanced = enhance_report_image(image)
+    data_url = to_data_url(enhanced, detect_mime(enhanced))
+
+    # Два прохода: 1) сырое OCR  2) структура JSON — так рукопись читается точнее
+    ocr_user = _merge_hint(OCR_PASS_PROMPT, hint)
+    try:
+        ocr_text = await _report_vision(ocr_user, data_url)
+    except Exception as e:
+        logger.warning("report OCR pass fail, fallback single-shot: %s", e)
+        ocr_text = ""
+
+    if ocr_text and len(ocr_text.strip()) > 40:
+        try:
+            structured = await parse_report_text(
+                "OCR бланка (рукопись, сырой текст — не JSON):\n" + ocr_text.strip()[:10000],
+                hint=hint,
+            )
+        except ValueError as e:
+            logger.warning("report structure-from-OCR fail: %s", e)
+            structured = None
+        if structured and (
+            structured.get("walls")
+            or structured.get("client", {}).get("name")
+            or structured.get("client", {}).get("phone")
+        ):
+            structured["sourceType"] = structured.get("sourceType") or "blank"
+            return structured
+
+    user = _merge_hint(USER_PROMPT + "\n\nСначала мысленно прочитай таблицу Пл.ст. по строкам, потом JSON.", hint)
     raw_text = await _report_vision(user, data_url)
     try:
         raw = json.loads(_strip_json(raw_text))
@@ -530,12 +606,12 @@ async def parse_report_bundle(
     if errors:
         note = "Часть файлов не распознана AI: " + "; ".join(errors)[:300]
         result["notes"] = f"{result.get('notes') or ''}\n{note}".strip()[:1200]
-    # подсказка замерщика побеждает пустое поле
+    # подсказка замерщика — приоритетнее кривого OCR подписи
     if hint:
         m = re.search(r"замерщик[:\s]+(.+?)(?:\.|$|,)", hint, re.I)
-        if m and not result["client"].get("surveyor"):
+        if m:
             result["client"]["surveyor"] = m.group(1).strip()[:120]
-        if "морозов" in hint.lower() and not result["client"].get("surveyor"):
+        elif "морозов" in hint.lower() and "степан" in hint.lower():
             result["client"]["surveyor"] = "Морозов Степан"
     if not result["walls"] and not result["notes"] and not result["client"].get("name"):
         raise ValueError("Не удалось извлечь данные из отчёта — проверьте фото/файл")

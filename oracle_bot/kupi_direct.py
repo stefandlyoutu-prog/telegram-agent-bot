@@ -8,7 +8,7 @@ from typing import Any
 import aiohttp
 from aiohttp import ClientConnectorError, ClientError
 
-from bot.config import LLM_API_KEY, LLM_CHAT_URL, VISION_MODEL
+from bot.config import LLM_API_KEY, LLM_BASE_URL, LLM_CHAT_URL, VISION_MODEL
 from bot.services.http_client import (
     format_client_error,
     llm_connection_modes,
@@ -26,13 +26,22 @@ def _timeout(total: int) -> aiohttp.ClientTimeout:
     return aiohttp.ClientTimeout(total=total, connect=connect, sock_connect=connect)
 
 
-async def _post(payload: dict[str, Any], *, timeout_sec: int) -> dict[str, Any]:
-    if not LLM_API_KEY:
-        raise LLMError("Не задан LLM_API_KEY")
+def _llm_headers() -> dict[str, str]:
     headers = {
         "Authorization": f"Bearer {LLM_API_KEY}",
         "Content-Type": "application/json",
     }
+    # OpenRouter просит Referer/Title; без них часть ключей режется.
+    if "openrouter.ai" in (LLM_BASE_URL or "").lower():
+        headers["HTTP-Referer"] = "https://moracul.ru"
+        headers["X-Title"] = "BestPaints / Moracul"
+    return headers
+
+
+async def _post(payload: dict[str, Any], *, timeout_sec: int) -> dict[str, Any]:
+    if not LLM_API_KEY:
+        raise LLMError("Не задан LLM_API_KEY / OPENROUTER_API_KEY")
+    headers = _llm_headers()
     modes = list(llm_connection_modes())
     last_err: Exception | None = None
 
@@ -50,11 +59,11 @@ async def _post(payload: dict[str, Any], *, timeout_sec: int) -> dict[str, Any]:
                         data = await resp.json()
                     except Exception:
                         body = await resp.text()
-                        raise LLMError(f"Kupi ({resp.status}): {body[:200]}")
+                        raise LLMError(f"LLM ({resp.status}): {body[:200]}")
                     if resp.status != 200:
                         err = data.get("error", {})
                         msg = err.get("message", str(data)) if isinstance(err, dict) else str(data)
-                        raise LLMError(f"Kupi ({resp.status}): {msg}")
+                        raise LLMError(f"LLM ({resp.status}): {msg}")
                     return data
         except LLMError:
             raise
@@ -65,11 +74,12 @@ async def _post(payload: dict[str, Any], *, timeout_sec: int) -> dict[str, Any]:
         except ClientError as e:
             last_err = e
 
+    provider = "OpenRouter" if "openrouter.ai" in (LLM_BASE_URL or "").lower() else "LLM"
     if isinstance(last_err, asyncio.TimeoutError):
-        raise LLMError(f"Таймаут KupiAPI ({timeout_sec} сек)") from last_err
+        raise LLMError(f"Таймаут {provider} ({timeout_sec} сек)") from last_err
     if last_err:
-        raise LLMError(f"KupiAPI: {format_client_error(last_err)}") from last_err
-    raise LLMError("KupiAPI недоступен")
+        raise LLMError(f"{provider}: {format_client_error(last_err)}") from last_err
+    raise LLMError(f"{provider} недоступен")
 
 
 def _text(data: dict[str, Any]) -> str:
