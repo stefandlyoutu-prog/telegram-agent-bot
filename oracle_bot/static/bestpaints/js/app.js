@@ -20,6 +20,7 @@ import { compressImageFile, photosHtml, wallPhotosHtml } from "./photos.js";
 import { bindKeypad } from "./keypad.js";
 import { scalePanelHtml, bindScalePanel } from "./scale.js";
 import { drawingsPanelHtml, bindDrawingsPanel } from "./drawings.js";
+import { reportsPanelHtml, bindReportsPanel } from "./reports.js";
 import { softDelete, listTrash, removeTrash, getTrash, askDelete, clearTrash } from "./trash.js";
 import {
   emptySurvey,
@@ -469,6 +470,7 @@ function renderHome() {
       <summary>Локальные замеры на устройстве (${list.length})</summary>
       <p class="hint">Офлайн-конструктор. Воронка статусов — во вкладке «Сделки» выше.</p>
       <button class="btn ghost block" id="btn-new" style="margin:10px 0">+ Локальный замер</button>
+      <button class="btn ghost block" id="btn-demo-morozov" style="margin:0 0 10px">Демо-история: Морозов Степан · Сергей / Чёрный Ручей</button>
       <div class="survey-list">
       ${
         list.length
@@ -534,6 +536,30 @@ function renderHome() {
     </p>
   `;
   $("#btn-new").onclick = () => newSurvey();
+  $("#btn-demo-morozov")?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/bestpaints/data/demo-survey-morozov-stepan.json?v=47", {
+        credentials: "same-origin",
+      });
+      if (!res.ok) throw new Error("Демо-файл недоступен");
+      const data = await res.json();
+      data.id = uid();
+      data.createdAt = new Date().toISOString();
+      data.updatedAt = data.createdAt;
+      if (Array.isArray(data.buildings)) {
+        for (const b of data.buildings) {
+          if (!b.id) b.id = uid();
+        }
+        data.activeBuildingId = data.buildings[0]?.id || data.activeBuildingId;
+      }
+      migrateSurvey(data);
+      store.upsert(data);
+      toast("Демо загружено: Морозов Степан · Сергей");
+      openSurvey(data.id);
+    } catch (e) {
+      toast(e.message || "Не удалось загрузить демо");
+    }
+  });
   app.querySelectorAll("[data-open]").forEach((btn) => {
     btn.onclick = () => openSurvey(btn.dataset.open);
   });
@@ -1656,6 +1682,7 @@ function renderWalls(root) {
     <details class="premium-details" open>
       <summary>Чертёж заказчика и масштаб</summary>
       ${drawingsPanelHtml(survey._drawings || {})}
+      ${reportsPanelHtml(survey._reports || {})}
       <div style="height:12px"></div>
       <div class="grid two" style="margin-top:10px">
         <div class="field">
@@ -1740,6 +1767,25 @@ function renderWalls(root) {
       refreshBadge();
       render();
       toast(`Из чертежа: ${r.walls} стен, ${r.openings} проёмов`);
+    },
+  });
+
+  bindReportsPanel(root, {
+    getSurvey: () => survey,
+    getBuilding: () => active(),
+    getState: () => survey._reports || {},
+    setState: (st) => {
+      survey._reports = st;
+      save();
+    },
+    toast,
+    onApplied: (r) => {
+      syncAreasFromLists(active());
+      save();
+      paintWallsList();
+      refreshBadge();
+      render();
+      toast(`Из отчёта: ${r.walls} стен · ${ (r.filled || []).length } блоков полей`);
     },
   });
 

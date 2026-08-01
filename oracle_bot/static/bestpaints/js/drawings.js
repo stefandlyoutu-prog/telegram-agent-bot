@@ -12,7 +12,7 @@ export function drawingsPanelHtml(state = {}) {
     <div class="drawings-card" id="drawings-card">
       <div class="scale-head">
         <strong>Чертёж заказчика → замер</strong>
-        <span class="hint">Фасад / план с размерами · AI читает длины, высоты, проёмы</span>
+        <span class="hint">Фасад / план с размерами · AI читает длины, высоты, проёмы. Бланк отчёта — блок ниже.</span>
       </div>
       <div class="field">
         <label>Фото или скан чертежа (JPG/PNG)</label>

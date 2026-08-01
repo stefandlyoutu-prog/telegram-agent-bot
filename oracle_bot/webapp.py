@@ -373,6 +373,13 @@ def _bp_api_auth(request: Request):
 import base64
 import binascii
 from oracle_bot.bestpaints_drawings import parse_drawing_bytes  # noqa: E402
+from oracle_bot.bestpaints_reports import (  # noqa: E402
+    GOLDEN_SERGEY_CHERNY_RUCHEY,
+    decode_data_url,
+    extract_plain_from_bytes,
+    normalize_report,
+    parse_report_bundle,
+)
 
 
 @app.post("/bestpaints/api/parse-drawing")
@@ -395,6 +402,69 @@ async def bp_api_parse_drawing(request: Request):
         raise HTTPException(422, str(e)) from e
     except Exception as e:
         raise HTTPException(502, f"Vision недоступен: {e}") from e
+    return result
+
+
+@app.get("/bestpaints/api/demo-report")
+async def bp_api_demo_report(request: Request):
+    """Эталон: бланк + DOCX (Сергей / СНТ Чёрный Ручей / Морозов Степан)."""
+    _bp_api_auth(request)
+    return normalize_report(GOLDEN_SERGEY_CHERNY_RUCHEY)
+
+
+@app.post("/bestpaints/api/parse-report")
+async def bp_api_parse_report(request: Request):
+    """AI: отчёт замерщика (фото бланка, DOCX, текст) → поля проекта/замера."""
+    _bp_api_auth(request)
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise HTTPException(400, "Нужен JSON")
+    hint = str(data.get("hint") or "")
+    images: list[bytes] = []
+    texts: list[str] = []
+
+    # одиночный imageDataUrl (совместимость)
+    if data.get("imageDataUrl"):
+        try:
+            images.append(decode_data_url(str(data["imageDataUrl"])))
+        except (binascii.Error, ValueError) as e:
+            raise HTTPException(400, f"Битый imageDataUrl: {e}") from e
+
+    if data.get("text"):
+        texts.append(str(data["text"]))
+
+    for f in data.get("files") or []:
+        if not isinstance(f, dict):
+            continue
+        name = str(f.get("name") or "")
+        mime = str(f.get("mime") or "")
+        if f.get("imageDataUrl"):
+            try:
+                images.append(decode_data_url(str(f["imageDataUrl"])))
+            except (binascii.Error, ValueError) as e:
+                raise HTTPException(400, f"Битый файл {name}: {e}") from e
+            continue
+        b64 = f.get("dataBase64")
+        if not b64:
+            continue
+        try:
+            raw = base64.b64decode(str(b64), validate=False)
+        except (binascii.Error, ValueError) as e:
+            raise HTTPException(400, f"Битый base64 {name}: {e}") from e
+        lower = name.lower()
+        if mime.startswith("image/") or lower.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic")):
+            images.append(raw)
+        else:
+            plain = extract_plain_from_bytes(raw, filename=name, mime=mime)
+            if plain.strip():
+                texts.append(f"=== {name} ===\n{plain}")
+
+    try:
+        result = await parse_report_bundle(images=images, texts=texts, hint=hint)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    except Exception as e:
+        raise HTTPException(502, f"Распознавание отчёта недоступно: {e}") from e
     return result
 
 

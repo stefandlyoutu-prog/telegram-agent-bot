@@ -1,4 +1,4 @@
-const CACHE = "bp-survey-v46";
+const CACHE = "bp-survey-v47";
 const ASSETS = [
   "./",
   "./index.html",
@@ -15,6 +15,8 @@ const ASSETS = [
   "./js/scale.js",
   "./js/trash.js",
   "./js/crm.js",
+  "./js/drawings.js",
+  "./js/reports.js",
   "./data/catalog.json",
   "./data/tech-matrix.js",
   "./data/extras.js",

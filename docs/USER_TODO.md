@@ -69,3 +69,39 @@
 16. Если Mac выкл неделями — при первом включении догонит birthday; VK бэклог идёт порциями.
 
 Скрипт: `scripts/promo_catchup_on_login.sh` · plist: `scripts/com.oracle.promo-catchup.plist`
+
+## Сделать руками сегодня (деньги)
+
+### OpenAI — иначе сценарии/бот тупят
+1. Открой https://platform.openai.com/account/billing
+2. Нажми **Add payment method** / **Add to credit balance**
+3. Пополни минимум **$10–20**
+4. Проверь https://platform.openai.com/usage что usage идёт
+
+### YouTube Shorts — токен сдох (invalid_grant)
+1. Открой https://console.cloud.google.com/apis/credentials
+2. Убедись что OAuth Client (Desktop) жив, YouTube Data API v3 включён
+3. В терминале на Mac:
+```bash
+cd ~/Projects/telegram-agent-bot
+source .venv/bin/activate
+# Client ID/Secret уже в .env — если нет, вставь:
+# export YOUTUBE_CLIENT_ID=...
+# export YOUTUBE_CLIENT_SECRET=...
+.venv/bin/python scripts/youtube_authorize.py
+```
+4. Войди в Google аккаунт канала → Разрешить
+5. Скопируй напечатанный `refresh_token` в `.env` как `YOUTUBE_REFRESH_TOKEN=...`
+6. Напиши агенту «ютуб токен обновил»
+
+### Instagram
+1. Новая почта + телефон (не старый moracul_taro)
+2. Создай аккаунт → прогрев 5–7 дней руками
+3. Подключи в https://www.upload-post.com/
+4. Напиши «инста готова»
+
+### SEO индексирование
+1. https://search.google.com/search-console → добавь `https://moracul.ru`
+2. Отправь sitemap: `https://moracul.ru/sitemap.xml`
+3. https://webmaster.yandex.ru/ → то же для moracul.ru
+
