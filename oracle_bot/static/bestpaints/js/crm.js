@@ -1266,8 +1266,15 @@ function assignSurveyorHtml(obj, meta, { forceOpen = false } = {}) {
 }
 
 export function detailHtml(obj, events, meta) {
-  const actions = NEXT_ACTIONS[obj.status] || [];
+  let actions = NEXT_ACTIONS[obj.status] || [];
   const step = stepCopy(obj.status);
+  // На адресе рано показывать «Заключил / Не заключил» — сперва нужно посчитать
+  // смету в конструкторе, иначе замерщик видит исход раньше самого замера.
+  const surveyStarted = Boolean(obj.survey_local_id);
+  if (obj.status === "on_site" && !surveyStarted) {
+    actions = actions.filter((a) => a.action === "open_survey");
+    step.body = "Откройте конструктор и посчитайте смету на месте. Кнопки «Заключил» / «Не заключил» появятся после этого.";
+  }
   const needsAssign = obj.status === "created" || !obj.surveyor_id;
   // Переназначение замерщика, кабинет клиента и «исправить статус/удалить» —
   // рабочие инструменты лидоруба/менеджера/админа. Замерщику эти блоки не нужны
