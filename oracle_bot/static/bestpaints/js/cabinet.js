@@ -395,7 +395,7 @@ function render() {
 
 async function boot() {
   state.token = magicTokenFromPath();
-  catalog = await fetch("./data/catalog.json").then((r) => r.json());
+  catalog = await fetch("/bestpaints/data/catalog.json").then((r) => r.json());
   try {
     await loadMe();
   } catch {

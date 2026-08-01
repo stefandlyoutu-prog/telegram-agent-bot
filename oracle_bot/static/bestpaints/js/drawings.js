@@ -184,6 +184,8 @@ export function applyDrawingParse(building, data, { replace = true, wallIdx = nu
 export function bindDrawingsPanel(root, { getBuilding, getState, setState, onApplied, toast } = {}) {
   const card = root.querySelector("#drawings-card");
   if (!card) return;
+  if (card.dataset.bound === "1") return;
+  card.dataset.bound = "1";
 
   let lastParse = getState?.()?.lastParse || null;
   if (lastParse) renderResult(root.querySelector("#dw-result"), lastParse);

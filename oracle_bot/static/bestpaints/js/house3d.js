@@ -1,5 +1,10 @@
 import { num, calcWallArea, money } from "./calc.js";
-import { TECHNOLOGIES } from "../data/tech-matrix.js";
+import {
+  TECHNOLOGIES,
+  recommendTechs,
+  getMatrixCell,
+} from "../data/tech-matrix.js";
+import { findPaintProduct, isPaintAllowedForCell } from "./calc.js";
 import { OBJECT_KINDS, ROOF_TYPES } from "../data/objects.js";
 
 /** Вытащить габариты строения из замеренных плоскостей */
@@ -160,16 +165,27 @@ export function techCompareHtml(building, catalog) {
   if (area <= 0 || !building.tech?.paintId) {
     return `<div class="callout">Выберите ЛКМ — покажем разницу технологий в рублях на вашу площадь.</div>`;
   }
-  const [brand, ...rest] = building.tech.paintId.split("::");
-  const product = catalog[brand]?.products.find((p) => p.name === rest.join("::"));
+  const product = findPaintProduct(catalog, building.tech.paintId);
   if (!product) return "";
 
-  const rows = TECHNOLOGIES.map((t) => {
-    const item = product.items.find((i) => i.tech === t.id);
-    if (!item) return null;
-    const sum = item.price * area;
-    return { t, item, sum };
-  }).filter(Boolean);
+  const name = (product.name || "").toLowerCase();
+  const paintOpt = {
+    id: building.tech.paintId,
+    name: product.displayName || product.name,
+    fullName: product.name,
+    opacity: product.coating || (name.includes("укрывн") ? "opaque" : "semi"),
+  };
+  const allowedTechs = recommendTechs(building.houseType, building.condition, building.material);
+  const rows = allowedTechs
+    .map((t) => {
+      const cell = getMatrixCell(building.houseType, building.condition, t.id);
+      if (!isPaintAllowedForCell(paintOpt, cell)) return null;
+      const item = product.items.find((i) => i.tech === t.id);
+      if (!item || !(item.price > 0)) return null;
+      const sum = item.price * area;
+      return { t, item, sum };
+    })
+    .filter(Boolean);
 
   if (rows.length < 2) return "";
 

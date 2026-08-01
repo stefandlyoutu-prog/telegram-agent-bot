@@ -620,7 +620,7 @@ function payrollHtml(data, period, roleFilter = "surveyors") {
 }
 
 
-async function loadCabinetsPanel(root, toast) {
+async function loadCabinetsPanel(root, toast, onOpenDetail) {
   const panel = root.querySelector("#crm-panel-cabinets");
   if (!panel) return;
   panel.innerHTML = `<div class="crm-panel-inner"><h3>Кабинеты клиентов</h3><p class="hint">Все кабинеты · логи изменений видны в карточке сделки</p><div id="crm-cab-list">Загрузка…</div></div>`;
@@ -664,6 +664,7 @@ async function loadCabinetsPanel(root, toast) {
             /* optional */
           }
           toast(`${detail.cabinet?.client_name || "Кабинет"} · ${logs.length} записей лога`);
+          if (oid && typeof onOpenDetail === "function") onOpenDetail(oid);
         } catch (e) {
           toast(String(e.message || e));
         }
@@ -701,7 +702,7 @@ export async function mountHomeCrm(ctx) {
   const filterBar = root.querySelector("#crm-filter-bar");
 
   const WON = new Set(["contract_signed", "closed"]);
-  const LOST = new Set(["contract_declined", "manager_assigned", "manager_accepted"]);
+  const LOST = new Set(["contract_declined"]);
   const WORK = new Set([
     "created",
     "assigned",
@@ -808,7 +809,7 @@ export async function mountHomeCrm(ctx) {
       if (tab.dataset.tab === "team") await renderTeam();
       if (tab.dataset.tab === "analytics") await renderAnalytics("30d");
       if (tab.dataset.tab === "payroll") await renderPayroll("30d");
-      if (tab.dataset.tab === "cabinets") await loadCabinetsPanel(root, toast);
+      if (tab.dataset.tab === "cabinets") await loadCabinetsPanel(root, toast, onOpenDetail);
     };
   });
 
@@ -1145,9 +1146,9 @@ export function detailHtml(obj, events, meta) {
     .map((s) => `<option value="${esc(s.id)}" ${s.id === obj.status ? "selected" : ""}>${esc(s.label)}</option>`)
     .join("");
   // На этапе «На адресе / смета» сумму не показываем — только после исхода (заключил / не заключил)
-  const showMoney = ["contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed"].includes(
-    obj.status
-  );
+  const showMoney =
+    ["contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed"].includes(obj.status) ||
+    Number(obj.amount_total) > 0;
   const assignHtml = assignSurveyorHtml(obj, meta);
   return `
   <header class="topbar">
@@ -1290,10 +1291,11 @@ export async function mountDetail(ctx) {
       }
       info.innerHTML = `<strong>${esc(cab.client_name || "Клиент")}</strong> · ${esc(cab.client_phone)}
         · статус ${esc(cab.status)} · код <b>${esc(cab.access_code || "—")}</b>
-        <div class="hint" style="margin-top:6px">Клиент входит по ссылке + телефону или телефону + коду.</div>`;
+        <div class="hint" style="margin-top:6px">Клиент входит по ссылке + телефону или телефону + коду.</div>
+        ${cabLink ? `<div style="margin-top:8px"><a href="${esc(cabLink)}" target="_blank" rel="noopener">${esc(cabLink)}</a></div>` : ""}`;
       if (copyBtn) copyBtn.hidden = false;
       if (revokeBtn) revokeBtn.hidden = cab.status !== "active";
-      cabLink = ""; // заполняется после open/refresh
+      // cabLink сохраняем из последнего open/refresh
       if (logsEl) {
         logsEl.innerHTML = (pack.logs || [])
           .slice(0, 40)

@@ -1,3 +1,4 @@
+import { getMatrixCell, recommendTechs } from "../data/tech-matrix.js";
 import { EXTRA_WORKS } from "../data/extras.js";
 import { OBJECT_KINDS, wallsForPreset } from "../data/objects.js";
 
@@ -223,6 +224,75 @@ export function listPaintOptions(catalog, scope = "facade") {
     }
   }
   return out;
+}
+
+
+
+function _isPullexColor(p) {
+  const s = `${p?.id || ""} ${p?.name || ""} ${p?.fullName || ""}`.toLowerCase();
+  return s.includes("pullex_color") || s.includes("pullex color");
+}
+
+function _isPlusLasur(p) {
+  const s = `${p?.id || ""} ${p?.name || ""} ${p?.fullName || ""}`.toLowerCase();
+  return s.includes("plus_lasur") || s.includes("plus lasur");
+}
+
+/** Допустимость ЛКМ по ячейке матрицы технологий */
+export function isPaintAllowedForCell(product, cell, coatingWant = "") {
+  if (!cell?.allowed) return false;
+  const opaque = (product.opacity || product.coating) === "opaque";
+  if (coatingWant === "opaque" && !opaque) return false;
+  if (coatingWant === "semi" && opaque) return false;
+
+  const note = String(cell.note || "").toLowerCase();
+  const op = cell.opacity || "any";
+
+  const colorOnly =
+    note.includes("только adler pullex color") && !note.includes("plus lasur");
+  const colorOrLasur =
+    note.includes("pullex color") && note.includes("plus lasur");
+
+  if (colorOnly) return _isPullexColor(product);
+  if (colorOrLasur) return _isPullexColor(product) || _isPlusLasur(product);
+
+  if (op === "opaque") return opaque;
+  if (op === "opaque_or_dark_semi") return true; // тёмные — подсказкой
+  if (op === "restricted") {
+    // не-плёнка: укрывные + полупрозрачные с оговоркой цвета
+    if (note.includes("полупрозрачные") && note.includes("нельзя")) return opaque;
+    return true;
+  }
+  return true;
+}
+
+/**
+ * Только ЛКМ, допустимые для houseType × condition × tech.
+ * coatingWant: "" | "opaque" | "semi"
+ */
+export function listAllowedPaints(
+  catalog,
+  {
+    scope = "facade",
+    houseType = "new",
+    condition = "good",
+    techId = 4,
+    coatingWant = "",
+    materialId = "",
+  } = {}
+) {
+  const all = listPaintOptions(catalog, scope);
+  if (scope === "interior") {
+    return all.filter((p) => (p.items || []).some((i) => i.tech === Number(techId) && Number(i.price) > 0));
+  }
+  const techs = recommendTechs(houseType, condition, materialId);
+  const tid = Number(techId);
+  if (!techs.some((t) => t.id === tid)) return [];
+  const cell = getMatrixCell(houseType, condition, tid);
+  return all.filter((p) => {
+    if (!isPaintAllowedForCell(p, cell, coatingWant)) return false;
+    return (p.items || []).some((i) => i.tech === tid && Number(i.price) > 0);
+  });
 }
 
 export function emptyMeasure(kind = "house") {

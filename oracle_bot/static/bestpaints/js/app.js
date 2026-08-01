@@ -26,6 +26,7 @@ import {
   emptyBuilding,
   money,
   listPaintOptions,
+  listAllowedPaints,
   buildEstimate,
   syncWarmTotal,
   syncAreasFromLists,
@@ -94,17 +95,19 @@ async function init() {
   const params = new URLSearchParams(location.search);
   const id = params.get("id");
   const crmId = params.get("crm");
-  if (crmId) {
-    crmObjectId = crmId;
-    view = "crm";
-  } else if (id) {
+  if (crmId) crmObjectId = crmId;
+  if (id) {
     const s = store.get(id);
     if (s) {
       survey = migrateSurvey(s);
       view = "wizard";
       const stepParam = Number(params.get("step"));
       step = Number.isFinite(stepParam) ? Math.max(0, Math.min(STEPS.length - 1, stepParam)) : 0;
+    } else if (crmId) {
+      view = "crm";
     }
+  } else if (crmId) {
+    view = "crm";
   }
   // Хуки для обучающего ролика / автотестов
   window.__BP__ = {
@@ -416,6 +419,11 @@ function renderCrm() {
       let sid = obj.survey_local_id;
       if (sid && store.get(sid)) {
         survey = migrateSurvey(store.get(sid));
+        if (typeof survey.notes !== "object" || survey.notes === null) {
+          survey.notes = { text: String(survey.notes || "") };
+        }
+        survey.notes.crmId = obj.id;
+        store.upsert(survey);
         startAtBuilding();
         return;
       }
@@ -425,12 +433,12 @@ function renderCrm() {
       s.client.name = obj.client_name || "";
       s.client.phone = obj.client_phone || "";
       s.client.address = obj.address || "";
-      s.notes = s.notes || {};
-      if (typeof s.notes === "object") {
-        s.notes.qualification = obj.qualification || "";
-        s.notes.crmId = obj.id;
-        s.notes.measureDate = obj.measure_date || "";
+      if (typeof s.notes !== "object" || s.notes === null) {
+        s.notes = { text: String(s.notes || "") };
       }
+      s.notes.qualification = obj.qualification || "";
+      s.notes.crmId = obj.id;
+      s.notes.measureDate = obj.measure_date || "";
       if (s.contract) s.contract.objectName = obj.title || "";
       store.upsert(s);
       survey = s;
@@ -2479,8 +2487,25 @@ function renderTech(root) {
   const facadeArea = b.zones?.facade ? calcWallArea(b.measure, "facade").total : 0;
   const interiorArea = b.zones?.interior ? calcWallArea(b.measure, "interior").total : 0;
   const rec = recommendTechs(b.houseType, b.condition, b.material);
-  const paintsF = listPaintOptions(catalog, "facade");
-  const paintsI = listPaintOptions(catalog, "interior");
+  if (!rec.some((t) => t.id === Number(b.tech.techId))) {
+    b.tech.techId = defaultTechId(b.houseType, b.condition, b.material) || 4;
+  }
+  const coatWant = b.tech.coatingWant || "";
+  let paintsF = listAllowedPaints(catalog, {
+    scope: "facade",
+    houseType: b.houseType,
+    condition: b.condition,
+    techId: b.tech.techId,
+    coatingWant: coatWant,
+    materialId: b.material,
+  });
+  if (b.tech.paintId && !paintsF.some((p) => p.id === b.tech.paintId)) {
+    b.tech.paintId = paintsF[0]?.id || "";
+  }
+  const paintsI = listAllowedPaints(catalog, {
+    scope: "interior",
+    techId: Number(b.tech.techIdInterior) || b.tech.techId,
+  });
 
   const fold = (title, hint, body, open = false) => `
     <details class="el-card" ${open ? "open" : ""}>
@@ -2493,7 +2518,7 @@ function renderTech(root) {
     <p class="section-sub">
       ${b.zones?.facade ? `Стены снаружи <b>${facadeArea.toFixed(1)} м²</b>` : "Снаружи выкл."}
       ${b.zones?.interior ? ` · внутри <b>${interiorArea.toFixed(1)} м²</b>` : ""}
-      · подшива/лобовая/столбы — шаг «Допы» (как в смете).
+      · показываем только то, что можно по таблице технологий.
     </p>
     ${tipBlock("tech")}
 
@@ -2549,20 +2574,20 @@ function renderTech(root) {
             "Стены снаружи · технология и ЛКМ",
             `${facadeArea.toFixed(0)} м²`,
             `
+      <p class="hint">Только допустимые технологии (${rec.length} из 5) · по таблице.</p>
       <div class="choice-grid">
-        ${TECHNOLOGIES.map((t) => {
-          const allowed = rec.some((r) => r.id === t.id);
-          const note = rec.find((r) => r.id === t.id)?.note || "Нельзя";
-          return `
-          <button type="button" class="choice ${b.tech.techId === t.id ? "selected" : ""} ${allowed ? "" : "bad"}"
-            data-tech="${t.id}" ${allowed ? "" : "disabled"}>
+        ${rec
+          .map(
+            (t) => `
+          <button type="button" class="choice ${b.tech.techId === t.id ? "selected" : ""}" data-tech="${t.id}">
             <strong>${t.title}${t.isBase ? " ★" : ""}</strong>
             <span>${t.desc}</span>
-            <span class="badge ${allowed ? "" : "danger"}">${allowed ? note : "Запрещено"}</span>
-          </button>`;
-        }).join("")}
+            <span class="badge">${escapeHtml(t.note || "Можно")}</span>
+          </button>`
+          )
+          .join("")}
       </div>
-      <label class="hint" style="display:block;margin:12px 0 8px">ЛКМ × ${facadeArea.toFixed(0)} м²</label>
+      <label class="hint" style="display:block;margin:12px 0 8px">ЛКМ × ${facadeArea.toFixed(0)} м² · только допустимые · ${paintsF.length}</label>
       <div class="paint-grid">
         ${paintsF
           .map((p) => {
@@ -3091,7 +3116,7 @@ function renderEstimate(root) {
   };
   root.querySelector("[data-path='estimate.discountPct']")?.addEventListener("change", () => render());
   $("#btn-cabinet", root)?.addEventListener("click", async () => {
-    const crmId = survey?.notes?.crmId || new URLSearchParams(location.search).get("crm");
+    const crmId = survey?.notes?.crmId || crmObjectId || new URLSearchParams(location.search).get("crm");
     if (!crmId) {
       toast("Сначала откройте смету из сделки CRM — нужен телефон клиента в сделке");
       return;

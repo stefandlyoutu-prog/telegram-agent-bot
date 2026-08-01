@@ -335,13 +335,7 @@ async def bestpaints_logout():
 @app.get("/bestpaints")
 @app.get("/bestpaints/")
 async def bestpaints_index(request: Request):
-    public_ok = (
-        file_path in ("cabinet.html", "cabinet", "login.html")
-        or file_path.startswith("js/")
-        or file_path.startswith("css/")
-        or file_path.startswith("data/")
-    )
-    if not is_authenticated(request) and not public_ok:
+    if not is_authenticated(request):
         return RedirectResponse("/bestpaints/login", status_code=303)
     return FileResponse(BP_STATIC / "index.html")
 
@@ -725,7 +719,15 @@ async def bestpaints_files(file_path: str, request: Request):
         raise HTTPException(404, "Not found")
     if file_path in ("login", "login.html"):
         return RedirectResponse("/bestpaints/login", status_code=303)
-    if not is_authenticated(request):
+    public_ok = (
+        file_path in ("cabinet.html", "cabinet", "sw.js", "manifest.webmanifest", "manifest.json")
+        or file_path.startswith("js/")
+        or file_path.startswith("css/")
+        or file_path.startswith("data/")
+        or file_path.startswith("assets/")
+        or file_path.startswith("icons/")
+    )
+    if not is_authenticated(request) and not public_ok:
         return RedirectResponse("/bestpaints/login", status_code=303)
     # default document
     if not file_path or file_path.endswith("/"):
