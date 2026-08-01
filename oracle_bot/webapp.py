@@ -507,12 +507,17 @@ async def bp_api_get_object(oid: str, request: Request):
 @app.post("/bestpaints/api/objects/{oid}/action")
 async def bp_api_action(oid: str, request: Request):
     _bp_api_auth(request)
-    data = await request.json()
+    try:
+        data = await request.json()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, f"invalid json: {e}") from e
     action = str((data or {}).get("action") or "")
     try:
         obj = bp_crm.transition(oid, action, data if isinstance(data, dict) else {})
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"action failed: {e}") from e
     return {"object": obj, "events": bp_crm.list_events(oid)}
 
 

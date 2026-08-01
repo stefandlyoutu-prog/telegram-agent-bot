@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import time
@@ -11,8 +12,10 @@ import urllib.request
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
+
+log = logging.getLogger(__name__)
 
 TZ = ZoneInfo(os.getenv("BESTPAINTS_TZ", "Europe/Moscow"))
 
@@ -618,7 +621,7 @@ def _send_telegram(chat_id: str, text: str) -> str:
         }
     ).encode()
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, data=body, method="POST"), timeout=20) as r:
+        with urllib.request.urlopen(urllib.request.Request(url, data=body, method="POST"), timeout=8) as r:
             raw = r.read().decode("utf-8", errors="replace")
         mid = ""
         try:
@@ -1120,14 +1123,27 @@ def _broadcast_status(obj: dict[str, Any], label: str) -> list[str]:
         address=obj.get("address") or "",
         link=link,
     )
-    return notify_tagged_stakeholders(
-        msg,
-        [
-            _person_from_obj(obj, "surveyor"),
-            _person_from_obj(obj, "lidarub"),
-            _person_from_obj(obj, "manager"),
-        ],
-    )
+    try:
+        return notify_tagged_stakeholders(
+            msg,
+            [
+                _person_from_obj(obj, "surveyor"),
+                _person_from_obj(obj, "lidarub"),
+                _person_from_obj(obj, "manager"),
+            ],
+        )
+    except Exception as e:  # noqa: BLE001 — уведомления не должны ломать смену статуса
+        log.warning("bestpaints broadcast failed for %s: %s", obj.get("id"), e)
+        return [f"notify fail: {e}"]
+
+
+def _run_side_effects(effects: list[Callable[[], Any]]) -> None:
+    """SMS/TG после успешного UPDATE — иначе деплой/таймаут Telegram даёт «Ошибка API» без смены статуса."""
+    for fn in effects:
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001
+            log.warning("bestpaints side effect failed: %s", e)
 
 
 def soft_delete(oid: str) -> dict[str, Any]:
@@ -1168,24 +1184,26 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
     now = _now()
     updates: dict[str, Any] = {"updated_at": now}
     message = action
+    side_effects: list[Callable[[], Any]] = []
 
     if action == "accept":
         updates["status"] = "accepted"
         updates["accepted_at"] = now
         message = f"{obj['surveyor_name'] or 'Замерщик'} взял в работу"
-        _broadcast_status({**obj, **updates, "id": oid, "title": obj["title"], "address": obj["address"]}, "Замерщик взял в работу")
+        snap = {**obj, **updates, "id": oid, "title": obj["title"], "address": obj["address"]}
+        side_effects.append(lambda s=snap: _broadcast_status(s, "Замерщик взял в работу"))
 
     elif action == "confirm_visit":
         updates["status"] = "visit_confirmed"
         updates["visit_confirmed_at"] = now
         message = "Выезд подтверждён"
-        _broadcast_status(obj, "Выезд подтверждён")
+        side_effects.append(lambda: _broadcast_status(obj, "Выезд подтверждён"))
 
     elif action in ("arrive", "start_measure"):
         updates["status"] = "on_site"
         updates["on_site_at"] = now
         message = "На адресе у клиента — начинаю замер"
-        _broadcast_status(obj, "На адресе · замер начат")
+        side_effects.append(lambda: _broadcast_status(obj, "На адресе · замер начат"))
 
     elif action == "estimate_done":
         # совместимость: оставляем на объекте, статус не обязателен
@@ -1221,11 +1239,15 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
             signed_msg = _msg_lines(signed_msg, "Место: офис (мотивация 1%)")
         surveyor_p = _person_from_obj(obj, "surveyor")
         mention = _mention_of(surveyor_p)
-        notify_all(
-            _msg_lines(mention or f"→ {obj.get('surveyor_name') or 'замерщик'}", signed_msg),
-            telegram_chat=chat,
-        )
-        _broadcast_status({**obj, **updates, "id": oid}, "Договор заключён" + (" · офис" if place == "office" else " · на адресе"))
+        signed_body = _msg_lines(mention or f"→ {obj.get('surveyor_name') or 'замерщик'}", signed_msg)
+        place_label = " · офис" if place == "office" else " · на адресе"
+        snap = {**obj, **updates, "id": oid}
+
+        def _notify_signed(body=signed_body, tg=chat, s=snap, pl=place_label) -> None:
+            notify_all(body, telegram_chat=tg)
+            _broadcast_status(s, "Договор заключён" + pl)
+
+        side_effects.append(_notify_signed)
 
     elif action in ("decline_contract", "decline_on_site"):
         updates["status"] = "contract_declined"
@@ -1235,7 +1257,7 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         updates["checklist_json"] = json.dumps({i["id"]: False for i in CHECKLIST_DECLINED}, ensure_ascii=False)
         _apply_money(updates, obj, payload)
         message = "Договор не заключён на адресе"
-        _broadcast_status(obj, "Не заключён — уйдёт менеджеру")
+        side_effects.append(lambda: _broadcast_status(obj, "Не заключён — уйдёт менеджеру"))
 
     elif action == "assign_manager":
         mid = (payload.get("manager_id") or "").strip()
@@ -1251,18 +1273,21 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         updates["manager_name"] = mgr.get("name") or ""
         updates["manager_phone"] = mgr.get("phone") or ""
         message = f"Назначен менеджер {updates['manager_name']} ({reason}) — защита ТЗ"
-        notify_person(
-            format_manager_take(
-                title=obj.get("title") or "",
-                address=obj.get("address") or "",
-                link=f"https://moracul.ru/bestpaints/?crm={oid}",
-            ),
-            {
-                "name": updates["manager_name"],
-                "phone": updates["manager_phone"],
-                "tg_username": (mgr or {}).get("tg_username") or "",
-                "tg_id": (mgr or {}).get("tg_id") or "",
-            },
+        mgr_notify = {
+            "name": updates["manager_name"],
+            "phone": updates["manager_phone"],
+            "tg_username": (mgr or {}).get("tg_username") or "",
+            "tg_id": (mgr or {}).get("tg_id") or "",
+        }
+        side_effects.append(
+            lambda m=mgr_notify: notify_person(
+                format_manager_take(
+                    title=obj.get("title") or "",
+                    address=obj.get("address") or "",
+                    link=f"https://moracul.ru/bestpaints/?crm={oid}",
+                ),
+                m,
+            )
         )
 
     elif action == "manager_accept":
@@ -1281,7 +1306,8 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         updates["status"] = target
         updates["deleted_at"] = None
         message = f"Вернули в работу → {STATUS_MAP[target]['label']}"
-        _broadcast_status(obj, f"Снова в работе: {STATUS_MAP[target]['label']}")
+        label = f"Снова в работе: {STATUS_MAP[target]['label']}"
+        side_effects.append(lambda lab=label: _broadcast_status(obj, lab))
 
     elif action == "set_status":
         target = (payload.get("status") or "").strip()
@@ -1301,7 +1327,8 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         if target in WON_STATUSES and not obj.get("contract_at"):
             updates["contract_at"] = now
         message = f"Статус вручную: {STATUS_MAP[target]['label']}"
-        _broadcast_status(obj, STATUS_MAP[target]["label"])
+        label = STATUS_MAP[target]["label"]
+        side_effects.append(lambda lab=label: _broadcast_status(obj, lab))
 
     elif action == "delete":
         return soft_delete(oid)
@@ -1359,9 +1386,11 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         updates["assigned_at"] = now
         updates["escalated_at"] = None
         message = f"Переназначен замерщик {person['name']} ({reason})"
-        notify_person(
-            format_assigned(title=obj.get("title") or "", link=f"https://moracul.ru/bestpaints/?crm={oid}"),
-            person,
+        side_effects.append(
+            lambda p=person: notify_person(
+                format_assigned(title=obj.get("title") or "", link=f"https://moracul.ru/bestpaints/?crm={oid}"),
+                p,
+            )
         )
 
     else:
@@ -1378,13 +1407,15 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
                 updates["manager_name"] = mgr["name"]
                 updates["manager_phone"] = mgr["phone"]
                 message += f" → менеджер {mgr['name']}"
-                notify_person(
-                    format_manager_take(
-                        title=obj.get("title") or "",
-                        address=obj.get("address") or "",
-                        link=f"https://moracul.ru/bestpaints/?crm={oid}",
-                    ),
-                    mgr,
+                side_effects.append(
+                    lambda m=mgr: notify_person(
+                        format_manager_take(
+                            title=obj.get("title") or "",
+                            address=obj.get("address") or "",
+                            link=f"https://moracul.ru/bestpaints/?crm={oid}",
+                        ),
+                        m,
+                    )
                 )
 
     sets = ", ".join(f"{k}=?" for k in updates)
@@ -1392,6 +1423,7 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
     with connect() as conn:
         conn.execute(f"UPDATE objects SET {sets} WHERE id=?", vals)
     log_event(oid, action, message)
+    _run_side_effects(side_effects)
     out = get_object(oid)
     assert out
     return out

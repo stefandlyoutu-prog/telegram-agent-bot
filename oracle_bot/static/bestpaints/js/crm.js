@@ -30,11 +30,16 @@ function monthPeriodOptions() {
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(`${API}${path}`, {
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
-    ...opts,
-  });
+  let res;
+  try {
+    res = await fetch(`${API}${path}`, {
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      ...opts,
+    });
+  } catch (e) {
+    throw new Error(`Сеть: ${e && e.message ? e.message : "нет связи с сервером"}`);
+  }
   if (res.status === 401) {
     location.href = "/bestpaints/login";
     throw new Error("login");
@@ -47,8 +52,13 @@ async function api(path, opts = {}) {
     data = { raw: text };
   }
   if (!res.ok) {
-    const msg = (data && (data.detail || data.message)) || res.statusText || "Ошибка API";
-    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    let detail = data && (data.detail || data.message);
+    if (typeof detail !== "string") {
+      detail = detail != null ? JSON.stringify(detail) : "";
+    }
+    const raw = data && typeof data.raw === "string" ? data.raw.replace(/\s+/g, " ").trim().slice(0, 120) : "";
+    const hint = detail || res.statusText || raw || "ошибка сервера";
+    throw new Error(`HTTP ${res.status}: ${hint}`);
   }
   return data;
 }
