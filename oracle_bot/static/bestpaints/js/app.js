@@ -48,6 +48,8 @@ import {
 const WALL_ATTENTION = ATTENTION_ELEMENTS.filter((el) =>
   ["lights", "antennas", "ac", "chimneys", "wiring", "garlands", "decor", "cable_duct"].includes(el.id)
 );
+/** Остальные помехи — не привязаны к конкретной стороне, считаются один раз на объект */
+const MANUAL_ATTENTION = ATTENTION_ELEMENTS.filter((el) => !WALL_ATTENTION.includes(el));
 import * as store from "./storage.js";
 import {
   fetchMeta,
@@ -2807,11 +2809,21 @@ function renderSite(root) {
     };
   }
   const c = survey.contract;
+  const autoAttention = WALL_ATTENTION.filter((el) => num(survey.attention[el.id]) > 0);
+  const autoAttentionHtml = autoAttention.length
+    ? `<div class="counter-row" style="flex-wrap:wrap"><div>${autoAttention
+        .map((el) => `<strong>${el.label}:</strong> ${num(survey.attention[el.id])} ${el.unit}`)
+        .join(" &nbsp;·&nbsp; ")}</div></div>
+       <p class="hint" style="margin:8px 0 0">Посчитано по счётчикам «Помехи на стороне» в замере стен. Менять не нужно — если что-то не так, поправьте там.</p>`
+    : `<p class="hint" style="margin:0">Появится здесь само, когда заполните «Помехи на стороне» в замере стен.</p>`;
   root.innerHTML = `
-    <h2 class="section-title">Участок и быт бригады</h2>
-    <p class="section-sub">Доступ, электричество, быт — влияет на смету и выезд бригады.</p>
+    <h2 class="section-title">Участок</h2>
+    <p class="section-sub">Ниже три разных блока — быт бригады, бумаги для договора и то, что уйдёт в смету доп.услугами. Каждый заполняется отдельно, без повторов.</p>
     ${tipBlock("site")}
 
+    <details class="premium-details" open>
+      <summary><strong>Быт и доступ бригады</strong> <span class="hint">влияет на смету и выезд</span></summary>
+      <div style="margin-top:10px">
     <h3 class="subhead">Доступ и высота</h3>
     <div class="choice-grid compact">
       ${SCAFFOLD_OPTIONS.map(
@@ -2898,8 +2910,12 @@ function renderSite(root) {
       </div>
       <div class="field"><label>Магазин</label><input data-path="site.shop" value="${esc(s.shop)}"></div>
     </div>
+      </div>
+    </details>
 
-    <h3 class="subhead">Данные для договора</h3>
+    <details class="premium-details" open>
+      <summary><strong>Данные для договора</strong> <span class="hint">бумага на объекте, к быту не относится</span></summary>
+      <div style="margin-top:10px">
     <p class="hint">Как в конструкторе smeta-bestpaints — чтобы на объекте сразу закрыть бумагу.</p>
     <div class="grid two">
       <div class="field"><label>Название объекта / сметы</label><input data-path="contract.objectName" value="${esc(c.objectName)}" placeholder="Как в названии проекта"></div>
@@ -2915,10 +2931,20 @@ function renderSite(root) {
       <div class="field"><label>Код подразделения</label><input data-path="contract.passportCode" value="${esc(c.passportCode)}"></div>
       <div class="field"><label>Адрес регистрации</label><input data-path="contract.registration" value="${esc(c.registration)}"></div>
     </div>
+      </div>
+    </details>
 
-    <h3 class="subhead">Что мешает на фасадах / внутри</h3>
+    <details class="premium-details" open>
+      <summary><strong>Что войдёт в смету доп.услугами</strong> <span class="hint">помехи на фасаде/внутри + доп.работы</span></summary>
+      <div style="margin-top:10px">
+    <h3 class="subhead">Уже учтено по замеру стен</h3>
     <div class="card flat">
-      ${ATTENTION_ELEMENTS.map((el) => {
+      ${autoAttentionHtml}
+    </div>
+
+    <h3 class="subhead">Добавить то, что по стенам не считали</h3>
+    <div class="card flat">
+      ${MANUAL_ATTENTION.map((el) => {
         const v = survey.attention[el.id] || 0;
         return `
         <div class="counter-row">
@@ -2954,7 +2980,10 @@ function renderSite(root) {
         </div>
       </details>`
     ).join("")}
-    <div class="field"><label>Заметки по объекту</label><textarea data-path="site.notes">${esc(s.notes)}</textarea></div>
+      </div>
+    </details>
+
+    <div class="field" style="margin-top:14px"><label>Заметки по объекту</label><textarea data-path="site.notes">${esc(s.notes)}</textarea></div>
   `;
   bindFields(root);
   root.querySelectorAll("[data-att-inc]").forEach((btn) => {
