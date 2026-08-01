@@ -89,6 +89,7 @@ const app = $("#app");
 let catalog = null;
 let view = "home";
 let step = 0;
+let lastScrolledStep = null;
 let survey = null;
 let crmObjectId = null;
 let crmMetaCache = null;
@@ -136,16 +137,20 @@ function goHome() {
   survey = null;
   crmObjectId = null;
   crmMetaCache = null;
+  lastScrolledStep = null;
   history.replaceState({}, "", location.pathname);
   render();
+  window.scrollTo(0, 0);
 }
 
 function openCrm(oid) {
   crmObjectId = oid;
   view = "crm";
   survey = null;
+  lastScrolledStep = null;
   history.replaceState({}, "", `?crm=${encodeURIComponent(oid)}`);
   render();
+  window.scrollTo(0, 0);
 }
 
 async function getCrmMeta() {
@@ -159,6 +164,7 @@ function openSurvey(id) {
   survey = migrateSurvey(store.get(id) || emptySurvey());
   view = "wizard";
   step = 0;
+  lastScrolledStep = null;
   history.replaceState({}, "", `?id=${survey.id}`);
   store.upsert(survey);
   render();
@@ -415,6 +421,7 @@ function renderCrm() {
         survey = migrateSurvey(store.get(survey.id) || survey);
         view = "wizard";
         step = 1; // Строение
+        lastScrolledStep = null;
         history.replaceState({}, "", `?id=${survey.id}&step=1&crm=${encodeURIComponent(obj.id)}`);
         store.upsert(survey);
         render();
@@ -738,6 +745,8 @@ function renderWizard() {
   const stepMeta = STEPS[step];
   const stepId = stepMeta.id;
   const ready = readiness(survey);
+  const stepChanged = step !== lastScrolledStep;
+  lastScrolledStep = step;
 
   app.innerHTML = `
     <header class="topbar">
@@ -847,6 +856,10 @@ function renderWizard() {
   const renderStep = map[stepId] || renderWalls;
   renderStep(body);
   bindKeypad(body);
+  if (stepChanged) {
+    window.scrollTo(0, 0);
+    document.scrollingElement && (document.scrollingElement.scrollTop = 0);
+  }
 }
 
 function nextLabel(stepId) {
