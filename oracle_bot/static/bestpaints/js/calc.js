@@ -808,14 +808,12 @@ export function buildEstimate(state, catalog) {
   for (const [id, qtyRaw] of Object.entries(state.extras?.qty || {})) {
     const qty = num(qtyRaw);
     if (qty <= 0) continue;
+    // Старые сохранённые сметы могли ссылаться на позиции (торцы/наличники/тёплый
+    // шов/водосток/отливы), которые теперь считаются автоматически из замера
+    // стен и убраны из каталога — found будет undefined, и такая qty просто
+    // игнорируется, не задваивая уже посчитанную автоматическую строку.
     const found = EXTRA_WORKS.flatMap((g) => g.items).find((i) => i.id === id);
     if (!found) continue;
-    if (
-      ["ends_seal", "warm_full", "trim_full", "gutter"].includes(id) &&
-      lines.some((l) => l.id.startsWith("ends_") || l.id.startsWith("warm_") || l.id.startsWith("trim_") || l.id.startsWith("gutter_"))
-    ) {
-      continue;
-    }
     lines.push({
       id: `extra_${id}`,
       name: found.name,
