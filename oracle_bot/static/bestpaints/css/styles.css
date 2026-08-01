@@ -830,6 +830,59 @@ h3 .pct-pill { margin-left: 8px; vertical-align: middle; }
 }
 @media (min-width: 640px) { .share-row { grid-template-columns: repeat(3, 1fr); } }
 
+/* Итог сметы — крупный акцент вместо строчки в подвале таблицы */
+.price-hero {
+  margin: 14px 0; padding: 20px 22px; border-radius: 18px;
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(196,163,90,0.22), transparent 60%),
+    linear-gradient(160deg, rgba(38,49,43,0.95), rgba(30,40,35,0.92));
+  border: 1px solid rgba(196,163,90,0.4);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+}
+.price-hero .label {
+  font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 6px;
+}
+.price-hero .amount {
+  font-family: var(--display); font-size: 2.15rem; font-weight: 600; line-height: 1;
+  background: linear-gradient(135deg, #f0dfa8, #c4a35a);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.price-hero .breakdown { display: flex; gap: 16px; flex-wrap: wrap; }
+.price-hero .breakdown div { font-size: 0.78rem; color: var(--muted); text-align: right; }
+.price-hero .breakdown b { display: block; color: var(--text); font-size: 0.95rem; font-weight: 700; }
+
+/* Таблица работ — карточкой, с зеброй и мягким хайлайтом строк */
+.table-card {
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--bg2);
+}
+.table-card .table { font-size: 0.87rem; margin: 0; }
+.table-card .table th {
+  background: rgba(255,255,255,0.03); padding: 10px 12px; border-bottom: 1px solid var(--line);
+}
+.table-card .table td { padding: 11px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.table-card .table tbody tr:last-child td { border-bottom: none; }
+.table-card .table tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+.table-card .table tbody tr:hover { background: rgba(196,163,90,0.06); }
+
+/* Единая главная CTA + ряд второстепенных действий */
+.cta-primary {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  width: 100%; padding: 16px 18px; margin: 16px 0 8px; border: none; border-radius: 16px; cursor: pointer;
+  background: linear-gradient(135deg, #ecd8a0, #b8903f);
+  color: #1a1408; font-weight: 800; font-size: 1rem; font-family: inherit;
+  box-shadow: 0 14px 32px rgba(196,163,90,0.3);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.cta-primary:hover { filter: brightness(1.03); }
+.cta-primary:active { transform: scale(0.99); }
+.cta-primary .cta-sub { display: block; font-weight: 600; font-size: 0.72rem; opacity: 0.75; margin-top: 2px; }
+.share-secondary {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 2px;
+}
+@media (min-width: 640px) { .share-secondary { grid-template-columns: repeat(4, 1fr); } }
+.share-secondary .btn { font-size: 0.8rem; padding: 10px 10px; }
+
 /* Toast — above fixed nav-bar so validation is visible */
 .toast {
   position: fixed; left: 50%; bottom: calc(78px + var(--safe-b)); transform: translateX(-50%) translateY(20px);

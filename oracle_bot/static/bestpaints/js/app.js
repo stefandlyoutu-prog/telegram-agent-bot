@@ -3247,33 +3247,41 @@ function renderEstimate(root) {
       <input data-path="estimate.discountPct" value="${esc(survey.estimate.discountPct)}" inputmode="decimal">
     </div>
 
-    <div style="overflow-x:auto">
-      <table class="table">
-        <thead><tr><th>Работа</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead>
-        <tbody>
-          ${
-            est.lines.length
-              ? est.lines
-                  .map(
-                    (l) => `<tr>
-              <td>${escapeHtml(l.name)}${l.guarantee ? `<div class="hint">гарантия ${l.guarantee} лет</div>` : ""}</td>
-              <td>${l.qty} ${l.unit}</td>
-              <td>${money(l.price)}</td>
-              <td class="sum">${money(l.sum)}</td>
-            </tr>`
-                  )
-                  .join("")
-              : `<tr><td colspan="4">Нет строк — проверьте замер и выбор ЛКМ по строениям</td></tr>`
-          }
-        </tbody>
-      </table>
+    <h3 class="subhead">Работы и материалы</h3>
+    <div class="table-card">
+      <div style="overflow-x:auto">
+        <table class="table">
+          <thead><tr><th>Работа</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead>
+          <tbody>
+            ${
+              est.lines.length
+                ? est.lines
+                    .map(
+                      (l) => `<tr>
+                <td>${escapeHtml(l.name)}${l.guarantee ? `<div class="hint">гарантия ${l.guarantee} лет</div>` : ""}</td>
+                <td>${l.qty} ${l.unit}</td>
+                <td>${money(l.price)}</td>
+                <td class="sum">${money(l.sum)}</td>
+              </tr>`
+                    )
+                    .join("")
+                : `<tr><td colspan="4">Нет строк — проверьте замер и выбор ЛКМ по строениям</td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
     </div>
 
-    <div class="totals">
-      <div class="row"><span>Итого</span><span>${money(est.subtotal)}</span></div>
-      <div class="row"><span>Скидка ${est.discountPct}%</span><span>− ${money(est.subtotal - est.afterDiscount)}</span></div>
-      <div class="row"><span>НДС 5%</span><span>${money(est.vat)}</span></div>
-      <div class="row total"><span>К оплате</span><span>${money(est.total)}</span></div>
+    <div class="price-hero">
+      <div>
+        <p class="label">К оплате, с НДС 5%</p>
+        <div class="amount">${money(est.total)}</div>
+      </div>
+      <div class="breakdown">
+        <div>Итого<b>${money(est.subtotal)}</b></div>
+        ${Number(est.discountPct) > 0 ? `<div>Скидка ${est.discountPct}%<b>− ${money(est.subtotal - est.afterDiscount)}</b></div>` : ""}
+        <div>НДС 5%<b>${money(est.vat)}</b></div>
+      </div>
     </div>
 
     <h3 class="subhead">Свои позиции</h3>
@@ -3295,19 +3303,20 @@ function renderEstimate(root) {
       финал ${money((est.total * num(survey.estimate.payments?.final, 10)) / 100)}
     </div>
 
-    <div class="callout ok no-print">
-      <b>PDF-презентация:</b> смета + почему выбран ЛКМ/технология + разложение цены по сторонам + гарантия и «вау»-визуализация дома.
-    </div>
-    <div class="share-row no-print">
-      <button class="btn primary" id="btn-cabinet">Кабинет клиенту ★</button>
-      <button class="btn primary" id="btn-pdf">PDF-презентация для клиента ★</button>
+    <h3 class="subhead">Клиенту</h3>
+    <button type="button" class="cta-primary no-print" id="btn-pdf">
+      Собрать презентацию для клиента
+      <span class="cta-sub">Смета · почему выбран ЛКМ и технология · цена по сторонам · гарантия</span>
+    </button>
+    <div class="share-secondary no-print">
+      <button class="btn" id="btn-cabinet">Кабинет клиенту</button>
       <button class="btn" id="btn-tg">Telegram</button>
       <button class="btn" id="btn-wa">WhatsApp</button>
       <button class="btn" id="btn-copy">Копировать</button>
       <button class="btn ghost" id="btn-native">Поделиться…</button>
-      <button class="btn" id="btn-export">JSON</button>
+      <button class="btn ghost" id="btn-export">Экспорт JSON</button>
     </div>
-    <p class="footer-note no-print">PDF → «Печать» → «Сохранить как PDF». Шаринг — текст сметы клиенту или в офис.</p>
+    <p class="footer-note no-print">PDF → «Печать» → «Сохранить как PDF». Кабинет — клиент видит статус и документы онлайн.</p>
   `;
 
   bindFields(root);

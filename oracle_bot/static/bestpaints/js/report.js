@@ -42,6 +42,18 @@ export function openClientReport(survey, catalog) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+function logoMarkHtml() {
+  return `<div class="logo-row">
+    <svg class="logo-mark" width="38" height="38" viewBox="0 0 38 38">
+      <circle cx="19" cy="19" r="17" fill="#121816"/>
+      <circle cx="19" cy="19" r="17" fill="none" stroke="#9a7b32" stroke-width="1.4"/>
+      <circle cx="19" cy="19" r="13" fill="none" stroke="#9a7b32" stroke-width=".6" opacity=".5"/>
+      <text x="19" y="24" text-anchor="middle" font-family="Unbounded,sans-serif" font-size="12" font-weight="700" fill="#e6cf8a">BP</text>
+    </svg>
+    <div class="logo-word">BESTPAINTS<span>покраска деревянных домов</span></div>
+  </div>`;
+}
+
 function buildReportHtml(survey, catalog) {
   const est = buildEstimate(survey, catalog);
   const areas = est.areas;
@@ -84,9 +96,12 @@ function buildReportHtml(survey, catalog) {
   }
   @keyframes rise { from { opacity:0; transform: translateY(8px);} to { opacity:1; transform:none;} }
   .brand { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:20px; }
-  .brand h1 { font-family:Unbounded,sans-serif; font-size:1.35rem; margin:0 0 6px; }
+  .brand h1 { font-family:Unbounded,sans-serif; font-size:1.4rem; margin:0 0 6px; letter-spacing:-.01em; }
   .brand p { margin:0; color:var(--muted); font-size:.9rem; }
-  .logo { font-family:Unbounded,sans-serif; font-weight:600; color:var(--gold); font-size:1rem; letter-spacing:.04em; }
+  .logo-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .logo-mark { flex-shrink:0; }
+  .logo-word { font-family:Unbounded,sans-serif; font-weight:700; color:var(--deep); font-size:1.05rem; letter-spacing:.06em; line-height:1; }
+  .logo-word span { display:block; font-family:Manrope,sans-serif; font-weight:600; color:var(--gold); font-size:.62rem; letter-spacing:.14em; margin-top:2px; }
   .meta { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:16px 0; font-size:.92rem; }
   .meta div { background:var(--bg); padding:10px 12px; border-radius:8px; }
   .meta span { display:block; color:var(--muted); font-size:.72rem; margin-bottom:2px; }
@@ -99,16 +114,29 @@ function buildReportHtml(survey, catalog) {
   .kpi { background:var(--bg); border-radius:10px; padding:12px; }
   .kpi b { display:block; font-size:1.25rem; margin-top:4px; font-family:Unbounded,sans-serif; }
   .kpi span { color:var(--muted); font-size:.75rem; }
-  h2 { font-family:Unbounded,sans-serif; font-size:1.05rem; margin:22px 0 10px; }
+  h2 { font-family:Unbounded,sans-serif; font-size:1.1rem; margin:24px 0 12px; letter-spacing:-.01em; }
+  h2::before { content:""; display:inline-block; width:16px; height:2px; background:var(--gold); margin-right:8px; vertical-align:middle; }
   h3 { font-family:Unbounded,sans-serif; font-size:.92rem; margin:16px 0 8px; color:var(--gold); }
   table { width:100%; border-collapse:collapse; font-size:.86rem; }
-  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { color:var(--muted); font-size:.72rem; font-weight:700; }
+  .table-wrap { border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .table-wrap table { margin:0; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; background:#fbfaf6; }
+  tbody tr:last-child td { border-bottom:none; }
+  tbody tr:nth-child(even) { background:#fbfaf7; }
   .sum { font-weight:800; white-space:nowrap; }
   .totals { margin-top:12px; }
   .totals .row { display:flex; justify-content:space-between; padding:4px 0; color:var(--muted); }
   .totals .row.big { color:var(--ink); font-size:1.2rem; font-weight:800; margin-top:6px; }
   .note { font-size:.8rem; color:var(--muted); line-height:1.45; margin-top:16px; }
+  .price-block {
+    margin:16px 0; padding:20px 22px; border-radius:14px; display:flex; justify-content:space-between;
+    align-items:center; gap:16px; flex-wrap:wrap;
+    background:linear-gradient(135deg,#151b18,#243028); color:#f4efe4;
+  }
+  .price-block .label { font-size:.72rem; text-transform:uppercase; letter-spacing:.1em; opacity:.7; margin:0 0 6px; }
+  .price-block .amount { font-family:Unbounded,sans-serif; font-size:1.9rem; font-weight:600; color:#e6cf8a; line-height:1; }
+  .price-block .sub { font-size:.78rem; opacity:.75; margin-top:4px; }
   .page-break { page-break-before: always; break-before: page; }
   .chip { display:inline-block; background:#efe6d0; color:#6a5420; padding:3px 8px; border-radius:999px; font-size:.72rem; font-weight:700; margin-right:6px; margin-bottom:4px; }
   .chip.ok { background:#dceee2; color:#1f5a35; }
@@ -118,26 +146,40 @@ function buildReportHtml(survey, catalog) {
   .toolbar button.ghost { background:white; color:var(--ink); border:1px solid var(--line); }
   .wow {
     background: linear-gradient(135deg, #151b18 0%, #243028 55%, #3a2f18 100%);
-    color: #f4efe4; border-radius: 16px; padding: 22px 20px; margin: 12px 0 18px;
+    color: #f4efe4; border-radius: 16px; padding: 24px 22px; margin: 12px 0 18px;
     position: relative; overflow: hidden;
   }
-  .wow h2 { color:#f0e2b8; margin:0 0 8px; font-size:1.15rem; }
-  .wow p { margin:0; opacity:.9; line-height:1.5; }
-  .wow .seal {
-    position:absolute; right:16px; top:16px; width:72px; height:72px; border:2px solid #d4b56a;
-    border-radius:50%; display:flex; align-items:center; justify-content:center; text-align:center;
-    font-family:Unbounded,sans-serif; font-size:.58rem; color:#d4b56a; letter-spacing:.04em; line-height:1.2;
-    transform: rotate(8deg); background:rgba(0,0,0,.2);
+  .wow::after {
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(480px 200px at 100% 0%, rgba(212,181,106,.18), transparent 60%);
   }
+  .wow h2 { color:#f0e2b8; margin:0 0 8px; font-size:1.2rem; position:relative; z-index:1; }
+  .wow h2::before { display:none; }
+  .wow p { margin:0; opacity:.92; line-height:1.55; position:relative; z-index:1; max-width:78%; }
+  .wow .seal {
+    position:absolute; right:20px; top:20px; width:64px; height:64px; border-radius:50%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+    background:radial-gradient(circle at 35% 30%, rgba(212,181,106,.25), rgba(0,0,0,.25));
+    box-shadow:inset 0 0 0 1.5px #d4b56a, inset 0 0 0 5px rgba(212,181,106,.15);
+    font-family:Unbounded,sans-serif; letter-spacing:.03em; z-index:1;
+  }
+  .wow .seal b { display:block; font-size:1.05rem; color:#f0e2b8; line-height:1; }
+  .wow .seal span { display:block; font-size:.5rem; color:#d4b56a; letter-spacing:.08em; margin-top:2px; }
   .benefit-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:12px 0; }
   .benefit {
     border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:linear-gradient(180deg,#fff,#f9f7f2);
   }
   .benefit strong { display:block; margin-bottom:4px; }
   .benefit ul { margin:8px 0 0; padding-left:18px; color:var(--muted); font-size:.86rem; }
-  .timeline { display:flex; gap:0; margin:14px 0; }
+  .timeline { display:flex; gap:0; margin:14px 0; position:relative; }
   .timeline .step {
-    flex:1; text-align:center; padding:10px 6px; background:var(--bg); border-right:1px solid white; font-size:.78rem;
+    flex:1; text-align:center; padding:14px 6px 10px; background:var(--bg); font-size:.78rem;
+    position:relative; border-right:1px solid white;
+  }
+  .timeline .step::before {
+    content:attr(data-n); position:absolute; top:-9px; left:50%; transform:translateX(-50%);
+    width:18px; height:18px; border-radius:50%; background:var(--gold); color:#fff;
+    font-size:.62rem; font-weight:800; display:flex; align-items:center; justify-content:center;
   }
   .timeline .step:first-child { border-radius:10px 0 0 10px; }
   .timeline .step:last-child { border-radius:0 10px 10px 0; border-right:none; }
@@ -150,8 +192,9 @@ function buildReportHtml(survey, catalog) {
   }
   .invest .box b { display:block; font-family:Unbounded,sans-serif; font-size:1.2rem; margin:6px 0 2px; color:#e6cf8a; }
   .invest .box span { font-size:.72rem; opacity:.8; }
-  .qr-row { display:flex; gap:14px; align-items:center; margin-top:18px; padding:12px; background:var(--bg); border-radius:12px; }
-  .qr-row img { width:88px; height:88px; border-radius:8px; background:white; }
+  .qr-row { display:flex; gap:14px; align-items:center; margin-top:18px; padding:14px 16px; background:var(--bg); border-radius:12px; border:1px solid var(--line); }
+  .qr-row img { width:80px; height:80px; border-radius:8px; background:white; padding:4px; }
+  .qr-row strong { font-family:Unbounded,sans-serif; font-size:.88rem; font-weight:600; }
   .side-bar {
     height:8px; border-radius:99px; background:#ece7db; overflow:hidden; margin-top:4px;
   }
@@ -178,9 +221,9 @@ function buildReportHtml(survey, catalog) {
   <section class="sheet">
     <div class="brand">
       <div>
-        <div class="logo">BESTPAINTS</div>
+        ${logoMarkHtml()}
         <h1>Смета и презентация решения</h1>
-        <p>Покраска деревянных домов · ${date}</p>
+        <p>${esc(survey.client?.address || "объект")} · ${date}</p>
       </div>
       <div style="text-align:right;font-size:.85rem;color:var(--muted)">
         www.bestpaints-bp.ru<br/>гарантия до 12 лет
@@ -188,10 +231,10 @@ function buildReportHtml(survey, catalog) {
     </div>
 
     <div class="wow">
-      <div class="seal">ГАРАНТИЯ<br/>ДО ${warranty}<br/>ЛЕТ</div>
+      <div class="seal"><b>${warranty}</b><span>лет гарантии</span></div>
       <h2>${esc(paintPitch.headline)}</h2>
       <p>${esc(paintPitch.wow)}</p>
-      <p style="margin-top:10px;font-size:.9rem;opacity:.85">${esc(WOW_LINES[0])}</p>
+      <p style="margin-top:10px;font-size:.9rem;opacity:.85;max-width:78%">${esc(WOW_LINES[0])}</p>
     </div>
 
     <div class="meta">
@@ -207,44 +250,48 @@ function buildReportHtml(survey, catalog) {
         <div class="kpi"><span>К покраске всего</span><b>${areas.paintTotal} м²</b></div>
         <div class="kpi"><span>Фасад / интерьер</span><b>${areas.facade} / ${areas.interior} м²</b></div>
         <div class="kpi"><span>Ориентир ЛКМ</span><b>~${paintLiters(areas.facade)} л</b></div>
-        <div class="kpi"><span>К оплате</span><b>${money(est.total)}</b></div>
       </div>
     </div>
 
     <div class="invest">
-      <div class="box"><span>Инвестиция</span><b>${money(est.total)}</b><span>с НДС 5%</span></div>
       <div class="box"><span>Защита на</span><b>${warranty} лет</b><span>${esc(techPitch.title)}</span></div>
       <div class="box"><span>≈ в год на м²</span><b>${perYear ? money(perYear) : "—"}</b><span>прозрачная экономика</span></div>
+      <div class="box"><span>Строений</span><b>${survey.buildings.length}</b><span>в этой смете</span></div>
     </div>
 
     <h2>Итоговая смета</h2>
-    <table>
-      <thead><tr><th>Работа</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead>
-      <tbody>
-        ${est.lines
-          .map(
-            (l) => `<tr>
-          <td>${esc(l.name)}${l.guarantee ? `<div style="color:var(--muted);font-size:.75rem">гарантия ${l.guarantee} лет</div>` : ""}</td>
-          <td>${l.qty} ${esc(l.unit)}</td>
-          <td>${money(l.price)}</td>
-          <td class="sum">${money(l.sum)}</td>
-        </tr>`
-          )
-          .join("")}
-      </tbody>
-    </table>
-    <div class="totals">
-      <div class="row"><span>Итого</span><span>${money(est.subtotal)}</span></div>
-      <div class="row"><span>Скидка ${est.discountPct}%</span><span>− ${money(est.subtotal - est.afterDiscount)}</span></div>
-      <div class="row"><span>НДС 5%</span><span>${money(est.vat)}</span></div>
-      <div class="row big"><span>К оплате</span><span>${money(est.total)}</span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Работа</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead>
+        <tbody>
+          ${est.lines
+            .map(
+              (l) => `<tr>
+            <td>${esc(l.name)}${l.guarantee ? `<div style="color:var(--muted);font-size:.75rem">гарантия ${l.guarantee} лет</div>` : ""}</td>
+            <td>${l.qty} ${esc(l.unit)}</td>
+            <td>${money(l.price)}</td>
+            <td class="sum">${money(l.sum)}</td>
+          </tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>
     </div>
 
+    <div class="price-block">
+      <div>
+        <p class="label">К оплате, с НДС 5%</p>
+        <div class="amount">${money(est.total)}</div>
+        <p class="sub">Итого ${money(est.subtotal)}${Number(est.discountPct) > 0 ? ` · скидка ${est.discountPct}% (− ${money(est.subtotal - est.afterDiscount)})` : ""} · НДС 5% ${money(est.vat)}</p>
+      </div>
+    </div>
+
+    <h2>Этапы оплаты</h2>
     <div class="timeline">
-      <div class="step"><b>${esc(String(survey.estimate?.payments?.advance ?? 10))}%</b>договор</div>
-      <div class="step"><b>${esc(String(survey.estimate?.payments?.second ?? 40))}%</b>выход бригады</div>
-      <div class="step"><b>${esc(String(survey.estimate?.payments?.third ?? 40))}%</b>50% работ</div>
-      <div class="step"><b>${esc(String(survey.estimate?.payments?.final ?? 10))}%</b>акт</div>
+      <div class="step" data-n="1"><b>${esc(String(survey.estimate?.payments?.advance ?? 10))}%</b>договор</div>
+      <div class="step" data-n="2"><b>${esc(String(survey.estimate?.payments?.second ?? 40))}%</b>выход бригады</div>
+      <div class="step" data-n="3"><b>${esc(String(survey.estimate?.payments?.third ?? 40))}%</b>50% работ</div>
+      <div class="step" data-n="4"><b>${esc(String(survey.estimate?.payments?.final ?? 10))}%</b>акт</div>
     </div>
 
     <div class="qr-row">
@@ -280,7 +327,7 @@ function choicePage(b, catalog, est, n) {
   <section class="sheet page-break">
     <div class="brand">
       <div>
-        <div class="logo">BESTPAINTS</div>
+        ${logoMarkHtml()}
         <h1>Почему это решение — правильное</h1>
         <p>${esc(b.name)} · строение ${n}</p>
       </div>
@@ -339,41 +386,43 @@ function choicePage(b, catalog, est, n) {
     <p class="note" style="margin-top:0">${esc(WOW_LINES[1])} Фасад к покраске: <b>${facade.toFixed(
       1
     )} м²</b>.</p>
-    <table>
-      <thead>
-        <tr>
-          <th>Сторона</th>
-          <th>Размер</th>
-          <th>Площадь</th>
-          <th>Доля сметы</th>
-          <th>Сумма</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${
-          sides.length
-            ? sides
-                .map((s) => {
-                  const pct = Math.round(s.share * 100);
-                  const bar = Math.round((s.total / maxSide) * 100);
-                  return `<tr>
-            <td><b>${esc(s.label)}</b>
-              <div class="side-bar"><i style="width:${bar}%"></i></div>
-              ${s.note ? `<div style="font-size:.75rem;color:#666;margin-top:4px">${esc(s.note)}</div>` : ""}
-            </td>
-            <td>${s.length || "—"} × ${s.height || "—"} м</td>
-            <td>${s.gross} м²${s.opens ? `<div style="font-size:.75rem;color:#666">− проёмы ${s.opens}</div>` : ""}</td>
-            <td>${pct}%</td>
-            <td class="sum">${money(s.total)}
-              <div style="font-size:.72rem;color:#888">${money(s.priceM2)}/м² · техн. ${s.techId}</div>
-            </td>
-          </tr>`;
-                })
-                .join("")
-            : `<tr><td colspan="5">Нет сторон фасада — заполните замер или загрузите чертёж</td></tr>`
-        }
-      </tbody>
-    </table>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Сторона</th>
+            <th>Размер</th>
+            <th>Площадь</th>
+            <th>Доля сметы</th>
+            <th>Сумма</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${
+            sides.length
+              ? sides
+                  .map((s) => {
+                    const pct = Math.round(s.share * 100);
+                    const bar = Math.round((s.total / maxSide) * 100);
+                    return `<tr>
+              <td><b>${esc(s.label)}</b>
+                <div class="side-bar"><i style="width:${bar}%"></i></div>
+                ${s.note ? `<div style="font-size:.75rem;color:#666;margin-top:4px">${esc(s.note)}</div>` : ""}
+              </td>
+              <td>${s.length || "—"} × ${s.height || "—"} м</td>
+              <td>${s.gross} м²${s.opens ? `<div style="font-size:.75rem;color:#666">− проёмы ${s.opens}</div>` : ""}</td>
+              <td>${pct}%</td>
+              <td class="sum">${money(s.total)}
+                <div style="font-size:.72rem;color:#888">${money(s.priceM2)}/м² · техн. ${s.techId}</div>
+              </td>
+            </tr>`;
+                  })
+                  .join("")
+              : `<tr><td colspan="5">Нет сторон фасада — заполните замер или загрузите чертёж</td></tr>`
+          }
+        </tbody>
+      </table>
+    </div>
 
     <h3>Обоснование цены</h3>
     <ul style="color:var(--muted);font-size:.9rem;line-height:1.5">
@@ -431,7 +480,7 @@ function buildingPage(b, catalog, n, total) {
   <section class="sheet page-break">
     <div class="brand">
       <div>
-        <div class="logo">BESTPAINTS</div>
+        ${logoMarkHtml()}
         <h1>${esc(b.name)}</h1>
         <p>Замер · строение ${n} из ${total}</p>
       </div>
@@ -482,26 +531,30 @@ function buildingPage(b, catalog, n, total) {
     }
 
     <h2>Плоскости замера</h2>
-    <table>
-      <thead><tr><th>Плоскость</th><th>Площадь</th></tr></thead>
-      <tbody>${planeRows || `<tr><td colspan="2">Нет данных</td></tr>`}</tbody>
-    </table>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Плоскость</th><th>Площадь</th></tr></thead>
+        <tbody>${planeRows || `<tr><td colspan="2">Нет данных</td></tr>`}</tbody>
+      </table>
+    </div>
 
     ${
       (b.measure.openings || []).length
         ? `<h2>Проёмы</h2>
-    <table>
-      <thead><tr><th>Проём</th><th>Размер</th></tr></thead>
-      <tbody>
-        ${(b.measure.openings || [])
-          .map((o) => {
-            const wall = (b.measure.walls || []).find((w) => w.id === o.wallId);
-            return `<tr><td>${esc(o.label)}${wall ? ` · ${esc(wall.label)}` : ""}${o.note ? `<div style="font-size:.8rem;color:#666">${esc(o.note)}</div>` : ""}</td>
-            <td>${esc(o.width)}×${esc(o.height)} м${o.needsWarm ? " · шов" : ""}</td></tr>`;
-          })
-          .join("")}
-      </tbody>
-    </table>`
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Проём</th><th>Размер</th></tr></thead>
+        <tbody>
+          ${(b.measure.openings || [])
+            .map((o) => {
+              const wall = (b.measure.walls || []).find((w) => w.id === o.wallId);
+              return `<tr><td>${esc(o.label)}${wall ? ` · ${esc(wall.label)}` : ""}${o.note ? `<div style="font-size:.8rem;color:#666">${esc(o.note)}</div>` : ""}</td>
+              <td>${esc(o.width)}×${esc(o.height)} м${o.needsWarm ? " · шов" : ""}</td></tr>`;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>`
         : ""
     }
 
