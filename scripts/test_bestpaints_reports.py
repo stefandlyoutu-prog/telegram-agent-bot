@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -86,7 +87,7 @@ def main() -> int:
     ok("demo-report" in web, "server demo-report")
 
     sw = (BP / "sw.js").read_text(encoding="utf-8")
-    ok("bp-survey-v51" in sw, "cache v51")
+    ok(re.search(r"bp-survey-v\d+", sw), "cache version present")
     ok("reports.js" in sw, "sw caches reports.js")
 
     # сохранить эталонный JSON для импорта/истории

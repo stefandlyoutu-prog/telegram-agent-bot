@@ -1,5 +1,7 @@
 /** BestPaints CRM — сделки Лидоруба, статусы, чек-листы, график. */
 
+import { importEstimateHtml, bindImportEstimatePanel } from "./estimate_import.js";
+
 const API = "/bestpaints/api";
 const CRM_ROLE_KEY = "bp_crm_role_v1";
 
@@ -201,6 +203,7 @@ export function boardHtml(objects) {
     <button type="button" class="crm-card" data-crm-open="${esc(o.id)}">
       <div class="crm-card-top">
         <strong>${esc(o.title)}</strong>
+        ${o.deal_source === "import_estimate" ? `<span class="crm-pill" style="--crm-c:#8e7cc3">Импорт</span>` : ""}
         ${statusPill(o)}
       </div>
       <div class="crm-card-meta">
@@ -408,10 +411,14 @@ export function homeCrmSectionHtml() {
             <h3>Сделки</h3>
             <p class="hint" id="crm-duty-hint">Загрузка графика…</p>
           </div>
-          <button type="button" class="btn primary" id="crm-toggle-create" ${canCreateDeals() ? "" : "hidden"}>+ Сделка</button>
+          <div class="crm-panel-head-btns">
+            <button type="button" class="btn primary" id="crm-toggle-create" ${canCreateDeals() ? "" : "hidden"}>+ Сделка</button>
+            <button type="button" class="btn ghost" id="crm-toggle-import" ${canCreateDeals() ? "" : "hidden"}>Загрузить готовую смету</button>
+          </div>
         </div>
         <p class="hint" id="crm-create-lock" ${canCreateDeals() ? "hidden" : ""}>Создание сделок — у лидоруба. Переключите роль выше, если вы лидоруб.</p>
         <div id="crm-create-wrap" class="crm-create-wrap" hidden></div>
+        <div id="crm-import-wrap" class="crm-create-wrap" hidden></div>
         <div id="crm-filter-bar" class="crm-filter-bar" hidden></div>
         <div id="crm-deals-list"></div>
       </div>
@@ -809,14 +816,21 @@ export async function mountHomeCrm(ctx) {
 
   function syncCreateUi() {
     const toggle = root.querySelector("#crm-toggle-create");
+    const importToggle = root.querySelector("#crm-toggle-import");
     const lock = root.querySelector("#crm-create-lock");
     const wrap = root.querySelector("#crm-create-wrap");
+    const importWrap = root.querySelector("#crm-import-wrap");
     const ok = canCreateDeals();
     if (toggle) toggle.hidden = !ok;
+    if (importToggle) importToggle.hidden = !ok;
     if (lock) lock.hidden = ok;
     if (!ok && wrap) {
       wrap.hidden = true;
       wrap.innerHTML = "";
+    }
+    if (!ok && importWrap) {
+      importWrap.hidden = true;
+      importWrap.innerHTML = "";
     }
   }
 
@@ -1122,6 +1136,38 @@ export async function mountHomeCrm(ctx) {
       bindCreateForm(wrap.querySelector("#crm-create-form"));
     };
   }
+
+  const importToggle = root.querySelector("#crm-toggle-import");
+  const importWrap = root.querySelector("#crm-import-wrap");
+  if (importToggle && importWrap) {
+    importToggle.onclick = () => {
+      if (!canCreateDeals()) {
+        toast("Сделки создаёт лидоруб или админ");
+        return;
+      }
+      if (!importWrap.hidden && importWrap.innerHTML) {
+        importWrap.hidden = true;
+        return;
+      }
+      if (wrap) {
+        wrap.hidden = true;
+      }
+      importWrap.innerHTML = importEstimateHtml();
+      importWrap.hidden = false;
+      bindImportEstimatePanel(importWrap, {
+        getMeta,
+        toast,
+        actorRole: getCrmRole(),
+        onCreated: async (obj) => {
+          importWrap.hidden = true;
+          importWrap.innerHTML = "";
+          objects = await fetchObjects();
+          paintDeals();
+          onOpenDetail(obj.id);
+        },
+      });
+    };
+  }
 }
 
 function checklistHtml(obj, meta) {
@@ -1388,6 +1434,7 @@ export function detailHtml(obj, events, meta) {
       <p><strong>Квалификация:</strong> ${esc(obj.qualification || "—")}</p>
       <p><strong>Менеджер:</strong> ${esc(obj.manager_name || "—")}</p>
       <p><strong>Лидоруб:</strong> ${esc(obj.lidarub_name || obj.ledorub_name || "—")}</p>
+      ${obj.deal_source === "import_estimate" ? `<p><strong>Источник:</strong> импорт готовой сметы (см. «История»)</p>` : ""}
       ${obj.survey_local_id ? `<p><strong>Локальный замер:</strong> ${esc(obj.survey_local_id)}</p>` : ""}
       ${obj.escalated_at ? `<p class="crm-escalated">Эскалация (${fmtTs(obj.escalated_at)})</p>` : ""}
     </section>

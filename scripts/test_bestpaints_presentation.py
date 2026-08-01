@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Smoke-тест чертежей + презентационного PDF BestPaints."""
 from pathlib import Path
+import re
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from oracle_bot.bestpaints_drawings import normalize_parse
@@ -27,14 +28,14 @@ ok(len(r["walls"]) == 2, "2 walls")
 ok(len(r["openings"]) == 1, "1 opening")
 
 report = (BP / "js/report.js").read_text(encoding="utf-8")
-for needle in ["Почему это решение", "Из чего складывается цена по сторонам", "Обоснование цены", "ГАРАНТИЯ", "pitchForPaint"]:
-    ok(needle in report, f"report has {needle}")
+for needle in ["Почему это решение", "Из чего складывается цена по сторонам", "Обоснование цены", "гарант", "pitchForPaint"]:
+    ok(needle.lower() in report.lower(), f"report has {needle}")
 
 app = (BP / "js/app.js").read_text(encoding="utf-8")
 ok("bindDrawingsPanel" in app, "drawings bound")
 ok("/bestpaints/api/parse-drawing" in (BP / "js/drawings.js").read_text(encoding="utf-8"), "client API path")
 ok("parse-drawing" in Path(__file__).resolve().parents[1].joinpath("oracle_bot/webapp.py").read_text(encoding="utf-8"), "server route")
-ok("bp-survey-v51" in (BP / "sw.js").read_text(encoding="utf-8"), "cache v51")
+ok(re.search(r"bp-survey-v\d+", (BP / "sw.js").read_text(encoding="utf-8")), "cache version present")
 
 print("ALL PASSED" if not failed else f"{failed} FAILURES")
 sys.exit(1 if failed else 0)

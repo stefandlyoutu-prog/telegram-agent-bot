@@ -293,6 +293,7 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
         "amount_total": "REAL NOT NULL DEFAULT 0",
         "area_m2": "REAL NOT NULL DEFAULT 0",
         "signed_place": "TEXT NOT NULL DEFAULT ''",
+        "lidarub_id": "TEXT NOT NULL DEFAULT ''",
     }
     for name, decl in alters.items():
         if name not in cols:
@@ -918,8 +919,20 @@ def create_object(payload: dict[str, Any]) -> dict[str, Any]:
     address = (payload.get("address") or "").strip()
     client_name = (payload.get("client_name") or "").strip()
     client_phone = (payload.get("client_phone") or "").strip()
-    lidarub_name = (payload.get("lidarub_name") or payload.get("ledorub_name") or "").strip() or "Лидоруб"
-    lidarub_phone = (payload.get("lidarub_phone") or payload.get("ledorub_phone") or "").strip()
+    lidarub_id = str(payload.get("lidarub_id") or "").strip()
+    lidarub_person = _person_by_id("lidarub", lidarub_id) if lidarub_id else None
+    lidarub_name = (
+        (lidarub_person or {}).get("name")
+        or (payload.get("lidarub_name") or payload.get("ledorub_name") or "").strip()
+        or "Лидоруб"
+    )
+    lidarub_phone = (lidarub_person or {}).get("phone") or (payload.get("lidarub_phone") or payload.get("ledorub_phone") or "").strip()
+    lidarub_id = (lidarub_person or {}).get("id") or lidarub_id
+    manager_id = str(payload.get("manager_id") or "").strip()
+    manager_person = _person_by_id("manager", manager_id) if manager_id else None
+    manager_name = (manager_person or {}).get("name") or ""
+    manager_phone = (manager_person or {}).get("phone") or ""
+    manager_id = (manager_person or {}).get("id") or ""
     qualification = (payload.get("qualification") or payload.get("comment") or "").strip()
     measure_date = (payload.get("measure_date") or "").strip()
     audio = payload.get("audio") or []
@@ -946,10 +959,11 @@ def create_object(payload: dict[str, Any]) -> dict[str, Any]:
             INSERT INTO objects(
               id, title, address, client_name, client_phone, status,
               surveyor_id, surveyor_name, surveyor_phone,
-              ledorub_name, ledorub_phone, checklist_json,
+              manager_id, manager_name, manager_phone,
+              ledorub_name, ledorub_phone, lidarub_id, checklist_json,
               qualification, measure_date, audio_json, deal_source, lidarub_tg_id,
               assigned_at, created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 oid,
@@ -961,8 +975,12 @@ def create_object(payload: dict[str, Any]) -> dict[str, Any]:
                 (surveyor or {}).get("id") or "",
                 (surveyor or {}).get("name") or "",
                 (surveyor or {}).get("phone") or "",
+                manager_id,
+                manager_name,
+                manager_phone,
                 lidarub_name,
                 lidarub_phone,
+                lidarub_id,
                 "{}",
                 qualification,
                 measure_date,
@@ -1002,6 +1020,31 @@ def create_object(payload: dict[str, Any]) -> dict[str, Any]:
     obj["assign_reason"] = assign_reason
     obj["notify"] = notes if status == "assigned" else notes
     return obj
+
+
+def create_imported_deal(payload: dict[str, Any]) -> dict[str, Any]:
+    """Сделка из уже готовой сметы (отправленной клиенту раньше другим способом).
+
+    Один вызов: создаёт объект (с ручным выбором лидоруба/менеджера/замерщика)
+    и сразу переводит его в «На адресе · замер» с суммой/скидкой/локальным ID сметы —
+    чтобы дальше работали обычные кнопки «Заключил» / «Не заключил» и кабинет клиента.
+    """
+    client = payload.get("client") if isinstance(payload.get("client"), dict) else {}
+    create_payload = {
+        "title": (payload.get("title") or client.get("name") or "").strip() or "Смета (импорт)",
+        "address": (payload.get("address") or client.get("address") or "").strip(),
+        "client_name": (payload.get("client_name") or client.get("name") or "").strip(),
+        "client_phone": (payload.get("client_phone") or client.get("phone") or "").strip(),
+        "measure_date": (payload.get("measure_date") or "").strip() or today_str(),
+        "qualification": (payload.get("qualification") or "").strip()
+        or "Импорт готовой сметы — уже отправлена клиенту другим способом",
+        "surveyor_id": payload.get("surveyor_id") or "",
+        "lidarub_id": payload.get("lidarub_id") or "",
+        "manager_id": payload.get("manager_id") or "",
+        "deal_source": "import_estimate",
+    }
+    obj = create_object(create_payload)
+    return transition(obj["id"], "import_estimate", payload)
 
 
 def list_objects(*, status: str | None = None, include_deleted: bool = False) -> list[dict[str, Any]]:
@@ -1367,6 +1410,30 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
             f"Смета в CRM: {updates.get('amount_total', obj.get('amount_total')):,.0f} ₽"
             f" (скидка {updates.get('discount_pct', obj.get('discount_pct')):g}%)"
         ).replace(",", " ")
+
+    elif action == "import_estimate":
+        # Смета уже была рассчитана и отправлена клиенту другим способом (до CRM) —
+        # сразу переводим сделку в «На адресе · замер» (эквивалент «замер и смета готовы»),
+        # дальше обычные кнопки «Заключил» / «Не заключил».
+        updates["status"] = "on_site"
+        updates["assigned_at"] = obj.get("assigned_at") or now
+        updates["accepted_at"] = obj.get("accepted_at") or now
+        updates["visit_confirmed_at"] = obj.get("visit_confirmed_at") or now
+        updates["on_site_at"] = obj.get("on_site_at") or now
+        if payload.get("survey_local_id"):
+            updates["survey_local_id"] = str(payload["survey_local_id"])
+        _apply_money(updates, obj, payload)
+        total_val = float(updates.get("amount_total", obj.get("amount_total") or 0) or 0)
+        disc_val = float(updates.get("discount_pct", obj.get("discount_pct") or 0) or 0)
+        src_note = (payload.get("source_note") or "").strip()
+        parts = [f"Импорт готовой сметы (роль оператора: {payload.get('actor_role') or 'лидоруб'})"]
+        if src_note:
+            parts.append(f"источник: {src_note}"[:200])
+        if total_val:
+            parts.append(f"сумма {total_val:,.0f} ₽".replace(",", " "))
+        if disc_val:
+            parts.append(f"скидка {disc_val:g}%")
+        message = " · ".join(parts)
 
     elif action == "reassign_surveyor":
         sid = (payload.get("surveyor_id") or "").strip()

@@ -22,11 +22,12 @@ from oracle_bot.kupi_direct import vision as kupi_vision
 logger = logging.getLogger(__name__)
 
 
-async def _report_chat(user: str) -> str:
+async def _report_chat(user: str, *, system: str | None = None) -> str:
     """Kupi → Groq → Gemini (кредиты OpenAI часто кончаются)."""
+    sys_prompt = system or SYSTEM
     errors: list[str] = []
     try:
-        text = await kupi_chat(user, system=SYSTEM, model=DEFAULT_MODEL, temperature=0.1)
+        text = await kupi_chat(user, system=sys_prompt, model=DEFAULT_MODEL, temperature=0.1)
         if text.strip():
             return text
     except Exception as e:
@@ -34,7 +35,7 @@ async def _report_chat(user: str) -> str:
         logger.warning("report chat kupi: %s", e)
     if groq_configured():
         try:
-            text = await groq_chat(user, system=SYSTEM, temperature=0.1, max_tokens=4000)
+            text = await groq_chat(user, system=sys_prompt, temperature=0.1, max_tokens=4000)
             if text.strip():
                 return text
         except Exception as e:
@@ -44,7 +45,7 @@ async def _report_chat(user: str) -> str:
         try:
             text = await gemini_chat_completion(
                 [{"role": "user", "content": user}],
-                system=SYSTEM,
+                system=sys_prompt,
                 temperature=0.1,
             )
             if text.strip():
@@ -55,10 +56,11 @@ async def _report_chat(user: str) -> str:
     raise ValueError("LLM недоступен для текста отчёта: " + ("; ".join(errors) or "нет провайдеров"))
 
 
-async def _report_vision(user: str, data_url: str) -> str:
+async def _report_vision(user: str, data_url: str, *, system: str | None = None) -> str:
+    sys_prompt = system or SYSTEM
     errors: list[str] = []
     try:
-        text = await kupi_vision(user, data_url, system=SYSTEM, temperature=0.1)
+        text = await kupi_vision(user, data_url, system=sys_prompt, temperature=0.1)
         if text.strip():
             return text
     except Exception as e:
@@ -66,7 +68,7 @@ async def _report_vision(user: str, data_url: str) -> str:
         logger.warning("report vision kupi: %s", e)
     if groq_configured():
         try:
-            text = await groq_vision(user, data_url, system=SYSTEM, temperature=0.1, max_tokens=4000)
+            text = await groq_vision(user, data_url, system=sys_prompt, temperature=0.1, max_tokens=4000)
             if text.strip():
                 return text
         except Exception as e:
@@ -74,7 +76,7 @@ async def _report_vision(user: str, data_url: str) -> str:
             logger.warning("report vision groq: %s", e)
     if gemini_llm_configured():
         try:
-            text = await gemini_vision_completion(user, data_url, system=SYSTEM, temperature=0.1)
+            text = await gemini_vision_completion(user, data_url, system=sys_prompt, temperature=0.1)
             if text.strip():
                 return text
         except Exception as e:
