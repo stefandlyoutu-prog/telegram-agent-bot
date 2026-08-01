@@ -853,7 +853,7 @@ function nextLabel(stepId) {
       client: "К строению →",
       building: "К замеру →",
       walls: "В конструктор →",
-      tech: "К договору →",
+      tech: "К участку →",
       site: "К смете →",
     }[stepId] || "Далее"
   );
@@ -2787,7 +2787,7 @@ function shortName(name) {
   return name.replace(/\s*-\s*(фасад|интерьер).*$/i, "").trim();
 }
 
-/* ——— 6. Объект ——— */
+/* ——— 5. Участок ——— */
 function renderSite(root) {
   const s = survey.site;
   if (!survey.contract) {

@@ -123,14 +123,15 @@ export const SCAFFOLD_OPTIONS = [
  * 1 Проект (имя, клиент, адрес)
  * 2–5 Замер
  * 6 Конструктор (технология / ЛКМ)
- * 7–8 Договор и смета
+ * 7 Участок (быт, доступ/леса — влияет на смету, + реквизиты для договора)
+ * 8 Смета (итог)
  */
 export const STEPS = [
   { id: "client", title: "Проект", icon: "1", phase: "project", coach: "Название · клиент · адрес" },
   { id: "building", title: "Строение", icon: "2", phase: "measure", coach: "Тип · зоны · крыша" },
   { id: "walls", title: "Замер", icon: "3", phase: "measure", coach: "Сторона целиком: стены · проёмы · допы" },
   { id: "tech", title: "Конструктор", icon: "4", phase: "constructor", coach: "Технология и ЛКМ" },
-  { id: "site", title: "Договор", icon: "5", phase: "rest", coach: "Быт и реквизиты" },
+  { id: "site", title: "Участок", icon: "5", phase: "rest", coach: "Быт и реквизиты" },
   { id: "estimate", title: "Смета", icon: "6", phase: "rest", coach: "Итог · PDF" },
 ];
 
@@ -138,7 +139,7 @@ export const PHASE_LABELS = {
   project: "Проект",
   measure: "Замер",
   constructor: "Конструктор",
-  rest: "Договор и смета",
+  rest: "Участок и смета",
 };
 
 export const WALL_PRESETS = [

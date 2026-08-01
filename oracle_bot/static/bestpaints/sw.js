@@ -1,4 +1,4 @@
-const CACHE = "bp-survey-v58";
+const CACHE = "bp-survey-v59";
 const ASSETS = [
   "./",
   "./index.html",
