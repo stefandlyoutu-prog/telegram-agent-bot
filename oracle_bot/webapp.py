@@ -349,6 +349,21 @@ from oracle_bot import bestpaints_cabinets as bp_cab  # noqa: E402
 bp_cab.init_db()
 
 
+
+def _bp_cabinet_headers() -> dict:
+    """Анти-кэш / анти-встраивание для клиентского кабинета."""
+    return {
+        "Cache-Control": "no-store, no-cache, must-revalidate, private, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        "X-Frame-Options": "DENY",
+        "Content-Security-Policy": "frame-ancestors 'none'",
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+        "Permissions-Policy": "clipboard-read=(), clipboard-write=()",
+    }
+
+
 def _bp_api_auth(request: Request):
     if not is_authenticated(request):
         raise HTTPException(401, "login required")
@@ -542,16 +557,16 @@ from fastapi.responses import JSONResponse  # noqa: E402
 async def bp_cabinet_magic(token: str, request: Request):
     """Magic-link → страница кабинета клиента."""
     pack = bp_cab.resolve_magic_token(token)
+    headers = _bp_cabinet_headers()
     if not pack:
-        return FileResponse(BP_STATIC / "cabinet.html", headers={"X-BP-Cabinet": "invalid"})
-    # cabinet.html читает token из path через JS location
-    return FileResponse(BP_STATIC / "cabinet.html")
+        headers["X-BP-Cabinet"] = "invalid"
+    return FileResponse(BP_STATIC / "cabinet.html", headers=headers)
 
 
 @app.get("/bestpaints/cabinet")
 @app.get("/bestpaints/cabinet/")
 async def bp_cabinet_app():
-    return FileResponse(BP_STATIC / "cabinet.html")
+    return FileResponse(BP_STATIC / "cabinet.html", headers=_bp_cabinet_headers())
 
 
 @app.post("/bestpaints/api/client/login")
@@ -600,7 +615,11 @@ def _bp_client_auth(request: Request):
 @app.get("/bestpaints/api/client/me")
 async def bp_client_me(request: Request):
     pack = _bp_client_auth(request)
-    return bp_cab.client_get_bundle(pack["cabinet"])
+    data = bp_cab.client_get_bundle(pack["cabinet"])
+    # не отдаём лишние поля для «скачать JSON»
+    if isinstance(data.get("survey"), dict):
+        data["survey"].pop("_export", None)
+    return JSONResponse(data, headers=_bp_cabinet_headers())
 
 
 @app.put("/bestpaints/api/client/survey")
@@ -618,12 +637,15 @@ async def bp_client_save_survey(request: Request):
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    return {
-        "ok": True,
-        "version": saved["version"],
-        "changes": saved.get("changes") or [],
-        "survey": saved["payload"],
-    }
+    return JSONResponse(
+        {
+            "ok": True,
+            "version": saved["version"],
+            "changes": saved.get("changes") or [],
+            "survey": saved["payload"],
+        },
+        headers=_bp_cabinet_headers(),
+    )
 
 
 @app.post("/bestpaints/api/objects/{oid}/cabinet")
@@ -734,6 +756,9 @@ async def bestpaints_files(file_path: str, request: Request):
         return FileResponse(BP_STATIC / "index.html")
     path = _bp_safe_file(file_path)
     headers = {}
+    if file_path in ("cabinet.html", "cabinet") or file_path.startswith("js/cabinet"):
+        headers.update(_bp_cabinet_headers())
+
     low = file_path.lower()
     if low.endswith(".pdf") or low.startswith("docs/") or low.endswith("sw.js"):
         headers = {

@@ -16,7 +16,7 @@ import {
   listAllowedPaints,
 } from "./calc.js";
 import { pitchForPaint, pitchForTech } from "../data/pitch.js";
-import { openClientReport } from "./report.js";
+import { installCabinetGuard, banExportUi, mountWatermark } from "./cabinet-guard.js";
 
 const app = document.getElementById("app");
 let catalog = null;
@@ -300,8 +300,8 @@ function renderCabinet() {
   </div>
   <div class="cab-sticky">
     <button class="btn primary" id="cab-save" ${state.busy ? "disabled" : ""}>Сохранить варианты</button>
-    <button class="btn" id="cab-pdf">PDF-презентация</button>
-  </div>`;
+  </div>
+  <p class="cab-muted" style="text-align:center;margin:8px 14px 0">Смета конфиденциальна: скачивание, пересылка, печать и скриншоты отключены. КП отправит менеджер BestPaints.</p>`;
 
   app.querySelectorAll("[data-tab]").forEach((btn) => {
     btn.onclick = () => {
@@ -381,7 +381,12 @@ function renderCabinet() {
       render();
     }
   };
-  app.querySelector("#cab-pdf").onclick = () => openClientReport(withSnapshot(state.survey), catalog);
+  banExportUi();
+  mountWatermark({
+    name: state.bundle?.cabinet?.client_name || "",
+    phone: state.bundle?.cabinet?.client_phone || "",
+    cabinetId: state.bundle?.cabinet?.id || "",
+  });
 }
 
 function render() {
@@ -394,6 +399,11 @@ function render() {
 }
 
 async function boot() {
+  installCabinetGuard(() => ({
+    name: state.bundle?.cabinet?.client_name || state.survey?.client?.name || "",
+    phone: state.bundle?.cabinet?.client_phone || state.phone || "",
+    cabinetId: state.bundle?.cabinet?.id || "",
+  }));
   state.token = magicTokenFromPath();
   catalog = await fetch("/bestpaints/data/catalog.json").then((r) => r.json());
   try {
