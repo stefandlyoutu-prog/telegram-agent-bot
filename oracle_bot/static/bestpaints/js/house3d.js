@@ -198,9 +198,14 @@ export function techCompareHtml(building, catalog) {
 
   const tips = [];
   if (cheaper) {
-    tips.push(
-      `«${cheaper.t.short}» дешевле на ${money(base.sum - cheaper.sum)}, но гарантия ${yearsLabel(cheaper.item.guarantee)} вместо ${yearsLabel(base.item.guarantee)} на «${base.t.short}»`
-    );
+    const sameGuarantee = String(cheaper.item.guarantee) === String(base.item.guarantee);
+    const reason =
+      cheaper.t.id === 4 && base.t.id === 5
+        ? "но это подготовка для нового дома: на уже окрашенном старый слой может остаться, и новый ЛКМ ляжет хуже"
+        : sameGuarantee
+          ? "но это менее глубокая подготовка поверхности"
+          : `но гарантия ${yearsLabel(cheaper.item.guarantee)} вместо ${yearsLabel(base.item.guarantee)} на «${base.t.short}»`;
+    tips.push(`«${cheaper.t.short}» дешевле на ${money(base.sum - cheaper.sum)} — ${reason}`);
   }
   if (pricier) {
     const reason =
