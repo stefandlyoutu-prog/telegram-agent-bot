@@ -1700,6 +1700,11 @@ function renderWalls(root) {
   const roof = ROOF_TYPES.find((r) => r.id === b.roofType);
   const kMatch = ROUND_COEF.find((c) => c.value != null && Number(b.measure.roundCoef) === c.value);
   const kCustom = !kMatch;
+  // Чертёж/масштаб от заказчика — разовый инструмент для старта замера.
+  // Если уже что-то измерили руками, разворачивать его по умолчанию не нужно.
+  const hasMeasurements = num(b.measure.wallsArea) > 0 || (b.measure.walls || []).length > 0;
+  const drawingToolsUsed = Boolean(survey._drawings?.lastParse);
+  const openDrawingTools = !hasMeasurements && !drawingToolsUsed;
 
   root.innerHTML = `
     <h2 class="section-title">Замер · ${escapeHtml(b.name)}</h2>
@@ -1713,32 +1718,34 @@ function renderWalls(root) {
 
     <div id="walls-list" class="walls-list"></div>
 
-    <details class="premium-details" open>
-      <summary>Чертёж заказчика и масштаб</summary>
+    <div class="grid two" style="margin-top:10px">
+      <div class="field">
+        <label>Коэффициент K (фасад)</label>
+        <select id="coef-preset">
+          ${ROUND_COEF.map((c) => {
+            const sel =
+              c.id === "custom"
+                ? kCustom
+                  ? "selected"
+                  : ""
+                : c.value != null && Number(b.measure.roundCoef) === c.value
+                  ? "selected"
+                  : "";
+            return `<option value="${c.id}" ${sel}>${c.label}</option>`;
+          }).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Свой K</label>
+        <input id="coef-custom" value="${esc(b.measure.roundCoef)}" inputmode="decimal">
+      </div>
+    </div>
+
+    <details class="premium-details" ${openDrawingTools ? "open" : ""}>
+      <summary>Чертёж от заказчика (необязательно)</summary>
+      <p class="hint" style="margin:8px 0 0">Только если есть готовый план/фасад с размерами — AI перенесёт их в замер. Меряете руками на месте — блок не нужен.</p>
       ${drawingsPanelHtml(survey._drawings || {})}
       <div style="height:12px"></div>
-      <div class="grid two" style="margin-top:10px">
-        <div class="field">
-          <label>Коэффициент K (фасад)</label>
-          <select id="coef-preset">
-            ${ROUND_COEF.map((c) => {
-              const sel =
-                c.id === "custom"
-                  ? kCustom
-                    ? "selected"
-                    : ""
-                  : c.value != null && Number(b.measure.roundCoef) === c.value
-                    ? "selected"
-                    : "";
-              return `<option value="${c.id}" ${sel}>${c.label}</option>`;
-            }).join("")}
-          </select>
-        </div>
-        <div class="field">
-          <label>Свой K</label>
-          <input id="coef-custom" value="${esc(b.measure.roundCoef)}" inputmode="decimal">
-        </div>
-      </div>
       ${scalePanelHtml(survey._scale || {})}
     </details>
 
