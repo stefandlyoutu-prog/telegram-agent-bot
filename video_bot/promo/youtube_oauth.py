@@ -21,11 +21,17 @@ def youtube_configured() -> bool:
     )
 
 
-def get_access_token() -> str:
-    """Действующий access-token (кэш с запасом 60 сек)."""
+def get_access_token(refresh_token: str | None = None) -> str:
+    """Действующий access-token (кэш с запасом 60 сек).
+
+    refresh_token — опционально для доп. аккаунта; иначе берём YOUTUBE_REFRESH_TOKEN.
+    """
+    rt = (refresh_token or "").strip() or os.getenv("YOUTUBE_REFRESH_TOKEN", "").strip()
+    cache_key = f"token:{rt[-12:]}" if rt else "token"
+    exp_key = f"exp:{rt[-12:]}" if rt else "exp"
     now = time.time()
-    if _cache.get("token") and float(_cache.get("exp", 0)) > now + 60:
-        return str(_cache["token"])
+    if _cache.get(cache_key) and float(_cache.get(exp_key, 0)) > now + 60:
+        return str(_cache[cache_key])
     import requests
 
     resp = requests.post(
@@ -33,7 +39,7 @@ def get_access_token() -> str:
         data={
             "client_id": os.getenv("YOUTUBE_CLIENT_ID", "").strip(),
             "client_secret": os.getenv("YOUTUBE_CLIENT_SECRET", "").strip(),
-            "refresh_token": os.getenv("YOUTUBE_REFRESH_TOKEN", "").strip(),
+            "refresh_token": rt,
             "grant_type": "refresh_token",
         },
         timeout=30,
@@ -41,6 +47,6 @@ def get_access_token() -> str:
     data = resp.json()
     if "access_token" not in data:
         raise RuntimeError(f"YouTube token refresh failed: {data}")
-    _cache["token"] = data["access_token"]
-    _cache["exp"] = now + float(data.get("expires_in", 3500))
-    return str(_cache["token"])
+    _cache[cache_key] = data["access_token"]
+    _cache[exp_key] = now + float(data.get("expires_in", 3500))
+    return str(_cache[cache_key])
