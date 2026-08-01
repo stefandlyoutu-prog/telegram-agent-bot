@@ -1269,6 +1269,10 @@ export function detailHtml(obj, events, meta) {
   const actions = NEXT_ACTIONS[obj.status] || [];
   const step = stepCopy(obj.status);
   const needsAssign = obj.status === "created" || !obj.surveyor_id;
+  // Переназначение замерщика, кабинет клиента и «исправить статус/удалить» —
+  // рабочие инструменты лидоруба/менеджера/админа. Замерщику эти блоки не нужны
+  // и только загромождают карточку сделки.
+  const canManage = getCrmRole() !== "surveyor";
   const mgrOpts = (meta?.staff?.managers || [])
     .map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`)
     .join("");
@@ -1278,12 +1282,12 @@ export function detailHtml(obj, events, meta) {
   const showMoney =
     ["contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed"].includes(obj.status) ||
     Number(obj.amount_total) > 0;
-  const showCabinet = ["on_site", "contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed"].includes(
-    obj.status
-  );
   const primary = actions.filter((a) => a.primary);
   const secondary = actions.filter((a) => !a.primary);
-  const assignHtml = assignSurveyorHtml(obj, meta);
+  const assignHtml = canManage ? assignSurveyorHtml(obj, meta) : "";
+  const noAssignYet = needsAssign && !canManage
+    ? `<section class="crm-step-card"><p class="crm-step-kicker">Замерщик не назначен</p><p class="crm-step-body">Ждите, когда лидоруб назначит замерщика на этот замер.</p></section>`
+    : "";
   const audio = audioHtml(obj);
   const checklist = checklistHtml(obj, meta);
 
@@ -1303,7 +1307,7 @@ export function detailHtml(obj, events, meta) {
     <div class="crm-deal-line"><span>Замерщик</span><b>${esc(obj.surveyor_name || "не назначен")}</b></div>
   </section>
 
-  ${needsAssign ? assignHtml : ""}
+  ${needsAssign ? (canManage ? assignHtml : noAssignYet) : ""}
 
   ${
     !needsAssign && (primary.length || step.body)
@@ -1353,7 +1357,9 @@ export function detailHtml(obj, events, meta) {
   ${audio ? `<details class="crm-fold"><summary>Аудио Лидоруба</summary>${audio}</details>` : ""}
   ${checklist ? `<details class="crm-fold"><summary>Чек-лист</summary>${checklist}</details>` : ""}
 
-  <details class="crm-fold" ${showCabinet ? "" : ""} id="crm-cabinet-fold">
+  ${
+    canManage
+      ? `<details class="crm-fold" id="crm-cabinet-fold">
     <summary>Кабинет клиента</summary>
     <section class="crm-money-box" id="crm-cabinet-box">
       <p class="hint">Ссылка клиенту после сметы. Вход по телефону, правки в логе.</p>
@@ -1365,7 +1371,9 @@ export function detailHtml(obj, events, meta) {
       </div>
       <ul class="crm-events" id="crm-cabinet-logs" style="margin-top:12px"></ul>
     </section>
-  </details>
+  </details>`
+      : ""
+  }
 
   <details class="crm-fold">
     <summary>Подробности</summary>
@@ -1378,7 +1386,7 @@ export function detailHtml(obj, events, meta) {
     </section>
   </details>
 
-  ${!needsAssign ? assignHtml : ""}
+  ${!needsAssign && canManage ? assignHtml : ""}
 
   <details class="crm-fold">
     <summary>История</summary>
@@ -1389,7 +1397,9 @@ export function detailHtml(obj, events, meta) {
     </ul>
   </details>
 
-  <details class="crm-admin">
+  ${
+    canManage
+      ? `<details class="crm-admin">
     <summary>Исправить статус / удалить</summary>
     <p class="hint">Если нажали не ту кнопку — выберите статус.</p>
     <label>Статус вручную
@@ -1400,7 +1410,9 @@ export function detailHtml(obj, events, meta) {
       <button type="button" class="btn" data-crm-act="reopen">Вернуть в работу</button>
       <button type="button" class="btn danger" data-crm-act="delete">Удалить сделку</button>
     </div>
-  </details>
+  </details>`
+      : ""
+  }
 
   <p class="footer-note"><a href="/bestpaints/logout">Выйти</a></p>`;
 }
