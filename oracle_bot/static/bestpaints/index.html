@@ -19,13 +19,13 @@
       rel="stylesheet"
     />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <link rel="stylesheet" href="./css/styles.css?v=48" />
+    <link rel="stylesheet" href="./css/styles.css?v=49" />
   </head>
   <body>
     <div class="app" id="app">
       <p style="color:#9aada2;padding:24px">Загрузка…</p>
     </div>
-    <script type="module" src="./js/app.js?v=48"></script>
+    <script type="module" src="./js/app.js?v=49"></script>
     <script>
       if ("serviceWorker" in navigator) {
         var refreshing = false;
@@ -34,7 +34,7 @@
           refreshing = true;
           window.location.reload();
         });
-        navigator.serviceWorker.register("./sw.js?v=48").then(function (reg) {
+        navigator.serviceWorker.register("./sw.js?v=49").then(function (reg) {
           reg.update();
           if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
           reg.addEventListener("updatefound", function () {

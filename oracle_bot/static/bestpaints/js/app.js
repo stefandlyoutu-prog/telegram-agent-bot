@@ -538,7 +538,7 @@ function renderHome() {
   $("#btn-new").onclick = () => newSurvey();
   $("#btn-demo-morozov")?.addEventListener("click", async () => {
     try {
-      const res = await fetch("/bestpaints/data/demo-survey-morozov-stepan.json?v=48", {
+      const res = await fetch("/bestpaints/data/demo-survey-morozov-stepan.json?v=49", {
         credentials: "same-origin",
       });
       if (!res.ok) throw new Error("Демо-файл недоступен");
@@ -1265,11 +1265,22 @@ function renderClient(root) {
   const hasTitle = Boolean(title.trim());
   const hasClient = Boolean((c.name || "").trim());
   const hasAddress = Boolean((c.address || "").trim());
+  const reportApplied = Boolean(survey._reports?.appliedAt);
 
   root.innerHTML = `
     <h2 class="section-title">Новый проект</h2>
-    <p class="section-sub">Поля открываются по очереди — сначала название, потом клиент, потом адрес.</p>
+    <p class="section-sub">В начале заявки можно загрузить бланк замера — дальше поля заполнятся сами. Или вручную: название → клиент → адрес.</p>
     ${tipBlock("client")}
+
+    ${
+      reportApplied
+        ? `<div class="callout ok" style="margin-bottom:12px">Бланк уже применён · ${escapeHtml(c.name || "клиент")} · ${escapeHtml(c.address || "")}. Дальше — строение и замер.</div>`
+        : `<details class="premium-details" open style="margin-bottom:14px">
+      <summary>Загрузить бланк / отчёт замерщика</summary>
+      <p class="hint" style="margin:8px 0 0">Только на старте новой заявки. После применения блок здесь не понадобится.</p>
+      ${reportsPanelHtml(survey._reports || {})}
+    </details>`
+    }
 
     <div class="flow-step open" data-flow="title">
       <div class="flow-step-num">1</div>
@@ -1320,6 +1331,29 @@ function renderClient(root) {
   `;
 
   bindFields(root);
+
+  if (!reportApplied) {
+    bindReportsPanel(root, {
+      getSurvey: () => survey,
+      getBuilding: () => active(),
+      getState: () => survey._reports || {},
+      setState: (st) => {
+        survey._reports = st;
+        save();
+      },
+      toast,
+      onApplied: (r) => {
+        survey._reports = {
+          ...(survey._reports || {}),
+          appliedAt: new Date().toISOString(),
+        };
+        syncAreasFromLists(active());
+        save();
+        render();
+        toast(`Из бланка: ${r.walls} стен · проект заполнен`);
+      },
+    });
+  }
 
   const titleEl = $("#fld-title", root);
   const clientEl = $("#fld-client", root);
@@ -1682,7 +1716,6 @@ function renderWalls(root) {
     <details class="premium-details" open>
       <summary>Чертёж заказчика и масштаб</summary>
       ${drawingsPanelHtml(survey._drawings || {})}
-      ${reportsPanelHtml(survey._reports || {})}
       <div style="height:12px"></div>
       <div class="grid two" style="margin-top:10px">
         <div class="field">
@@ -1767,25 +1800,6 @@ function renderWalls(root) {
       refreshBadge();
       render();
       toast(`Из чертежа: ${r.walls} стен, ${r.openings} проёмов`);
-    },
-  });
-
-  bindReportsPanel(root, {
-    getSurvey: () => survey,
-    getBuilding: () => active(),
-    getState: () => survey._reports || {},
-    setState: (st) => {
-      survey._reports = st;
-      save();
-    },
-    toast,
-    onApplied: (r) => {
-      syncAreasFromLists(active());
-      save();
-      paintWallsList();
-      refreshBadge();
-      render();
-      toast(`Из отчёта: ${r.walls} стен · ${ (r.filled || []).length } блоков полей`);
     },
   });
 

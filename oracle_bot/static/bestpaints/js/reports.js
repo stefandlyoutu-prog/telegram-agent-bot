@@ -11,8 +11,8 @@ export function reportsPanelHtml(state = {}) {
   return `
     <div class="drawings-card" id="reports-card">
       <div class="scale-head">
-        <strong>Отчёт замерщика → замер</strong>
-        <span class="hint">Бланк «Отчет по замеру», DOCX-заметки, фото таблицы · AI раскладывает по полям</span>
+        <strong>Бланк в начале заявки</strong>
+        <span class="hint">Фото бланка «Отчет по замеру» и/или DOCX · заполнит клиента, стены и быт</span>
       </div>
       <div class="field">
         <label>Файлы (можно несколько: фото бланка + DOCX)</label>
