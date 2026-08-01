@@ -1165,8 +1165,55 @@ function audioHtml(obj) {
     .join("")}</ul><p class="hint">Прослушать: откройте переписку с ботом или попросите админа выгрузить.</p></div>`;
 }
 
-/** Назначение замерщика: график / список команды / создать нового */
-function assignSurveyorHtml(obj, meta) {
+/** Подсказка «что делать сейчас» по статусу */
+function stepCopy(status) {
+  const map = {
+    created: {
+      title: "Назначьте замерщика",
+      body: "Выберите из графика или списка — потом замерщик нажмёт «Взял в работу».",
+    },
+    assigned: {
+      title: "Ваш следующий шаг",
+      body: "Подтвердите, что берёте этот замер. Остальное — после этого.",
+    },
+    accepted: {
+      title: "Подтвердите выезд",
+      body: "Когда договорились о времени с клиентом — нажмите кнопку ниже.",
+    },
+    visit_confirmed: {
+      title: "На объекте?",
+      body: "Когда приехали — отметьте и откройте конструктор замера.",
+    },
+    on_site: {
+      title: "Замер и смета",
+      body: "Считайте в конструкторе. Потом отметьте исход: заключили или нет.",
+    },
+    contract_signed: {
+      title: "Договор есть",
+      body: "Проверьте чек-лист и закройте сделку, когда всё сдано.",
+    },
+    contract_declined: {
+      title: "Не заключили",
+      body: "Передайте менеджеру на защиту ТЗ или закройте позже.",
+    },
+    manager_assigned: {
+      title: "Менеджеру",
+      body: "Возьмите сделку в работу и работайте со сметой.",
+    },
+    manager_accepted: {
+      title: "В работе у менеджера",
+      body: "Закройте исход: заключили или завершите сделку.",
+    },
+    closed: {
+      title: "Сделка закрыта",
+      body: "При необходимости можно вернуть в работу.",
+    },
+  };
+  return map[status] || { title: "Сделка", body: "" };
+}
+
+/** Назначение замерщика: только когда реально нужно сверху; иначе — в «Ещё» */
+function assignSurveyorHtml(obj, meta, { forceOpen = false } = {}) {
   const needsAssign = obj.status === "created" || !obj.surveyor_id;
   const canReassign = ["created", "assigned", "accepted", "visit_confirmed"].includes(obj.status);
   if (!canReassign) return "";
@@ -1181,26 +1228,21 @@ function assignSurveyorHtml(obj, meta) {
     })
     .join("");
   const title = needsAssign ? "Назначить замерщика" : "Переназначить замерщика";
-  return `
-  <section class="crm-assign-box" id="crm-assign-box">
-    <h3>${esc(title)}</h3>
+  const inner = `
     <p class="hint">Сейчас: <strong>${esc(obj.surveyor_name || "не назначен")}</strong>
-      ${duty.length ? ` · в графике сегодня: ${esc(duty.map((s) => s.name).join(", "))}` : " · в графике сегодня никого"}</p>
-
-    <button type="button" class="btn primary block" id="crm-assign-from-schedule">Назначить из графика</button>
-
+      ${duty.length ? ` · в графике: ${esc(duty.map((s) => s.name).join(", "))}` : " · в графике никого"}</p>
+    <button type="button" class="btn primary block" id="crm-assign-from-schedule">Из графика на сегодня</button>
     <div class="crm-assign-manual">
-      <label>Вручную из списка
+      <label>Из списка команды
         <select id="crm-assign-sv">
-          <option value="">— выберите замерщика —</option>
+          <option value="">— выберите —</option>
           ${opts || ""}
         </select>
       </label>
       <button type="button" class="btn block" id="crm-assign-manual" ${all.length ? "" : "disabled"}>Назначить выбранного</button>
     </div>
-
     <details class="crm-assign-new" ${all.length ? "" : "open"}>
-      <summary>+ Создать нового замерщика и назначить</summary>
+      <summary>+ Новый замерщик</summary>
       <div class="crm-assign-new-form">
         <label>Имя<input id="crm-new-sv-name" required placeholder="Иван" /></label>
         <div class="crm-form-row">
@@ -1209,69 +1251,83 @@ function assignSurveyorHtml(obj, meta) {
         </div>
         <button type="button" class="btn primary block" id="crm-assign-create">Создать и назначить</button>
       </div>
-    </details>
-  </section>`;
+    </details>`;
+
+  if (needsAssign || forceOpen) {
+    return `<section class="crm-assign-box" id="crm-assign-box"><h3>${esc(title)}</h3>${inner}</section>`;
+  }
+  return `<details class="crm-fold" id="crm-assign-box"><summary>${esc(title)}</summary><div class="crm-assign-box flat">${inner}</div></details>`;
 }
 
 export function detailHtml(obj, events, meta) {
   const actions = NEXT_ACTIONS[obj.status] || [];
+  const step = stepCopy(obj.status);
+  const needsAssign = obj.status === "created" || !obj.surveyor_id;
   const mgrOpts = (meta?.staff?.managers || [])
     .map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`)
     .join("");
   const statusOpts = (meta?.statuses || [])
     .map((s) => `<option value="${esc(s.id)}" ${s.id === obj.status ? "selected" : ""}>${esc(s.label)}</option>`)
     .join("");
-  // На этапе «На адресе / смета» сумму не показываем — только после исхода (заключил / не заключил)
   const showMoney =
     ["contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed"].includes(obj.status) ||
     Number(obj.amount_total) > 0;
+  const showCabinet = ["on_site", "contract_signed", "contract_declined", "manager_assigned", "manager_accepted", "closed"].includes(
+    obj.status
+  );
+  const primary = actions.filter((a) => a.primary);
+  const secondary = actions.filter((a) => !a.primary);
   const assignHtml = assignSurveyorHtml(obj, meta);
+
   return `
   <header class="topbar">
     <div class="brand">
-      <strong>Сделка · ${esc(obj.title)}</strong>
+      <strong>${esc(obj.title || "Сделка")}</strong>
       <span>${statusPill(obj)}</span>
     </div>
     <button type="button" class="btn ghost" id="crm-back">← К списку</button>
   </header>
 
-  ${assignHtml}
+  <section class="crm-deal-hero">
+    <div class="crm-deal-line"><span>Адрес</span><b>${esc(obj.address || "—")}</b></div>
+    <div class="crm-deal-line"><span>Замер</span><b>${esc(obj.measure_date || "—")}</b></div>
+    <div class="crm-deal-line"><span>Клиент</span><b>${esc(obj.client_name || "—")}${obj.client_phone ? " · " + esc(obj.client_phone) : ""}</b></div>
+    <div class="crm-deal-line"><span>Замерщик</span><b>${esc(obj.surveyor_name || "не назначен")}</b></div>
+  </section>
 
-  <div class="crm-actions sticky-acts">
-    ${actions
-      .map((a) => {
-        const cls = a.primary ? "btn primary" : a.danger ? "btn danger" : "btn ghost";
-        return `<button type="button" class="${cls}" data-crm-act="${esc(a.action)}">${esc(a.label)}</button>`;
-      })
-      .join("")}
-  </div>
+  ${needsAssign ? assignHtml : ""}
+
   ${
-    obj.status === "contract_declined" || obj.status === "manager_assigned"
-      ? `<label class="crm-mgr">Менеджер<select id="crm-mgr">${mgrOpts}</select></label>`
+    !needsAssign && (primary.length || step.body)
+      ? `<section class="crm-step-card">
+    <p class="crm-step-kicker">${esc(step.title)}</p>
+    <p class="crm-step-body">${esc(step.body)}</p>
+    <div class="crm-step-actions">
+      ${primary
+        .map((a) => `<button type="button" class="btn primary block" data-crm-act="${esc(a.action)}">${esc(a.label)}</button>`)
+        .join("")}
+      ${secondary
+        .map((a) => {
+          const cls = a.danger ? "btn danger block" : "btn ghost block";
+          return `<button type="button" class="${cls}" data-crm-act="${esc(a.action)}">${esc(a.label)}</button>`;
+        })
+        .join("")}
+    </div>
+    ${
+      obj.status === "contract_declined" || obj.status === "manager_assigned"
+        ? `<label class="crm-mgr">Менеджер<select id="crm-mgr">${mgrOpts}</select></label>`
+        : ""
+    }
+  </section>`
       : ""
   }
-
-  <details class="crm-fold">
-    <summary>Данные сделки</summary>
-    <section class="hero-card crm-detail">
-      <p><strong>Адрес:</strong> ${esc(obj.address)}</p>
-      <p><strong>Дата замера:</strong> ${esc(obj.measure_date || "—")}</p>
-      <p><strong>Квалификация:</strong> ${esc(obj.qualification || "—")}</p>
-      <p><strong>Клиент:</strong> ${esc(obj.client_name)} ${esc(obj.client_phone)}</p>
-      <p><strong>Замерщик:</strong> ${esc(obj.surveyor_name || "—")} ${esc(obj.surveyor_phone || "")}</p>
-      <p><strong>Менеджер:</strong> ${esc(obj.manager_name || "—")}</p>
-      <p><strong>Лидоруб:</strong> ${esc(obj.lidarub_name || obj.ledorub_name || "—")}</p>
-      ${obj.survey_local_id ? `<p><strong>Локальный замер:</strong> ${esc(obj.survey_local_id)}</p>` : ""}
-      ${obj.escalated_at ? `<p class="crm-escalated">Эскалация (${fmtTs(obj.escalated_at)})</p>` : ""}
-    </section>
-  </details>
 
   ${
     showMoney
       ? `<details class="crm-fold" ${Number(obj.amount_total) > 0 ? "" : "open"}>
     <summary>Сумма и скидка${Number(obj.amount_total) > 0 ? ` · ${esc(moneyFmt(obj.amount_total))}` : ""}</summary>
     <section class="crm-money-box">
-      <p class="hint">После сметы в конструкторе. Попадает в аналитику.</p>
+      <p class="hint">После сметы. Попадает в аналитику и ЗП.</p>
       <div class="crm-form-row">
         <label>Сумма до скидки, ₽<input id="crm-money-sub" type="number" min="0" step="100" value="${esc(obj.amount_subtotal || "")}" /></label>
         <label>Скидка, %<input id="crm-money-disc" type="number" min="0" max="100" step="0.5" value="${esc(obj.discount_pct || 0)}" /></label>
@@ -1280,7 +1336,7 @@ export function detailHtml(obj, events, meta) {
         <label>Итого, ₽<input id="crm-money-total" type="number" min="0" step="100" value="${esc(obj.amount_total || "")}" readonly /></label>
         <label>Площадь, м²<input id="crm-money-area" type="number" min="0" step="0.1" value="${esc(obj.area_m2 || "")}" /></label>
       </div>
-      <button type="button" class="btn primary" id="crm-save-money">Сохранить в аналитику</button>
+      <button type="button" class="btn primary" id="crm-save-money">Сохранить</button>
     </section>
   </details>`
       : ""
@@ -1288,6 +1344,42 @@ export function detailHtml(obj, events, meta) {
 
   ${audioHtml(obj) ? `<details class="crm-fold"><summary>Аудио Лидоруба</summary>${audioHtml(obj)}</details>` : ""}
   ${checklistHtml(obj, meta) ? `<details class="crm-fold"><summary>Чек-лист</summary>${checklistHtml(obj, meta)}</details>` : ""}
+
+  <details class="crm-fold" ${showCabinet ? "" : ""} id="crm-cabinet-fold">
+    <summary>Кабинет клиента</summary>
+    <section class="crm-money-box" id="crm-cabinet-box">
+      <p class="hint">Ссылка клиенту после сметы. Вход по телефону, правки в логе.</p>
+      <div id="crm-cabinet-info" class="hint">Загрузка…</div>
+      <div class="crm-actions" style="margin-top:10px">
+        <button type="button" class="btn primary" id="crm-cab-open">Открыть / обновить</button>
+        <button type="button" class="btn ghost" id="crm-cab-copy" hidden>Копировать ссылку</button>
+        <button type="button" class="btn ghost" id="crm-cab-revoke" hidden>Отозвать</button>
+      </div>
+      <ul class="crm-events" id="crm-cabinet-logs" style="margin-top:12px"></ul>
+    </section>
+  </details>
+
+  <details class="crm-fold">
+    <summary>Подробности</summary>
+    <section class="crm-detail">
+      <p><strong>Квалификация:</strong> ${esc(obj.qualification || "—")}</p>
+      <p><strong>Менеджер:</strong> ${esc(obj.manager_name || "—")}</p>
+      <p><strong>Лидоруб:</strong> ${esc(obj.lidarub_name || obj.ledorub_name || "—")}</p>
+      ${obj.survey_local_id ? `<p><strong>Локальный замер:</strong> ${esc(obj.survey_local_id)}</p>` : ""}
+      ${obj.escalated_at ? `<p class="crm-escalated">Эскалация (${fmtTs(obj.escalated_at)})</p>` : ""}
+    </section>
+  </details>
+
+  ${!needsAssign ? assignHtml : ""}
+
+  <details class="crm-fold">
+    <summary>История</summary>
+    <ul class="crm-events">
+      ${(events || [])
+        .map((e) => `<li><span class="hint">${fmtTs(e.created_at)}</span> ${esc(e.message)}</li>`)
+        .join("") || "<li class='hint'>Пока пусто</li>"}
+    </ul>
+  </details>
 
   <details class="crm-admin">
     <summary>Исправить статус / удалить</summary>
@@ -1302,28 +1394,6 @@ export function detailHtml(obj, events, meta) {
     </div>
   </details>
 
-  <details class="crm-fold" open id="crm-cabinet-fold">
-    <summary>Кабинет клиента</summary>
-    <section class="crm-money-box" id="crm-cabinet-box">
-      <p class="hint">Ссылка для клиента: вход по телефону, можно менять технологию/ЛКМ. Все правки пишутся в лог.</p>
-      <div id="crm-cabinet-info" class="hint">Загрузка…</div>
-      <div class="crm-actions" style="margin-top:10px">
-        <button type="button" class="btn primary" id="crm-cab-open">Открыть / обновить кабинет</button>
-        <button type="button" class="btn ghost" id="crm-cab-copy" hidden>Копировать ссылку</button>
-        <button type="button" class="btn ghost" id="crm-cab-revoke" hidden>Отозвать</button>
-      </div>
-      <ul class="crm-events" id="crm-cabinet-logs" style="margin-top:12px"></ul>
-    </section>
-  </details>
-
-  <details class="crm-fold">
-    <summary>История</summary>
-    <ul class="crm-events">
-      ${(events || [])
-        .map((e) => `<li><span class="hint">${fmtTs(e.created_at)}</span> ${esc(e.message)}</li>`)
-        .join("") || "<li class='hint'>Пока пусто</li>"}
-    </ul>
-  </details>
   <p class="footer-note"><a href="/bestpaints/logout">Выйти</a></p>`;
 }
 

@@ -86,7 +86,7 @@ def main() -> int:
     ok("demo-report" in web, "server demo-report")
 
     sw = (BP / "sw.js").read_text(encoding="utf-8")
-    ok("bp-survey-v50" in sw, "cache v50")
+    ok("bp-survey-v51" in sw, "cache v51")
     ok("reports.js" in sw, "sw caches reports.js")
 
     # сохранить эталонный JSON для импорта/истории

@@ -1310,12 +1310,67 @@ h3 .pct-pill { margin-left: 8px; vertical-align: middle; }
   font-size: 0.88rem;
 }
 .sticky-acts { position: sticky; top: 52px; z-index: 15; background: rgba(15,20,18,.92); padding: 8px 0; backdrop-filter: blur(6px); }
+.crm-deal-hero {
+  margin: 4px 0 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(154,173,162,.18);
+  background: rgba(20,28,24,.7);
+  display: grid;
+  gap: 10px;
+}
+.crm-deal-line {
+  display: grid;
+  gap: 2px;
+}
+.crm-deal-line span {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.crm-deal-line b {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+}
+.crm-step-card {
+  margin: 0 0 16px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(196,163,90,.45);
+  background: linear-gradient(160deg, rgba(196,163,90,.16), rgba(20,28,24,.5));
+}
+.crm-step-kicker {
+  margin: 0 0 6px;
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.crm-step-body {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.crm-step-actions {
+  display: grid;
+  gap: 8px;
+}
 .crm-assign-box {
   margin: 8px 0 14px;
   padding: 14px;
   border-radius: 14px;
   border: 1px solid rgba(196,163,90,0.4);
   background: rgba(196,163,90,0.08);
+}
+.crm-assign-box.flat {
+  margin: 0;
+  border: 0;
+  background: transparent;
+  padding: 4px 0 8px;
 }
 .crm-assign-box h3 {
   margin: 0 0 6px;
