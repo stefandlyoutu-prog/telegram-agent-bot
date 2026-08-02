@@ -32,8 +32,8 @@ def format_teaser(teaser: str) -> str:
     return (
         f"{teaser}\n\n"
         "────────────\n"
-        "🔒 <b>Сценарий 2</b> — что изменится и конкретные шаги на 2 недели.\n"
-        f"⚡ Открой сейчас за <b>{price_hint}</b> · {premium_hint}"
+        "🔒 <b>Сценарий 2 закрыт</b> — что изменится и шаги на 2 недели.\n"
+        f"⚡ Сейчас <b>{price_hint}</b> · карта/СБП · {premium_hint}"
     )
 
 

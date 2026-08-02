@@ -1180,8 +1180,9 @@ async def api_admin_hot_recovery(
     intent_only: int = Query(0),
     flash_price: int | None = Query(None),
     hours: int | None = Query(None),
+    skip_recent_hours: int = Query(18),
 ):
-    """Дожим лидов. intent_only=1 — только payment_intent; flash_price=29 — спеццена."""
+    """Дожим лидов. intent_only=1 — только payment_intent; flash_price=19 — спеццена."""
     if user_id <= 0 or not is_admin_user(user_id):
         raise HTTPException(403, "Нет доступа")
     from oracle_bot.cloud import _bot
@@ -1190,23 +1191,59 @@ async def api_admin_hot_recovery(
     if not _bot:
         raise HTTPException(503, "Бот не инициализирован")
     fp = flash_price if flash_price and flash_price > 0 else None
-    window = hours if hours and hours > 0 else (720 if intent_only else 168)
+    window = hours if hours and hours > 0 else (720 if intent_only else 720)
     result = await run_hot_recovery(
         _bot,
-        limit=min(limit, 80),
+        limit=min(limit, 120),
         intent_only=bool(intent_only),
         flash_price=fp,
         hours=min(window, 720),
+        skip_recent_hours=max(0, min(skip_recent_hours, 72)),
+        second_nudge=True,
     )
     try:
         from oracle_bot.admin_notify import notify_admins
 
         tag = f" flash={fp}₽" if fp else ""
         mode = " intent-only" if intent_only else ""
-        summary = f"sent={result['sent']} skip={result['skip']} fail={result['fail']}{mode}{tag}"
+        summary = (
+            f"sent={result['sent']} skip={result['skip']} fail={result['fail']} "
+            f"pool={result.get('pool')}{mode}{tag}"
+        )
         await notify_admins(
             _bot,
             f"⚡ Flash recovery: {summary}\n" + "\n".join(result.get("details", [])[:15]),
+        )
+    except Exception:
+        pass
+    return result
+
+
+@app.post("/api/admin/winback")
+async def api_admin_winback(
+    user_id: int = Query(...),
+    flash_price: int = Query(19),
+    limit: int = Query(200),
+):
+    """Мягкая рассылка по живой базе: 2 сценария + премиум."""
+    if user_id <= 0 or not is_admin_user(user_id):
+        raise HTTPException(403, "Нет доступа")
+    from oracle_bot.cloud import _bot
+    from oracle_bot.hot_recovery import run_winback_broadcast
+
+    if not _bot:
+        raise HTTPException(503, "Бот не инициализирован")
+    result = await run_winback_broadcast(
+        _bot,
+        flash_price=max(9, min(flash_price, 99)),
+        limit=min(limit, 250),
+    )
+    try:
+        from oracle_bot.admin_notify import notify_admins
+
+        await notify_admins(
+            _bot,
+            f"📣 Winback: ok={result['ok']} fail={result['fail']} skip={result['skip']}",
         )
     except Exception:
         pass

@@ -829,6 +829,95 @@ def latest_locked_continuation(user_id: int) -> int | None:
     return int(row[0]) if row else None
 
 
+def locked_continuation_lead_ids(*, limit: int = 100) -> list[int]:
+    """Все с незакрытым Сценарием 2, без оплаты deep_unlock."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT c.user_id
+            FROM continuations c
+            WHERE c.unlocked = 0 AND c.user_id > 0
+              AND c.user_id NOT IN (
+                SELECT user_id FROM payments WHERE kind = 'deep_unlock'
+              )
+            ORDER BY c.id DESC
+            LIMIT ?
+            """,
+            (max(1, limit),),
+        ).fetchall()
+    return [int(r[0]) for r in rows]
+
+
+def mark_bot_blocked(user_id: int) -> None:
+    log_event(user_id, "bot_blocked", "1")
+
+
+def is_bot_blocked(user_id: int) -> bool:
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT 1 FROM events
+            WHERE user_id = ? AND event_type = 'bot_blocked'
+            ORDER BY id DESC LIMIT 1
+            """,
+            (user_id,),
+        ).fetchone()
+    return bool(row)
+
+
+def hours_since_event(user_id: int, event_type: str) -> float | None:
+    """Часов с последнего события; None если событий не было."""
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT created_at FROM events
+            WHERE user_id = ? AND event_type = ?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (user_id, event_type),
+        ).fetchone()
+    if not row or not row[0]:
+        return None
+    from datetime import datetime, timezone
+
+    raw = str(row[0]).replace("Z", "+00:00")
+    try:
+        ts = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    delta = datetime.now(timezone.utc) - ts.astimezone(timezone.utc)
+    return max(0.0, delta.total_seconds() / 3600.0)
+
+
+def broadcast_candidate_ids(*, limit: int = 200) -> list[int]:
+    """Живые юзеры для winback: были события за 60д, не premium, не bot_blocked."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT u.user_id FROM users u
+            WHERE u.user_id > 0
+              AND u.user_id NOT IN (
+                SELECT user_id FROM events WHERE event_type = 'bot_blocked'
+              )
+              AND (
+                SELECT COUNT(*) FROM payments p
+                WHERE p.user_id = u.user_id AND p.kind = 'premium_30d'
+              ) = 0
+              AND EXISTS (
+                SELECT 1 FROM events e
+                WHERE e.user_id = u.user_id
+                  AND e.created_at >= datetime('now', '-60 days')
+              )
+            ORDER BY u.user_id DESC
+            LIMIT ?
+            """,
+            (max(1, limit),),
+        ).fetchall()
+    return [int(r[0]) for r in rows]
+
+
 def create_invoice(
     user_id: int,
     kind: str,
