@@ -7,6 +7,8 @@
 1. **OpenAI / KupiAPI billing** — квота 429. Без этого голос и LLM-скрипты роликов падают на fallback.
    - https://platform.openai.com/account/billing
 2. ~~**YouTube OAuth**~~ — обновлён 2026-08-02; Shorts снова льются. При `invalid_grant` снова: `python scripts/youtube_authorize.py`.
+2b. **TikTok охват** — после пачки постов (~1 просмотр) автопост на паузе 48ч; дальше 1 ролик/день через `tiktok_daily_dropoff.py`. Проверить статус аккаунта в TikTok Studio.
+2c. **Render env** — при правке env через API только `PUT .../env-vars/{KEY}` по одному ключу. Bulk PUT затирает все переменные.
 3. **Новый Instagram** (старый `moracul_taro` отключён навсегда 19.07.2026):
    - другая почта + телефон;
    - прогрев 5–7 дней руками;
