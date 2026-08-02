@@ -99,6 +99,19 @@ def _day_ok(row: dict | None) -> bool:
     return any((plats.get(p) or {}).get("ok") for p in ("vk", "tiktok"))
 
 
+def _needs_publish(row: dict | None) -> bool:
+    """Нужен догон: нет VK/TikTok или ещё не вышел YouTube (и IG, если не skip)."""
+    plats = (row or {}).get("platforms") or {}
+    if not _day_ok(row):
+        return True
+    if (plats.get("youtube") or {}).get("ok") is not True:
+        return True
+    skip_ig = os.getenv("BIRTHDAY_SKIP_INSTAGRAM", "1").strip().lower() not in ("0", "false", "no")
+    if not skip_ig and (plats.get("instagram") or {}).get("ok") is not True:
+        return True
+    return False
+
+
 def publish(day: int, video: Path, *, when: date | None = None) -> dict:
     """Публикация. when — календарная дата выпуска (для догона пропущенных дней)."""
     when = when or date.today()
@@ -130,9 +143,14 @@ def publish(day: int, video: Path, *, when: date | None = None) -> dict:
     for platform in upload_platforms:
         if row["platforms"].get(platform, {}).get("ok") is True:
             continue
+        scheduled = ""
+        if platform == "tiktok":
+            # Не палим сразу с YouTube/VK: слот 19:00 МСК в день выпуска.
+            scheduled = f"{when.isoformat()}T19:00:00"
         res = post_uploadpost(
             _item(day, platform, video, when=when),
             platforms=[platform],
+            scheduled_iso=scheduled,
         )
         row["platforms"][platform] = {
             "ok": res.ok,
@@ -170,8 +188,8 @@ def catch_up(*, lookback: int = 7, force_render: bool = False, render_only: bool
         if when < series_start:
             continue
         key = when.isoformat()
-        if _day_ok(state.get(key)):
-            print(f"SKIP {key} already ok", flush=True)
+        if not _needs_publish(state.get(key)):
+            print(f"SKIP {key} already ok (vk/tt + youtube)", flush=True)
             continue
         day = when.day
         print(f"CATCH-UP {key} day={day}", flush=True)

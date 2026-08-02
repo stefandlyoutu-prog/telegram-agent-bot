@@ -45,9 +45,9 @@ ORACLE_CHANNEL_POSTS_ENABLED = os.getenv("ORACLE_CHANNEL_POSTS_ENABLED", "1") no
     "False",
 }
 ORACLE_CHANNEL_POST_INTERVAL_SEC = int(os.getenv("ORACLE_CHANNEL_POST_INTERVAL_SEC", "90"))
+# Не «запекаем» RENDER_EXTERNAL_URL в константу: иначе после смены env без
+# рестарта health/miniapp остаются на onrender.com. Читаем в cloud_webapp_url().
 ORACLE_WEBAPP_URL = os.getenv("ORACLE_WEBAPP_URL", "").strip().rstrip("/")
-if not ORACLE_WEBAPP_URL:
-    ORACLE_WEBAPP_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
 ORACLE_COACH_SEPARATE = os.getenv("ORACLE_COACH_SEPARATE", "0") not in {"1", "true", "True"}
 
 ORACLE_ADMIN_IDS: set[int] = {
@@ -107,7 +107,7 @@ ORACLE_DEEP_PRICE_RUB = int(os.getenv("ORACLE_DEEP_PRICE_RUB", "99"))
 # Цена ПЕРВОЙ разблокировки (разбить печать первой покупки: холодному юзеру -50%).
 # После первой любой оплаты действует обычный ORACLE_DEEP_PRICE_RUB.
 # Flash 24ч (до ~2026-07-11): первая разблокировка 29₽. Потом вернуть 49.
-ORACLE_DEEP_FIRST_PRICE_RUB = int(os.getenv("ORACLE_DEEP_FIRST_PRICE_RUB", "29"))
+ORACLE_DEEP_FIRST_PRICE_RUB = int(os.getenv("ORACLE_DEEP_FIRST_PRICE_RUB", "19"))
 ORACLE_EXCLUSIVE_HVD_PRICE_RUB = int(os.getenv("ORACLE_EXCLUSIVE_HVD_PRICE_RUB", "599"))
 ORACLE_ULTRA_PLUS_PRICE_RUB = int(os.getenv("ORACLE_ULTRA_PLUS_PRICE_RUB", "1499"))
 # PDF-довыгрузка: ХВД в книге PDF (+200₽), любой обычный расклад в PDF (+99₽)
@@ -130,11 +130,11 @@ def public_base_url() -> str:
 
 
 def cloud_webapp_url() -> str:
-    """HTTPS URL сервиса: явный ORACLE_WEBAPP_URL или Render."""
-    if ORACLE_WEBAPP_URL:
-        return ORACLE_WEBAPP_URL
-    base = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
-    return base
+    """HTTPS URL сервиса: явный ORACLE_WEBAPP_URL или Render (runtime getenv)."""
+    explicit = os.getenv("ORACLE_WEBAPP_URL", "").strip().rstrip("/") or ORACLE_WEBAPP_URL
+    if explicit:
+        return explicit
+    return os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
 
 
 def miniapp_entry_url() -> str:

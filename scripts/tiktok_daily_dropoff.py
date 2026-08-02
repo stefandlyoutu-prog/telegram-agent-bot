@@ -35,8 +35,8 @@ import os  # noqa: E402
 
 from video_bot.promo import oracle_promo as op  # noqa: E402
 
-# 1–2 ролика в день: щадящий режим для TikTok (уходим от бана spam_risk).
-PER_DAY = max(1, int(os.getenv("VIDEO_TIKTOK_PER_DAY", "2")))
+# 1 ролик в день: после spam_risk / ~1 просмотр — не давим ленту.
+PER_DAY = max(1, int(os.getenv("VIDEO_TIKTOK_PER_DAY", "1")))
 DOWNLOADS = Path.home() / "Downloads"
 
 _HASHTAGS = [
@@ -52,10 +52,11 @@ _BOT_LINK = "https://t.me/MOracul_bot?start=src_tiktok"
 
 
 def _caption(topic: str, idx: int) -> str:
+    # Ссылка — в первом комментарии / шапке; в title без t.me (меньше shadowban).
     return (
         f"{topic} 🌙\n"
-        f"2 сценария судьбы — бесплатно 👇\n"
-        f"{_BOT_LINK}\n"
+        "Напиши свой знак в комментариях — отвечу картой\n"
+        "Бот в шапке профиля · moracul.ru\n"
         f"{_HASHTAGS[idx % len(_HASHTAGS)]}"
     )
 
@@ -153,7 +154,8 @@ def main() -> None:
             report = ["нет площадок для автопостинга — залейте вручную из Downloads"]
         else:
             label = "+".join(p.upper() for p in plats)
-            slots_h = [9, 12, 15, 18, 21]  # время выхода по Москве
+            # Мало слотов, разнесено: утро / вечер (не 5 подряд).
+            slots_h = [11, 19]
             posted = failed = 0
             report: list[str] = []
             for idx, it in enumerate(items):

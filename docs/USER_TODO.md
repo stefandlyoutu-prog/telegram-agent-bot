@@ -6,7 +6,7 @@
 
 1. **OpenAI / KupiAPI billing** — квота 429. Без этого голос и LLM-скрипты роликов падают на fallback.
    - https://platform.openai.com/account/billing
-2. **YouTube OAuth заново** — токен `invalid_grant`, Shorts не льются.
+2. ~~**YouTube OAuth**~~ — обновлён 2026-08-02; Shorts снова льются. При `invalid_grant` снова: `python scripts/youtube_authorize.py`.
 3. **Новый Instagram** (старый `moracul_taro` отключён навсегда 19.07.2026):
    - другая почта + телефон;
    - прогрев 5–7 дней руками;

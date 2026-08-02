@@ -111,11 +111,13 @@ async def start_cloud() -> None:
         except Exception as e:
             logger.warning("WebApp menu: %s", e)
 
-    webhook_base = os.getenv("ORACLE_WEBHOOK_URL", "").strip() or os.getenv(
-        "RENDER_EXTERNAL_URL", ""
-    ).strip()
+    webhook_base = (
+        os.getenv("ORACLE_WEBHOOK_URL", "").strip()
+        or os.getenv("ORACLE_WEBAPP_URL", "").strip()
+        or os.getenv("RENDER_EXTERNAL_URL", "").strip()
+    )
     if not webhook_base:
-        raise RuntimeError("Задай RENDER_EXTERNAL_URL или ORACLE_WEBHOOK_URL")
+        raise RuntimeError("Задай ORACLE_WEBHOOK_URL / ORACLE_WEBAPP_URL / RENDER_EXTERNAL_URL")
     webhook_url = webhook_base.rstrip("/") + "/webhook"
     await _bot.delete_webhook(drop_pending_updates=False)
     await _bot.set_webhook(

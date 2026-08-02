@@ -71,6 +71,10 @@ def _first_comment(item: PromoItem, platform: str = "birthday") -> str:
         from video_bot.promo.birthday_series import first_comment
 
         return first_comment(day, platform)
+    # TikTok: ссылка в первом комменте, не в title (меньше shadowban).
+    if platform == "tiktok" or item.platform == "tiktok":
+        link = (item.link or "https://t.me/MOracul_bot?start=src_tiktok").strip()
+        return f"Бесплатный расклад → {link}"
     return ""
 
 
@@ -378,15 +382,31 @@ def post_uploadpost(item: PromoItem, *, platforms: list[str] | None = None,
     generic_tpl = _promo_setting("generic_caption_template", "").strip()
     site = _site_url()
     birth_day = _birthday_day(item)
+    _tt_tags = (
+        "#таро #гороскоп #эзотерика #предсказания #знакизодиака",
+        "#таро #любовь #расклад #гороскоп #эзотерика",
+        "#гороскоп #знакизодиака #таро #судьба #предсказание",
+        "#таро #раскладтаро #эзотерика #мистика #гадание",
+        "#гороскопнасегодня #таро #знакизодиака #вселенная #эзотерика",
+        "#датарождения #нумерология #характер #самопознание #таро",
+    )
+    tag_i = abs(hash(item.source or item.topic)) % len(_tt_tags)
     if birth_day:
-        from video_bot.promo.birthday_series import first_comment
-
         caption = (
             f"🔢 {item.topic}\n\n"
             "Сохрани, чтобы не забыть. Знаешь именинника с этим числом — отправь ему.\n"
-            "Какое число разобрать следующим? Пиши в комментариях — обязательно выпустим.\n\n"
-            f"{first_comment(birth_day, item.platform)}\n"
-            "#датарождения #нумерология #характер #самопознание"
+            "Какое число разобрать следующим? Пиши в комментариях.\n\n"
+            f"Бот в шапке · {site}\n"
+            f"{_tt_tags[birth_day % len(_tt_tags)]}"
+        )[:2100]
+    elif "tiktok" in plats and "instagram" not in plats:
+        # TikTok: хук + хэштеги, без t.me в title (ссылка — first_comment / шапка).
+        hook = _comment_hook_line() or "Напиши свой знак в комментариях — отвечу картой 👇"
+        caption = (
+            f"{caption_base}\n\n"
+            f"{hook}\n"
+            f"Бот в шапке профиля · {site}\n\n"
+            f"{_tt_tags[tag_i]}"
         )[:2100]
     elif "instagram" in plats:
         if ig_tpl:

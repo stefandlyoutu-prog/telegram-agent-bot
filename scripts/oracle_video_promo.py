@@ -187,11 +187,16 @@ def _admin_notify(text: str) -> None:
 def cmd_run(args: argparse.Namespace) -> None:
     """Полный день: рендер запланированных + загрузка на площадки + отчёт админу."""
     plan = op.load_plan()
+    tt_per_day = max(1, int(os.getenv("VIDEO_TIKTOK_PER_DAY", "1")))
     if not plan:
         # авто-план, чтобы cron работал «из коробки»
-        plan = op.build_month_plan(date.today(), {"youtube": 4, "tiktok": 4, "vk": 4}, days=30)
+        plan = op.build_month_plan(
+            date.today(),
+            {"youtube": 4, "tiktok": tt_per_day, "vk": 4},
+            days=30,
+        )
         op.save_plan(plan)
-        print("План отсутствовал — создан автоматически (4/день yt/tt/vk).")
+        print(f"План отсутствовал — создан автоматически (yt4/tt{tt_per_day}/vk4).")
     on = date.fromisoformat(args.date) if args.date else date.today()
     due = [i for i in op.due_items(plan, on)]
     platforms = {p.strip() for p in (args.platforms or "").split(",") if p.strip()}
@@ -199,6 +204,18 @@ def cmd_run(args: argparse.Namespace) -> None:
         due = [i for i in due if i.platform in platforms]
     if args.today_only:
         due = [i for i in due if i.date == on.isoformat()]
+    # TikTok только через tiktok_daily_dropoff.py (расписание + лимит 1/день).
+    # Иначе backlog dump (6 сразу) убивает охват → ~1 просмотр.
+    allow_tt = bool(getattr(args, "allow_tiktok", False))
+    if not allow_tt:
+        skipped_tt = sum(1 for i in due if i.platform == "tiktok")
+        due = [i for i in due if i.platform != "tiktok"]
+        if skipped_tt:
+            print(
+                f"SKIP {skipped_tt} tiktok (используй scripts/tiktok_daily_dropoff.py "
+                "или --allow-tiktok)",
+                flush=True,
+            )
     if args.limit:
         due = due[: args.limit]
     if not due:
@@ -307,6 +324,11 @@ def main() -> None:
     srun.add_argument("--no-llm", action="store_true")
     srun.add_argument("--platforms", default="", help="только эти площадки, через запятую: vk,youtube")
     srun.add_argument("--today-only", action="store_true", help="не подтягивать долги прошлых дней")
+    srun.add_argument(
+        "--allow-tiktok",
+        action="store_true",
+        help="разрешить TikTok здесь (по умолчанию только tiktok_daily_dropoff.py)",
+    )
     srun.set_defaults(func=cmd_run)
 
     srep = sub.add_parser("report", help="атрибуция трафика")

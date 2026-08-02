@@ -17,6 +17,12 @@ services:
         sync: false
       - key: ORACLE_BOT_USERNAME
         value: MOracul_bot
+      - key: ORACLE_SITE_URL
+        value: https://moracul.ru
+      - key: ORACLE_WEBAPP_URL
+        value: https://moracul.ru
+      - key: ORACLE_WEBHOOK_URL
+        value: https://moracul.ru
       - key: GROK_API_KEY
         sync: false
       - key: GEMINI_API_KEY
@@ -140,7 +146,9 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.9"
       - key: VIDEO_TIKTOK_PER_DAY
-        value: "2"
+        value: "1"
+      - key: UPLOAD_POST_SKIP_INSTAGRAM
+        value: "1"
       # LLM (сценарии + правка озвучки): платный OpenAI в приоритете
       - key: LLM_API_KEY
         sync: false
