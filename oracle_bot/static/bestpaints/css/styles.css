@@ -519,11 +519,12 @@ select.field-error {
   .custom-line input[data-cf="name"] { grid-column: 1 / -1; }
 }
 .custom-line.wall-line {
-  grid-template-columns: 1.6fr 0.8fr auto;
+  grid-template-columns: 1.4fr 0.9fr 0.7fr auto;
 }
 @media (max-width: 600px) {
   .custom-line.wall-line { grid-template-columns: 1fr 1fr auto; }
   .custom-line.wall-line input[data-cf="name"] { grid-column: 1 / -1; }
+  .custom-line.wall-line select[data-cf="zone"] { grid-column: 1 / -1; }
 }
 .check-inline {
   display: flex; align-items: center; gap: 8px;

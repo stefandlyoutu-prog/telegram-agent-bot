@@ -8,6 +8,7 @@
 import { compressImageFile } from "./photos.js";
 import { emptySurvey, uid } from "./calc.js";
 import { applyReportParse } from "./reports.js";
+import { WORK_ZONES } from "../data/objects.js";
 import * as store from "./storage.js";
 
 const PARSE_API = "/bestpaints/api/parse-project";
@@ -37,9 +38,14 @@ function optionsHtml(list, { emptyLabel } = {}) {
 
 function wallRowHtml(w) {
   const id = w.id || uid();
+  const zone = w.zone === "interior" ? "interior" : "facade";
   return `
   <div class="custom-line wall-line" data-wall-row="${esc(id)}">
     <input data-cf="name" placeholder="Имя стены (Стена01, СтенаА…)" value="${esc(w.label ?? "")}" />
+    <select data-cf="zone" title="Где красим эту стену">
+      <option value="facade" ${zone === "facade" ? "selected" : ""}>Снаружи (фасад)</option>
+      <option value="interior" ${zone === "interior" ? "selected" : ""}>Внутри (интерьер)</option>
+    </select>
     <input data-cf="qty" type="number" min="0" step="0.01" placeholder="Площадь, м²" value="${esc(w.areaManual ?? "")}" />
     <button type="button" class="btn ghost sm" data-line-del title="Убрать">✕</button>
   </div>`;
@@ -76,6 +82,7 @@ function reviewFormHtml(meta, data) {
   const svOpts = optionsHtml(meta?.staff?.surveyors, { emptyLabel: "Не назначен (авто из графика)" });
   const today = meta?.today || new Date().toISOString().slice(0, 10);
   const totalArea = walls.reduce((s, w) => s + (num(w.areaManual, 0) || 0), 0);
+  const hasInteriorWall = walls.some((w) => w.zone === "interior");
   return `
   <div class="crm-create" id="ip-review-form">
     <h3>Проверьте и дозаполните</h3>
@@ -102,11 +109,34 @@ function reviewFormHtml(meta, data) {
     </div>
     <label>Замерщик<select name="surveyor_id">${svOpts}</select></label>
 
-    <h4 class="subhead" style="margin:14px 0 6px">Стены / фасады из проекта</h4>
-    <p class="hint">Площади — как в проекте; замерщик уточнит на месте. Можно убрать/добавить/поправить.</p>
+    <h4 class="subhead" style="margin:14px 0 6px">Что красим</h4>
+    <div class="zone-toggles" id="ip-zones">
+      ${WORK_ZONES.map(
+        (z) => `
+        <label class="choice zone-check ${z.id === "facade" || (z.id === "interior" && hasInteriorWall) ? "selected" : ""}">
+          <input type="checkbox" data-ip-zone="${z.id}" ${z.id === "facade" || (z.id === "interior" && hasInteriorWall) ? "checked" : ""}>
+          <span><strong>${z.title}</strong><br><span class="hint">${z.hint}</span></span>
+        </label>`
+      ).join("")}
+    </div>
+    <p class="hint">
+      Из проекта обычно видно только площади ФАСАДА (развёртки стен). Если клиент хочет ещё и покраску
+      внутри — включите «Внутри» и добавьте строки ниже с зоной «интерьер» (площади стен/потолков можно
+      прикинуть по площади комнат из проекта, точно замерщик посчитает на месте).
+    </p>
+
+    <h4 class="subhead" style="margin:14px 0 6px">Стены из проекта</h4>
+    <p class="hint">Площади — как в проекте; замерщик уточнит на месте. Для каждой строки укажите зону (фасад/интерьер), можно убрать/добавить/поправить.</p>
     <div id="ip-walls">${walls.map(wallRowHtml).join("")}</div>
     <button type="button" class="btn ghost sm" id="ip-add-wall">+ Стена</button>
     <div class="hint" id="ip-total-hint" style="margin:8px 0"></div>
+
+    <div class="callout compact" style="margin:10px 0">
+      В проектной документации, как правило, НЕТ размеров проёмов (окна/двери), торцов/венцов, подшивы,
+      водостока и отливов — этого нет и в этом файле. Площади стен уже готовы под покраску, но остальное
+      наш калькулятор досчитает по своим тарифам только после того, как замерщик впишет эти цифры на месте
+      (в конструкторе на карточке сделки) — как и для любой обычной сделки.
+    </div>
 
     <label>Заметка / источник (для истории сделки)<textarea id="ip-source-note" rows="2" placeholder="напр. проект дома №2 от 15.07.2022, PDF от клиента">${esc(data?.notes ? data.notes.slice(0, 300) : "")}</textarea></label>
 
@@ -119,9 +149,18 @@ function readWalls(root) {
   return [...root.querySelectorAll("[data-wall-row]")]
     .map((row) => ({
       label: row.querySelector("[data-cf='name']")?.value.trim() || "",
+      zone: row.querySelector("[data-cf='zone']")?.value === "interior" ? "interior" : "facade",
       areaManual: num(row.querySelector("[data-cf='qty']")?.value, 0),
     }))
     .filter((w) => w.label && w.areaManual > 0);
+}
+
+function readZones(root) {
+  const zones = {};
+  root.querySelectorAll("[data-ip-zone]").forEach((cb) => {
+    zones[cb.getAttribute("data-ip-zone")] = cb.checked;
+  });
+  return zones;
 }
 
 async function fileToPayload(file) {
@@ -212,13 +251,36 @@ export function bindImportProjectPanel(root, { getMeta, toast, onCreated, actorR
   function bindReview(wrap, parsedData) {
     const wallsWrap = wrap.querySelector("#ip-walls");
     const totalHint = wrap.querySelector("#ip-total-hint");
+    const zonesWrap = wrap.querySelector("#ip-zones");
 
     const recalcTotal = () => {
-      const total = readWalls(wrap).reduce((s, w) => s + w.areaManual, 0);
-      totalHint.textContent = `Стен: ${readWalls(wrap).length} · суммарная площадь фасадов: ${Math.round(total).toLocaleString("ru-RU")} м²`;
+      const rows = readWalls(wrap);
+      const facade = rows.filter((w) => w.zone !== "interior").reduce((s, w) => s + w.areaManual, 0);
+      const interior = rows.filter((w) => w.zone === "interior").reduce((s, w) => s + w.areaManual, 0);
+      totalHint.textContent =
+        `Стен: ${rows.length} · фасад: ${Math.round(facade).toLocaleString("ru-RU")} м²` +
+        (interior ? ` · интерьер: ${Math.round(interior).toLocaleString("ru-RU")} м²` : "");
+      // если появилась хоть одна стена с зоной "интерьер" — включаем чекбокс "Внутри" автоматически
+      if (interior > 0) {
+        const cb = zonesWrap?.querySelector('[data-ip-zone="interior"]');
+        if (cb && !cb.checked) {
+          cb.checked = true;
+          cb.closest(".zone-check")?.classList.add("selected");
+        }
+      }
     };
 
-    wallsWrap.addEventListener("input", recalcTotal);
+    wallsWrap.addEventListener("input", (e) => {
+      recalcTotal();
+      if (e.target?.matches?.("[data-cf='zone']") && e.target.value === "interior") {
+        const cb = zonesWrap?.querySelector('[data-ip-zone="interior"]');
+        if (cb) {
+          cb.checked = true;
+          cb.closest(".zone-check")?.classList.add("selected");
+        }
+      }
+    });
+    wallsWrap.addEventListener("change", recalcTotal);
     wallsWrap.addEventListener("click", (e) => {
       const del = e.target.closest("[data-line-del]");
       if (!del) return;
@@ -228,6 +290,11 @@ export function bindImportProjectPanel(root, { getMeta, toast, onCreated, actorR
     wrap.querySelector("#ip-add-wall")?.addEventListener("click", () => {
       wallsWrap.insertAdjacentHTML("beforeend", wallRowHtml({ label: "", areaManual: "" }));
       recalcTotal();
+    });
+    zonesWrap?.querySelectorAll("[data-ip-zone]").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        cb.closest(".zone-check")?.classList.toggle("selected", cb.checked);
+      });
     });
     recalcTotal();
 
@@ -244,6 +311,7 @@ export function bindImportProjectPanel(root, { getMeta, toast, onCreated, actorR
         return;
       }
       const walls = readWalls(wrap);
+      const zonesChecked = readZones(wrap);
       const clientName = form.querySelector("[name=client_name]")?.value.trim() || "";
       const clientPhone = form.querySelector("[name=client_phone]")?.value.trim() || "";
       const address = form.querySelector("[name=address]")?.value.trim() || "";
@@ -256,11 +324,19 @@ export function bindImportProjectPanel(root, { getMeta, toast, onCreated, actorR
         {
           ...(parsedData || {}),
           client: { name: clientName, phone: clientPhone, address, surveyor: parsedData?.client?.surveyor || "" },
-          walls: walls.map((w) => ({ label: w.label, areaManual: w.areaManual, shape: "custom", zone: "facade" })),
+          walls: walls.map((w) => ({ label: w.label, areaManual: w.areaManual, shape: "custom", zone: w.zone })),
         },
         { replace: true }
       );
       survey.title = title;
+      // "Что красим": берём чекбоксы, но если по факту есть стены нужной зоны — не даём выключить зону,
+      // иначе конструктор откроется с уже заполненными стенами в зоне, которая не считается в смете.
+      const hasFacadeWall = walls.some((w) => w.zone !== "interior");
+      const hasInteriorWall = walls.some((w) => w.zone === "interior");
+      building.zones = {
+        facade: Boolean(zonesChecked.facade || hasFacadeWall),
+        interior: Boolean(zonesChecked.interior || hasInteriorWall),
+      };
 
       const btn = wrap.querySelector("#ip-submit");
       const status = wrap.querySelector("#ip-submit-status");
@@ -315,8 +391,10 @@ export function bindImportProjectPanel(root, { getMeta, toast, onCreated, actorR
           }
         }
 
-        status.innerHTML = `<span style="color:var(--ok,#6fcf97)">Готово!</span> Сделка «${esc(obj.title)}» создана, стен: ${walls.length}.
-          Технологию/краску и итоговую смету досчитайте в конструкторе на карточке сделки.
+        const facadeCount = walls.filter((w) => w.zone !== "interior").length;
+        const interiorCount = walls.filter((w) => w.zone === "interior").length;
+        status.innerHTML = `<span style="color:var(--ok,#6fcf97)">Готово!</span> Сделка «${esc(obj.title)}» создана, стен: ${facadeCount} фасад${interiorCount ? ` + ${interiorCount} интерьер` : ""}.
+          Технологию/краску (можно разную для стен/подшивы/фасада и интерьера) и итоговую смету досчитайте в конструкторе на карточке сделки.
           ${cabinetLink ? `<div style="margin-top:6px">Кабинет клиента: <a href="${esc(cabinetLink)}" target="_blank" rel="noopener">${esc(cabinetLink)}</a></div>` : ""}`;
         toast?.("Сделка создана из проекта дома");
         onCreated?.(obj);
