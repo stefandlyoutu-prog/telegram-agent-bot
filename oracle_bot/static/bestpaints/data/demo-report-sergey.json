@@ -13,7 +13,7 @@
     "material": "block",
     "materialSize": "брус",
     "houseType": "film",
-    "condition": "normal",
+    "condition": "medium",
     "removalDifficulty": "normal",
     "colors": "Adler",
     "oldCoatingNote": "Старое покрытие, чернеет",

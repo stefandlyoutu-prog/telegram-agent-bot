@@ -117,7 +117,7 @@ USER_PROMPT = """Разбери отчёт / бланк замера / заме�
     "material":"beam|log|hand_log|imit|block|board|other|",
     "materialSize":"",
     "houseType":"new|non_film|film|",
-    "condition":"good|normal|bad|",
+    "condition":"good|medium|bad|",
     "removalDifficulty":"easy|normal|hard|full_strip|",
     "colors":"",
     "oldCoatingNote":"",
@@ -401,7 +401,11 @@ def normalize_report(raw: dict[str, Any]) -> dict[str, Any]:
             ),
             "materialSize": _str(building_in.get("materialSize"), 40),
             "houseType": _choice(building_in.get("houseType"), {"new", "non_film", "film"}),
-            "condition": _choice(building_in.get("condition"), {"good", "normal", "bad"}),
+            # "normal" — старое (неверное) имя середины шкалы; фронтенд (tech-matrix.js) ждёт "medium".
+            "condition": _choice(
+                "medium" if _str(building_in.get("condition"), 40).lower() == "normal" else building_in.get("condition"),
+                {"good", "medium", "bad"},
+            ),
             "removalDifficulty": _choice(
                 building_in.get("removalDifficulty"),
                 {"easy", "normal", "hard", "full_strip"},
@@ -674,7 +678,7 @@ GOLDEN_SERGEY_CHERNY_RUCHEY: dict[str, Any] = {
         "material": "block",
         "materialSize": "брус",
         "houseType": "film",
-        "condition": "normal",
+        "condition": "medium",
         "removalDifficulty": "normal",
         "colors": "Adler",
         "oldCoatingNote": "Старое покрытие, чернеет",

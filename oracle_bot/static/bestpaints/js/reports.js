@@ -182,7 +182,8 @@ export function applyReportParse(survey, building, data, { replace = true, wallI
   if (binfo.material) building.material = binfo.material;
   if (binfo.materialSize) building.materialSize = binfo.materialSize;
   if (binfo.houseType) building.houseType = binfo.houseType;
-  if (binfo.condition) building.condition = binfo.condition;
+  // "normal" — устаревшее/неверное имя середины шкалы состояния; tech-matrix.js ждёт "medium".
+  if (binfo.condition) building.condition = binfo.condition === "normal" ? "medium" : binfo.condition;
   if (binfo.removalDifficulty) building.removalDifficulty = binfo.removalDifficulty;
   if (binfo.colors) building.colors = binfo.colors;
   if (binfo.oldCoatingNote) building.oldCoatingNote = binfo.oldCoatingNote;

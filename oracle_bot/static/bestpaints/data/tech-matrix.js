@@ -209,14 +209,26 @@ export const SEMI_LADDER = [
   { brand: "OSMO", productIncludes: "Holzschutz", label: "Премиум", tip: "OSMO Holzschutz Öl-Lasur" },
 ];
 
+// Защита от неизвестного/устаревшего значения (например старое "normal" вместо "medium"):
+// не роняем весь подбор техники/ЛКМ в пустоту, а откатываемся на безопасное значение.
+function _safeCondition(condition) {
+  if (condition === "good" || condition === "medium" || condition === "bad") return condition;
+  if (condition === "normal") return "medium";
+  return "good";
+}
+function _safeHouseType(houseType) {
+  if (houseType === "new" || houseType === "non_film" || houseType === "film") return houseType;
+  return "new";
+}
+
 export function getMatrixCell(houseType, condition, techId) {
-  const row = MATRIX[`${houseType}:${condition}`];
+  const row = MATRIX[`${_safeHouseType(houseType)}:${_safeCondition(condition)}`];
   if (!row) return null;
   return row[techId] || null;
 }
 
 export function recommendTechs(houseType, condition, materialId) {
-  const row = MATRIX[`${houseType}:${condition}`];
+  const row = MATRIX[`${_safeHouseType(houseType)}:${_safeCondition(condition)}`];
   if (!row) return [];
   let list = TECHNOLOGIES.map((t) => {
     const c = row[t.id];
