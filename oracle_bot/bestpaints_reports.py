@@ -226,9 +226,35 @@ def extract_docx_text(data: bytes) -> str:
     return text.strip()
 
 
+def extract_pdf_text(data: bytes) -> str:
+    """Текст из PDF (векторный текстовый слой — так экспортируют CAD/архитектурные программы,
+    поэтому даже сложные многостраничные проекты домов часто читаются как обычный текст, без vision).
+
+    PyMuPDF (fitz), а не pypdf: на плотных векторных чертежах (десятки листов, тысячи путей)
+    pypdf может разбирать один файл по 2+ минуты, а fitz — секунды (тот же движок, что у PDF-вьюеров).
+    """
+    if not data or len(data) < 50:
+        return ""
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        logger.warning("PyMuPDF не установлен — PDF нельзя прочитать как текст")
+        return ""
+    try:
+        with fitz.open(stream=data, filetype="pdf") as doc:
+            parts = [page.get_text() or "" for page in doc]
+        return "\n\n".join(x for x in parts if x).strip()
+    except Exception as e:
+        logger.warning("pdf extract fail: %s", e)
+        return ""
+
+
 def extract_plain_from_bytes(data: bytes, filename: str = "", mime: str = "") -> str:
     name = (filename or "").lower()
     mime = (mime or "").lower()
+    if name.endswith(".pdf") or mime == "application/pdf" or data[:5] == b"%PDF-":
+        # сканы без текстового слоя вернут пустую строку — вызывающий код попросит фото/скан страниц
+        return extract_pdf_text(data)
     if name.endswith(".docx") or "wordprocessingml" in mime or data[:2] == b"PK":
         try:
             return extract_docx_text(data)

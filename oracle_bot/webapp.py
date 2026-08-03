@@ -383,6 +383,9 @@ from oracle_bot.bestpaints_drawings import parse_drawing_bytes  # noqa: E402
 from oracle_bot.bestpaints_estimate_import import (  # noqa: E402
     parse_estimate_bundle,
 )
+from oracle_bot.bestpaints_project_import import (  # noqa: E402
+    parse_project_bundle,
+)
 from oracle_bot.bestpaints_reports import (  # noqa: E402
     GOLDEN_SERGEY_CHERNY_RUCHEY,
     decode_data_url,
@@ -524,9 +527,56 @@ async def bp_api_parse_estimate(request: Request):
     return result
 
 
+@app.post("/bestpaints/api/parse-project")
+async def bp_api_parse_project(request: Request):
+    """AI: проект дома (PDF планов/фасадов/развёрток стен, фото листов, DOCX, текст) → стены/площади."""
+    _bp_api_auth(request)
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise HTTPException(400, "Нужен JSON")
+    hint = str(data.get("hint") or "")
+    images: list[bytes] = []
+    texts: list[str] = []
+    for f in data.get("files") or []:
+        if not isinstance(f, dict):
+            continue
+        name = str(f.get("name") or "")
+        mime = str(f.get("mime") or "")
+        if f.get("imageDataUrl"):
+            try:
+                images.append(decode_data_url(str(f["imageDataUrl"])))
+            except (binascii.Error, ValueError) as e:
+                raise HTTPException(400, f"Битый файл {name}: {e}") from e
+            continue
+        b64 = f.get("dataBase64")
+        if not b64:
+            continue
+        try:
+            raw = base64.b64decode(str(b64), validate=False)
+        except (binascii.Error, ValueError) as e:
+            raise HTTPException(400, f"Битый base64 {name}: {e}") from e
+        lower = name.lower()
+        if mime.startswith("image/") or lower.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic")):
+            images.append(raw)
+        else:
+            plain = extract_plain_from_bytes(raw, filename=name, mime=mime)
+            if plain.strip():
+                texts.append(f"=== {name} ===\n{plain}")
+    if data.get("text"):
+        texts.append(str(data["text"]))
+    try:
+        result = await parse_project_bundle(images=images, texts=texts, hint=hint)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    except Exception as e:
+        raise HTTPException(502, f"Распознавание проекта недоступно: {e}") from e
+    return result
+
+
 @app.post("/bestpaints/api/objects/import-estimate")
 async def bp_api_import_estimate(request: Request):
-    """Создать сделку сразу из готовой сметы: клиент/суммы/роли + перевод в «На адресе»."""
+    """Создать сделку сразу из готовой сметы ИЛИ проекта дома (payload.source_kind: estimate|project):
+    клиент/суммы или стены/роли + перевод в «На адресе»."""
     _bp_api_auth(request)
     try:
         data = await request.json()

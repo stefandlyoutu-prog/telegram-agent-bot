@@ -518,6 +518,13 @@ select.field-error {
   .custom-line { grid-template-columns: 1fr 1fr; }
   .custom-line input[data-cf="name"] { grid-column: 1 / -1; }
 }
+.custom-line.wall-line {
+  grid-template-columns: 1.6fr 0.8fr auto;
+}
+@media (max-width: 600px) {
+  .custom-line.wall-line { grid-template-columns: 1fr 1fr auto; }
+  .custom-line.wall-line input[data-cf="name"] { grid-column: 1 / -1; }
+}
 .check-inline {
   display: flex; align-items: center; gap: 8px;
   font-size: 0.85rem; color: var(--muted); margin-top: 8px;

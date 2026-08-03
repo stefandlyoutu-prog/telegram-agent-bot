@@ -1,6 +1,7 @@
 /** BestPaints CRM — сделки Лидоруба, статусы, чек-листы, график. */
 
 import { importEstimateHtml, bindImportEstimatePanel } from "./estimate_import.js";
+import { importProjectHtml, bindImportProjectPanel } from "./project_import.js";
 
 const API = "/bestpaints/api";
 const CRM_ROLE_KEY = "bp_crm_role_v1";
@@ -203,7 +204,8 @@ export function boardHtml(objects) {
     <button type="button" class="crm-card" data-crm-open="${esc(o.id)}">
       <div class="crm-card-top">
         <strong>${esc(o.title)}</strong>
-        ${o.deal_source === "import_estimate" ? `<span class="crm-pill" style="--crm-c:#8e7cc3">Импорт</span>` : ""}
+        ${o.deal_source === "import_estimate" ? `<span class="crm-pill" style="--crm-c:#8e7cc3">Импорт сметы</span>` : ""}
+        ${o.deal_source === "import_project" ? `<span class="crm-pill" style="--crm-c:#6fa8dc">Импорт проекта</span>` : ""}
         ${statusPill(o)}
       </div>
       <div class="crm-card-meta">
@@ -414,11 +416,13 @@ export function homeCrmSectionHtml() {
           <div class="crm-panel-head-btns">
             <button type="button" class="btn primary" id="crm-toggle-create" ${canCreateDeals() ? "" : "hidden"}>+ Сделка</button>
             <button type="button" class="btn ghost" id="crm-toggle-import" ${canCreateDeals() ? "" : "hidden"}>Загрузить готовую смету</button>
+            <button type="button" class="btn ghost" id="crm-toggle-project" ${canCreateDeals() ? "" : "hidden"}>Загрузить проект дома</button>
           </div>
         </div>
         <p class="hint" id="crm-create-lock" ${canCreateDeals() ? "hidden" : ""}>Создание сделок — у лидоруба. Переключите роль выше, если вы лидоруб.</p>
         <div id="crm-create-wrap" class="crm-create-wrap" hidden></div>
         <div id="crm-import-wrap" class="crm-create-wrap" hidden></div>
+        <div id="crm-project-wrap" class="crm-create-wrap" hidden></div>
         <div id="crm-filter-bar" class="crm-filter-bar" hidden></div>
         <div id="crm-deals-list"></div>
       </div>
@@ -817,12 +821,15 @@ export async function mountHomeCrm(ctx) {
   function syncCreateUi() {
     const toggle = root.querySelector("#crm-toggle-create");
     const importToggle = root.querySelector("#crm-toggle-import");
+    const projectToggle = root.querySelector("#crm-toggle-project");
     const lock = root.querySelector("#crm-create-lock");
     const wrap = root.querySelector("#crm-create-wrap");
     const importWrap = root.querySelector("#crm-import-wrap");
+    const projectWrap = root.querySelector("#crm-project-wrap");
     const ok = canCreateDeals();
     if (toggle) toggle.hidden = !ok;
     if (importToggle) importToggle.hidden = !ok;
+    if (projectToggle) projectToggle.hidden = !ok;
     if (lock) lock.hidden = ok;
     if (!ok && wrap) {
       wrap.hidden = true;
@@ -831,6 +838,10 @@ export async function mountHomeCrm(ctx) {
     if (!ok && importWrap) {
       importWrap.hidden = true;
       importWrap.innerHTML = "";
+    }
+    if (!ok && projectWrap) {
+      projectWrap.hidden = true;
+      projectWrap.innerHTML = "";
     }
   }
 
@@ -1130,11 +1141,18 @@ export async function mountHomeCrm(ctx) {
         wrap.hidden = true;
         return;
       }
+      closeOtherCreateWraps(wrap);
       const m = await getMeta();
       wrap.innerHTML = createFormHtml(m);
       wrap.hidden = false;
       bindCreateForm(wrap.querySelector("#crm-create-form"));
     };
+  }
+
+  function closeOtherCreateWraps(keep) {
+    for (const w of [wrap, root.querySelector("#crm-import-wrap"), root.querySelector("#crm-project-wrap")]) {
+      if (w && w !== keep) w.hidden = true;
+    }
   }
 
   const importToggle = root.querySelector("#crm-toggle-import");
@@ -1149,9 +1167,7 @@ export async function mountHomeCrm(ctx) {
         importWrap.hidden = true;
         return;
       }
-      if (wrap) {
-        wrap.hidden = true;
-      }
+      closeOtherCreateWraps(importWrap);
       importWrap.innerHTML = importEstimateHtml();
       importWrap.hidden = false;
       bindImportEstimatePanel(importWrap, {
@@ -1161,6 +1177,36 @@ export async function mountHomeCrm(ctx) {
         onCreated: async (obj) => {
           importWrap.hidden = true;
           importWrap.innerHTML = "";
+          objects = await fetchObjects();
+          paintDeals();
+          onOpenDetail(obj.id);
+        },
+      });
+    };
+  }
+
+  const projectToggle = root.querySelector("#crm-toggle-project");
+  const projectWrap = root.querySelector("#crm-project-wrap");
+  if (projectToggle && projectWrap) {
+    projectToggle.onclick = () => {
+      if (!canCreateDeals()) {
+        toast("Сделки создаёт лидоруб или админ");
+        return;
+      }
+      if (!projectWrap.hidden && projectWrap.innerHTML) {
+        projectWrap.hidden = true;
+        return;
+      }
+      closeOtherCreateWraps(projectWrap);
+      projectWrap.innerHTML = importProjectHtml();
+      projectWrap.hidden = false;
+      bindImportProjectPanel(projectWrap, {
+        getMeta,
+        toast,
+        actorRole: getCrmRole(),
+        onCreated: async (obj) => {
+          projectWrap.hidden = true;
+          projectWrap.innerHTML = "";
           objects = await fetchObjects();
           paintDeals();
           onOpenDetail(obj.id);
@@ -1435,6 +1481,7 @@ export function detailHtml(obj, events, meta) {
       <p><strong>Менеджер:</strong> ${esc(obj.manager_name || "—")}</p>
       <p><strong>Лидоруб:</strong> ${esc(obj.lidarub_name || obj.ledorub_name || "—")}</p>
       ${obj.deal_source === "import_estimate" ? `<p><strong>Источник:</strong> импорт готовой сметы (см. «История»)</p>` : ""}
+      ${obj.deal_source === "import_project" ? `<p><strong>Источник:</strong> импорт проекта дома (см. «История»)</p>` : ""}
       ${obj.survey_local_id ? `<p><strong>Локальный замер:</strong> ${esc(obj.survey_local_id)}</p>` : ""}
       ${obj.escalated_at ? `<p class="crm-escalated">Эскалация (${fmtTs(obj.escalated_at)})</p>` : ""}
     </section>

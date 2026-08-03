@@ -1022,28 +1022,42 @@ def create_object(payload: dict[str, Any]) -> dict[str, Any]:
     return obj
 
 
+_IMPORT_KIND_TITLES = {
+    "estimate": "Смета (импорт)",
+    "project": "Проект дома (импорт)",
+}
+_IMPORT_KIND_QUALIFICATION = {
+    "estimate": "Импорт готовой сметы — уже отправлена клиенту другим способом",
+    "project": "Импорт проекта дома — стены/площади из проектной документации, смету считаем в конструкторе",
+}
+
+
 def create_imported_deal(payload: dict[str, Any]) -> dict[str, Any]:
-    """Сделка из уже готовой сметы (отправленной клиенту раньше другим способом).
+    """Сделка из готовой сметы ИЛИ из проекта дома (source_kind: estimate|project).
 
     Один вызов: создаёт объект (с ручным выбором лидоруба/менеджера/замерщика)
-    и сразу переводит его в «На адресе · замер» с суммой/скидкой/локальным ID сметы —
-    чтобы дальше работали обычные кнопки «Заключил» / «Не заключил» и кабинет клиента.
+    и сразу переводит его в «На адресе · замер» с данными источника (сумма/скидка для сметы,
+    локальный ID замера со стенами для проекта) — чтобы дальше работали обычные кнопки
+    «Заключил» / «Не заключил» и кабинет клиента.
     """
+    kind = (payload.get("source_kind") or "estimate").strip()
+    if kind not in _IMPORT_KIND_TITLES:
+        kind = "estimate"
     client = payload.get("client") if isinstance(payload.get("client"), dict) else {}
     create_payload = {
-        "title": (payload.get("title") or client.get("name") or "").strip() or "Смета (импорт)",
+        "title": (payload.get("title") or client.get("name") or "").strip() or _IMPORT_KIND_TITLES[kind],
         "address": (payload.get("address") or client.get("address") or "").strip(),
         "client_name": (payload.get("client_name") or client.get("name") or "").strip(),
         "client_phone": (payload.get("client_phone") or client.get("phone") or "").strip(),
         "measure_date": (payload.get("measure_date") or "").strip() or today_str(),
-        "qualification": (payload.get("qualification") or "").strip()
-        or "Импорт готовой сметы — уже отправлена клиенту другим способом",
+        "qualification": (payload.get("qualification") or "").strip() or _IMPORT_KIND_QUALIFICATION[kind],
         "surveyor_id": payload.get("surveyor_id") or "",
         "lidarub_id": payload.get("lidarub_id") or "",
         "manager_id": payload.get("manager_id") or "",
-        "deal_source": "import_estimate",
+        "deal_source": f"import_{kind}",
     }
     obj = create_object(create_payload)
+    payload = {**payload, "source_kind": kind}
     return transition(obj["id"], "import_estimate", payload)
 
 
@@ -1412,9 +1426,11 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         ).replace(",", " ")
 
     elif action == "import_estimate":
-        # Смета уже была рассчитана и отправлена клиенту другим способом (до CRM) —
-        # сразу переводим сделку в «На адресе · замер» (эквивалент «замер и смета готовы»),
-        # дальше обычные кнопки «Заключил» / «Не заключил».
+        # Смета/проект уже были готовы до CRM (отправлены клиенту другим способом, или это
+        # проектная документация со стенами до выезда замерщика) — сразу переводим сделку
+        # в «На адресе · замер» (эквивалент «замер готов»), дальше обычные кнопки
+        # «Заключил» / «Не заключил», конструктор/смета досчитывается на месте.
+        kind = (payload.get("source_kind") or "estimate").strip()
         updates["status"] = "on_site"
         updates["assigned_at"] = obj.get("assigned_at") or now
         updates["accepted_at"] = obj.get("accepted_at") or now
@@ -1426,7 +1442,8 @@ def transition(oid: str, action: str, payload: dict[str, Any] | None = None) -> 
         total_val = float(updates.get("amount_total", obj.get("amount_total") or 0) or 0)
         disc_val = float(updates.get("discount_pct", obj.get("discount_pct") or 0) or 0)
         src_note = (payload.get("source_note") or "").strip()
-        parts = [f"Импорт готовой сметы (роль оператора: {payload.get('actor_role') or 'лидоруб'})"]
+        kind_label = "проекта дома" if kind == "project" else "готовой сметы"
+        parts = [f"Импорт {kind_label} (роль оператора: {payload.get('actor_role') or 'лидоруб'})"]
         if src_note:
             parts.append(f"источник: {src_note}"[:200])
         if total_val:
