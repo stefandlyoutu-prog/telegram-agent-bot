@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -71,8 +72,6 @@ SITE_PAGES: dict[str, str] = {
 
 
 def _inject_metrika(html: str) -> str:
-    import os
-
     cid = os.getenv("ORACLE_YANDEX_METRIKA_ID", "").strip()
     if not cid.isdigit():
         return html
@@ -168,8 +167,6 @@ def page_numerologiya(request: Request):
 def landing_page_legacy(request: Request):
     """Старый лендинг (архив) — основной сайт на /."""
     _log_web_visit("/landing-legacy", request)
-    import os
-
     html = (SITE / "landing.html").read_text(encoding="utf-8")
     html = html.replace("https://moracul.onrender.com/landing", site_base_url())
     html = html.replace("{{BASE}}", site_base_url())
