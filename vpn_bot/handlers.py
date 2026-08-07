@@ -20,7 +20,7 @@ from vpn_bot.config import (
     get_tariff,
     robokassa_configured,
 )
-from vpn_bot.keyboards import kb_back, kb_main, kb_pay, kb_tariffs
+from vpn_bot.keyboards import kb_back, kb_key, kb_main, kb_pay, kb_tariffs
 from vpn_bot.marzban_client import MarzbanClient, MarzbanError
 from vpn_bot.robokassa import build_payment_url
 
@@ -87,6 +87,8 @@ async def cb_howto(callback: CallbackQuery) -> None:
 
 
 async def _send_key_card(callback_or_message, user_id: int, subscription_url: str, expires_at: str | None) -> None:
+    import html
+
     import qrcode
 
     qr_img = qrcode.make(subscription_url, box_size=8, border=2)
@@ -96,12 +98,18 @@ async def _send_key_card(callback_or_message, user_id: int, subscription_url: st
     caption = (
         f"🔑 <b>Твой ключ</b>\n"
         f"Активен до: <b>{_fmt_expiry(expires_at)}</b>\n\n"
-        f"Ссылка подписки:\n<code>{subscription_url}</code>\n\n"
-        "Вставь её в Happ/v2rayNG/Hiddify (кнопка «❓ Как подключить», если нужна инструкция)."
+        "QR для сканирования или скопируй ссылку в следующем сообщении 👇"
     )
     photo = BufferedInputFile(buf.read(), filename="vpn_key_qr.png")
     target = callback_or_message.message if isinstance(callback_or_message, CallbackQuery) else callback_or_message
-    await target.answer_photo(photo=photo, caption=caption, reply_markup=kb_back())
+    await target.answer_photo(photo=photo, caption=caption)
+    safe_url = html.escape(subscription_url)
+    await target.answer(
+        "👇 <b>Нажми на ссылку</b> — скопируется в буфер:\n\n"
+        f"<code>{safe_url}</code>\n\n"
+        "Или нажми «📋 Скопировать ключ» и вставь в Happ / v2rayNG / Hiddify.",
+        reply_markup=kb_key(subscription_url),
+    )
 
 
 @router.callback_query(F.data == "my_key")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
 
 from vpn_bot.config import (
     VPN_HELP_CONTACT,
@@ -64,4 +64,20 @@ def kb_pay(pay_url: str, inv_id: int) -> InlineKeyboardMarkup:
 def kb_back() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="« В меню", callback_data="back_main")]]
+    )
+
+
+def kb_key(subscription_url: str) -> InlineKeyboardMarkup:
+    """Ключ: кнопка copy_text + инструкция + меню."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📋 Скопировать ключ",
+                    copy_text=CopyTextButton(text=subscription_url),
+                )
+            ],
+            [InlineKeyboardButton(text="❓ Как подключить", callback_data="howto")],
+            [InlineKeyboardButton(text="« В меню", callback_data="back_main")],
+        ]
     )
