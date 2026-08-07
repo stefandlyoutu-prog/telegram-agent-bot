@@ -41,8 +41,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="m-Oracul WebApp", version="1.0", lifespan=lifespan)
 
 from oracle_bot.cloud import router_cloud  # noqa: E402
+from vpn_bot.cloud import router_vpn  # noqa: E402
 
 app.include_router(router_cloud)
+app.include_router(router_vpn)
 
 
 def site_base_url() -> str:

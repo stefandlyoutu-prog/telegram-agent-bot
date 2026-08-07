@@ -127,6 +127,9 @@ async def start_cloud() -> None:
     )
     logger.info("Webhook: %s", webhook_url)
     await _init_bestpaints_bot()
+    from vpn_bot.cloud import init_vpn_bot
+
+    await init_vpn_bot()
 
     if ORACLE_PUSH_ENABLED:
         _push_task = asyncio.create_task(push_worker(_bot, ORACLE_PUSH_INTERVAL_SEC))
@@ -190,6 +193,9 @@ async def stop_cloud() -> None:
         await _bot.session.close()
         _bot = None
     _dp = None
+    from vpn_bot.cloud import stop_vpn_bot
+
+    await stop_vpn_bot()
 
 
 @router_cloud.post("/webhook")
@@ -235,14 +241,26 @@ async def health():
             bot_user = me.username
         except Exception:
             bot_user = "error"
+    from vpn_bot.cloud import vpn_runtime
+
+    vpn_bot, vpn_dp = vpn_runtime()
+    vpn_user = None
+    if vpn_bot:
+        try:
+            me = await vpn_bot.get_me()
+            vpn_user = me.username
+        except Exception:
+            vpn_user = "error"
     return {
         "ok": True,
         "mode": "webhook_sync",
         "bot_ready": _bot is not None and _dp is not None,
         "bot": bot_user,
+        "vpn_bot_ready": vpn_bot is not None and vpn_dp is not None,
+        "vpn_bot": vpn_user,
         "webapp": miniapp_entry_url() or ORACLE_WEBAPP_URL or cloud_webapp_url(),
         "version": commit or "local",
-        "routes": ["/landing", "/oferta", "/admin"],
+        "routes": ["/landing", "/oferta", "/admin", "/webhook/vpn"],
     }
 
 

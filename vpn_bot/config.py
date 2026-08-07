@@ -102,7 +102,9 @@ def robokassa_configured() -> bool:
 def public_base_url() -> str:
     """Публичный HTTPS-адрес бота (для Robokassa Result/Success URL)."""
     base = (
-        os.getenv("VPN_WEBHOOK_URL", "").strip()
+        os.getenv("ORACLE_WEBHOOK_URL", "").strip()
+        or os.getenv("VPN_WEBHOOK_URL", "").strip()
+        or os.getenv("ORACLE_WEBAPP_URL", "").strip()
         or os.getenv("RENDER_EXTERNAL_URL", "").strip()
     )
     return base.rstrip("/")

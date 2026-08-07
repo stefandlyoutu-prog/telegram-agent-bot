@@ -1,4 +1,4 @@
-"""Облачный режим VPN-бота: webhook Telegram + Robokassa callbacks (Render)."""
+"""Облачный режим VPN-бота: монтируется в moracul (webhook + Robokassa)."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ from aiogram.types import ErrorEvent, Update
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-from vpn_bot.telegram_net import create_telegram_session
 from vpn_bot.config import VPN_BOT_TOKEN, VPN_BOT_USERNAME
-from vpn_bot.handlers import router
+from vpn_bot.handlers import router as vpn_router
 from vpn_bot.storage import init_db
+from vpn_bot.telegram_net import create_telegram_session
 
 logger = logging.getLogger("vpn_bot.cloud")
 
@@ -28,9 +28,17 @@ _dp: Optional[Dispatcher] = None
 _seen_updates: dict[int, float] = {}
 _SEEN_TTL_SEC = 3600
 
-router_cloud = APIRouter()
-
+router_vpn = APIRouter()
 ALLOWED_UPDATES = ["message", "edited_message", "callback_query"]
+
+
+def _webhook_base() -> str:
+    return (
+        os.getenv("ORACLE_WEBHOOK_URL", "").strip()
+        or os.getenv("VPN_WEBHOOK_URL", "").strip()
+        or os.getenv("ORACLE_WEBAPP_URL", "").strip()
+        or os.getenv("RENDER_EXTERNAL_URL", "").strip()
+    )
 
 
 def _prune_seen() -> None:
@@ -42,10 +50,12 @@ def _prune_seen() -> None:
             _seen_updates.pop(uid, None)
 
 
-async def start_cloud() -> None:
+async def init_vpn_bot() -> None:
+    """Поднимает VPN-бота и вешает webhook на /webhook/vpn (если задан VPN_BOT_TOKEN)."""
     global _bot, _dp
     if not VPN_BOT_TOKEN:
-        raise RuntimeError("VPN_BOT_TOKEN не задан")
+        logger.info("VPN bot: токен не задан — пропуск")
+        return
     init_db()
     _bot = Bot(
         token=VPN_BOT_TOKEN,
@@ -59,24 +69,22 @@ async def start_cloud() -> None:
         logger.exception("handler error: %s", event.exception)
         return True
 
-    _dp.include_router(router)
+    _dp.include_router(vpn_router)
     me = await _bot.get_me()
-    logger.info("VPN-бот облако: @%s webhook", me.username)
-    print(f"vpn_bot cloud ready: @{me.username}", flush=True)
+    logger.info("VPN bot: @%s", me.username)
+    print(f"vpn_bot ready on moracul: @{me.username}", flush=True)
 
-    webhook_base = (
-        os.getenv("VPN_WEBHOOK_URL", "").strip()
-        or os.getenv("RENDER_EXTERNAL_URL", "").strip()
-    )
+    webhook_base = _webhook_base()
     if not webhook_base:
-        raise RuntimeError("Задай VPN_WEBHOOK_URL / RENDER_EXTERNAL_URL")
-    webhook_url = webhook_base.rstrip("/") + "/webhook"
+        logger.warning("VPN bot: webhook base URL не задан")
+        return
+    webhook_url = webhook_base.rstrip("/") + "/webhook/vpn"
     await _bot.delete_webhook(drop_pending_updates=False)
     await _bot.set_webhook(webhook_url, allowed_updates=ALLOWED_UPDATES, drop_pending_updates=False)
-    logger.info("Webhook: %s", webhook_url)
+    logger.info("VPN webhook: %s", webhook_url)
 
 
-async def stop_cloud() -> None:
+async def stop_vpn_bot() -> None:
     global _bot, _dp
     if _bot:
         try:
@@ -88,16 +96,20 @@ async def stop_cloud() -> None:
     _dp = None
 
 
-@router_cloud.post("/webhook")
-async def telegram_webhook(request: Request):
+def vpn_runtime() -> tuple[Optional[Bot], Optional[Dispatcher]]:
+    return _bot, _dp
+
+
+@router_vpn.post("/webhook/vpn")
+async def vpn_webhook(request: Request):
     if not _bot or not _dp:
-        logger.warning("webhook before bot ready")
+        logger.warning("vpn webhook before bot ready")
         return {"ok": False}
     try:
         data = await request.json()
         update = Update.model_validate(data, context={"bot": _bot})
     except Exception:
-        logger.exception("webhook parse error")
+        logger.exception("vpn webhook parse error")
         return {"ok": True}
 
     if update.update_id in _seen_updates:
@@ -107,20 +119,8 @@ async def telegram_webhook(request: Request):
         _prune_seen()
         _seen_updates[update.update_id] = time.time()
     except Exception:
-        logger.exception("feed_update %s failed", update.update_id)
+        logger.exception("vpn feed_update %s failed", update.update_id)
     return {"ok": True}
-
-
-@router_cloud.get("/health")
-async def health():
-    bot_user = None
-    if _bot:
-        try:
-            me = await _bot.get_me()
-            bot_user = me.username
-        except Exception:
-            bot_user = "error"
-    return {"ok": True, "bot_ready": _bot is not None and _dp is not None, "bot": bot_user}
 
 
 async def _robokassa_payload(request: Request) -> dict[str, str]:
@@ -142,22 +142,6 @@ async def _robokassa_fulfill(inv_id: int) -> None:
         asyncio.create_task(notify_paid(_bot, inv))
 
 
-@router_cloud.api_route("/robokassa/result", methods=["GET", "POST"])
-async def robokassa_result(request: Request):
-    from vpn_bot.robokassa import check_result_signature
-
-    data = await _robokassa_payload(request)
-    if not check_result_signature(data):
-        logger.warning("robokassa result: bad signature inv=%s", data.get("InvId"))
-        return PlainTextResponse("bad sign", status_code=400)
-    try:
-        inv_id = int(data["InvId"])
-    except (KeyError, ValueError):
-        return PlainTextResponse("bad inv", status_code=400)
-    await _robokassa_fulfill(inv_id)
-    return PlainTextResponse(f"OK{inv_id}")
-
-
 def _back_to_bot_html(title: str, message: str) -> str:
     link = f"https://t.me/{VPN_BOT_USERNAME}" if VPN_BOT_USERNAME else "https://t.me/"
     return (
@@ -174,8 +158,24 @@ def _back_to_bot_html(title: str, message: str) -> str:
     )
 
 
-@router_cloud.api_route("/robokassa/success", methods=["GET", "POST"])
-async def robokassa_success(request: Request):
+@router_vpn.api_route("/vpn/robokassa/result", methods=["GET", "POST"])
+async def vpn_robokassa_result(request: Request):
+    from vpn_bot.robokassa import check_result_signature
+
+    data = await _robokassa_payload(request)
+    if not check_result_signature(data):
+        logger.warning("vpn robokassa result: bad signature inv=%s", data.get("InvId"))
+        return PlainTextResponse("bad sign", status_code=400)
+    try:
+        inv_id = int(data["InvId"])
+    except (KeyError, ValueError):
+        return PlainTextResponse("bad inv", status_code=400)
+    await _robokassa_fulfill(inv_id)
+    return PlainTextResponse(f"OK{inv_id}")
+
+
+@router_vpn.api_route("/vpn/robokassa/success", methods=["GET", "POST"])
+async def vpn_robokassa_success(request: Request):
     from vpn_bot.robokassa import check_success_signature
 
     data = await _robokassa_payload(request)
@@ -193,12 +193,8 @@ async def robokassa_success(request: Request):
     )
 
 
-@router_cloud.api_route("/robokassa/fail", methods=["GET", "POST"])
-async def robokassa_fail(request: Request):
+@router_vpn.api_route("/vpn/robokassa/fail", methods=["GET", "POST"])
+async def vpn_robokassa_fail(request: Request):
     return HTMLResponse(
         _back_to_bot_html("Оплата не завершена", "Платёж отменён. Можно попробовать снова в боте.")
     )
-
-
-def cloud_runtime() -> tuple[Optional[Bot], Optional[Dispatcher]]:
-    return _bot, _dp
