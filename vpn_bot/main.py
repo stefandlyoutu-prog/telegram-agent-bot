@@ -11,7 +11,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from bot.services.telegram_net import create_telegram_session
+from vpn_bot.telegram_net import create_telegram_session
 from vpn_bot.config import VPN_BOT_TOKEN
 from vpn_bot.handlers import router
 from vpn_bot.storage import init_db

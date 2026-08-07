@@ -16,7 +16,7 @@ from aiogram.types import ErrorEvent, Update
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-from bot.services.telegram_net import create_telegram_session
+from vpn_bot.telegram_net import create_telegram_session
 from vpn_bot.config import VPN_BOT_TOKEN, VPN_BOT_USERNAME
 from vpn_bot.handlers import router
 from vpn_bot.storage import init_db
