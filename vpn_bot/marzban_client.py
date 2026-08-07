@@ -16,7 +16,7 @@ from typing import Any, Optional
 
 import httpx
 
-from vpn_bot.config import MARZBAN_BASE_URL, MARZBAN_INBOUNDS, MARZBAN_PASSWORD, MARZBAN_USERNAME
+from vpn_bot.config import MARZBAN_BASE_URL, MARZBAN_INBOUNDS, MARZBAN_PASSWORD, MARZBAN_USERNAME, VPN_BRAND_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +92,11 @@ class MarzbanClient:
         data_limit_bytes: int = 0,
         note: str = "",
     ) -> dict[str, Any]:
+        if not note:
+            note = VPN_BRAND_NAME
         payload = {
             "username": marzban_username,
-            "proxies": {"vless": {}},
+            "proxies": {"vless": {"flow": "xtls-rprx-vision"}},
             "inbounds": {"vless": list(MARZBAN_INBOUNDS)},
             "expire": expire_ts,
             "data_limit": data_limit_bytes,
@@ -149,6 +151,7 @@ class MarzbanClient:
             expire=new_expire,
             status="active",
             data_limit=data_limit_bytes,
+            proxies={"vless": {"flow": "xtls-rprx-vision"}},
         )
 
     @staticmethod
