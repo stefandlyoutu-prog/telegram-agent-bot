@@ -35,6 +35,7 @@ MARZBAN_USERNAME = os.getenv("MARZBAN_USERNAME", "").strip()
 MARZBAN_PASSWORD = os.getenv("MARZBAN_PASSWORD", "").strip()
 # Тег(и) инбаунда(ов), которые выдаём новым пользователям, через запятую.
 # Смотри в дашборде Marzban → Node Settings → Inbounds (напр. "VLESS TCP REALITY").
+# Используем только один инбаунд для стабильности.
 MARZBAN_INBOUNDS: tuple[str, ...] = tuple(
     x.strip() for x in os.getenv("MARZBAN_INBOUNDS", "VLESS TCP REALITY").split(",") if x.strip()
 )
