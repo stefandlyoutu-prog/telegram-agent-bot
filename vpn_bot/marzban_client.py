@@ -34,16 +34,15 @@ class MarzbanClient:
         username: str = MARZBAN_USERNAME,
         password: str = MARZBAN_PASSWORD,
     ) -> None:
-        # Всегда используем HTTP для API для совместимости с Happ
-        self._base_url = base_url.replace("https://", "http://").rstrip("/")
+        self._base_url = base_url.rstrip("/")
         self._username = username
         self._password = password
         self._token: Optional[str] = None
         self._token_expires_at: float = 0.0
 
     async def _login(self) -> str:
-        # Используем HTTP для совместимости с Happ
-        async with httpx.AsyncClient(timeout=20) as client:
+        # verify=False: панель часто на self-signed сертификате (IP без домена).
+        async with httpx.AsyncClient(timeout=20, verify=False) as client:
             resp = await client.post(
                 f"{self._base_url}/api/admin/token",
                 data={
@@ -67,13 +66,13 @@ class MarzbanClient:
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         headers = await self._auth_headers()
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=30, verify=False) as client:
             resp = await client.request(
                 method, f"{self._base_url}{path}", headers=headers, **kwargs
             )
         if resp.status_code == 401:
             headers = await self._auth_headers(force_refresh=True)
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(timeout=30, verify=False) as client:
                 resp = await client.request(
                     method, f"{self._base_url}{path}", headers=headers, **kwargs
                 )
@@ -159,10 +158,14 @@ class MarzbanClient:
 
     @staticmethod
     def subscription_url(user_obj: dict[str, Any]) -> str:
-        """Абсолютная подписочная ссылка (Marzban отдаёт относительный путь)."""
+        """Абсолютная подписочная ссылка (Marzban отдаёт относительный путь).
+        
+        Возвращает HTTP URL для совместимости с Happ клиентом.
+        """
         sub = user_obj.get("subscription_url") or ""
         if sub.startswith("http"):
-            return sub
-        # Если Marzban возвращает относительный путь, используем HTTP для совместимости с Happ
+            # Возвращаем HTTP URL для Happ
+            return sub.replace("https://", "http://")
+        # Если Marzban возвращает относительный путь, используем HTTP
         base_url = MARZBAN_BASE_URL.replace("https://", "http://")
         return f"{base_url}{sub}"
