@@ -6,8 +6,6 @@
   1. POST /api/admin/token (form: username/password) → access_token (JWT).
   2. Токен кешируем и переиспользуем, при 401 — логинимся заново.
   3. create_user/get_user/modify_user/delete_user — управление ключами.
-  
-Использует HTTP для совместимости с Happ клиентом.
 """
 
 from __future__ import annotations
@@ -158,14 +156,8 @@ class MarzbanClient:
 
     @staticmethod
     def subscription_url(user_obj: dict[str, Any]) -> str:
-        """Абсолютная подписочная ссылка (Marzban отдаёт относительный путь).
-        
-        Возвращает HTTP URL для совместимости с Happ клиентом.
-        """
+        """Абсолютная подписочная ссылка (Marzban отдаёт относительный путь)."""
         sub = user_obj.get("subscription_url") or ""
         if sub.startswith("http"):
-            # Возвращаем HTTP URL для Happ
-            return sub.replace("https://", "http://")
-        # Если Marzban возвращает относительный путь, используем HTTP
-        base_url = MARZBAN_BASE_URL.replace("https://", "http://")
-        return f"{base_url}{sub}"
+            return sub
+        return f"{MARZBAN_BASE_URL}{sub}"
