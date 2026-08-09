@@ -96,7 +96,7 @@ class MarzbanClient:
             note = VPN_BRAND_NAME
         payload = {
             "username": marzban_username,
-            "proxies": {"vless": {"flow": "xtls-rprx-vision"}},
+            "proxies": {"vless": {"flow": ""}},
             "inbounds": {"vless": list(MARZBAN_INBOUNDS)},
             "expire": expire_ts,
             "data_limit": data_limit_bytes,
@@ -151,7 +151,7 @@ class MarzbanClient:
             expire=new_expire,
             status="active",
             data_limit=data_limit_bytes,
-            proxies={"vless": {"flow": "xtls-rprx-vision"}},
+            proxies={"vless": {"flow": ""}},
         )
 
     @staticmethod
