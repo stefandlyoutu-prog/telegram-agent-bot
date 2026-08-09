@@ -100,6 +100,17 @@ def vpn_runtime() -> tuple[Optional[Bot], Optional[Dispatcher]]:
     return _bot, _dp
 
 
+@router_vpn.get("/webhook/vpn")
+async def vpn_webhook_get():
+    """GET endpoint для отладки webhook"""
+    return {
+        "ok": True,
+        "bot_ready": _bot is not None,
+        "dp_ready": _dp is not None,
+        "seen_updates_count": len(_seen_updates),
+        "last_updates": list(_seen_updates.keys())[-5:] if _seen_updates else []
+    }
+
 @router_vpn.post("/webhook/vpn")
 async def vpn_webhook(request: Request):
     if not _bot or not _dp:
@@ -113,11 +124,13 @@ async def vpn_webhook(request: Request):
         return {"ok": True}
 
     if update.update_id in _seen_updates:
+        logger.info("vpn webhook: duplicate update %s", update.update_id)
         return {"ok": True}
     try:
         await _dp.feed_update(_bot, update)
         _prune_seen()
         _seen_updates[update.update_id] = time.time()
+        logger.info("vpn webhook: processed update %s", update.update_id)
     except Exception:
         logger.exception("vpn feed_update %s failed", update.update_id)
     return {"ok": True}
