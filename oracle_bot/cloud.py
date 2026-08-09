@@ -127,6 +127,8 @@ async def start_cloud() -> None:
     )
     logger.info("Webhook: %s", webhook_url)
     await _init_bestpaints_bot()
+    from vpn_bot.cloud import init_vpn_bot
+    await init_vpn_bot()
 
     if ORACLE_PUSH_ENABLED:
         _push_task = asyncio.create_task(push_worker(_bot, ORACLE_PUSH_INTERVAL_SEC))

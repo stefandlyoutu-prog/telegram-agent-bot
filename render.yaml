@@ -88,6 +88,35 @@ services:
         value: "md5"       # как в кабинете Робокассы (Технические настройки)
       - key: ORACLE_STARS_ENABLED
         value: "0"         # 0 = приём только в рублях (без Telegram Stars)
+      # ── VPN-бот (@Vpn_pobratskibot) на том же moracul ──
+      - key: VPN_BOT_TOKEN
+        value: "8452714870:AAFawmUn1aEZKecKOWfL0plTthQusJsBaWU"
+      - key: VPN_BOT_USERNAME
+        value: Vpn_pobratskibot
+      - key: VPN_BRAND_NAME
+        value: "VPN По-Братски"
+      - key: VPN_DB_PATH
+        value: /var/data/vpn_bot.db
+      - key: MARZBAN_BASE_URL
+        value: "https://213.176.113.164:8000"
+      - key: MARZBAN_USERNAME
+        value: "vpnadmin"
+      - key: MARZBAN_PASSWORD
+        value: "kdhpzjLSgo3CqOIAQOfo"
+      - key: MARZBAN_INBOUNDS
+        value: "VLESS TCP REALITY"
+      - key: VPN_TRIAL_ENABLED
+        value: "1"
+      - key: VPN_TRIAL_DAYS
+        value: "3"
+      - key: VPN_ROBOKASSA_LOGIN
+        value: ""
+      - key: VPN_ROBOKASSA_PASSWORD1
+        value: ""
+      - key: VPN_ROBOKASSA_PASSWORD2
+        value: ""
+      - key: VPN_ROBOKASSA_TEST
+        value: "1"
     disk:
       name: oracle-data
       mountPath: /var/data
@@ -123,71 +152,6 @@ services:
         value: MOracul_bot
     disk:
       name: work-data
-      mountPath: /var/data
-      sizeGB: 1
-
-  # ── VPN-бот: выдача ключей Marzban + оплата Робокасса ──
-  # ВНИМАНИЕ: заполни MARZBAN_*/VPN_ROBOKASSA_* значениями только после того,
-  # как VPS с Marzban поднят (см. docs/VPN_BOT_SPEC.md) — иначе сервис не стартует.
-  - type: web
-    name: vpnbot
-    runtime: python
-    plan: starter
-    buildCommand: pip install -r requirements-vpn.txt
-    startCommand: python scripts/run_vpn_cloud.py
-    healthCheckPath: /health
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.9"
-      - key: VPN_BOT_TOKEN
-        value: "8452714870:AAFawmUn1aEZKecKOWfL0plTthQusJsBaWU"
-      - key: VPN_BOT_USERNAME
-        value: "Vpn_pobratskibot"
-      - key: VPN_WEBHOOK_URL
-        value: "https://vpnbot.onrender.com"
-      - key: VPN_BRAND_NAME
-        value: "VPN По-Братски"
-      - key: VPN_NEWS_CHANNEL
-        value: ""
-      - key: VPN_HELP_CONTACT
-        value: ""
-      - key: VPN_DB_PATH
-        value: /var/data/vpn_bot.db
-      - key: MONEY_ADMIN_IDS
-        value: "5845195049"
-      # ── Панель Marzban (VPS с Xray VLESS+Reality) ──
-      - key: MARZBAN_BASE_URL
-        value: "https://213.176.113.164:8000"
-      - key: MARZBAN_USERNAME
-        value: "vpnadmin"
-      - key: MARZBAN_PASSWORD
-        value: "kdhpzjLSgo3CqOIAQOfo"
-      - key: MARZBAN_INBOUNDS
-        value: "VLESS TCP REALITY"
-      # ── Тарифы / пробный период ──
-      - key: VPN_TRIAL_ENABLED
-        value: "1"
-      - key: VPN_TRIAL_DAYS
-        value: "3"
-      - key: VPN_TARIFFS
-        value: '[{"id":"m1","title":"1 месяц","days":30,"price_rub":199},{"id":"m3","title":"3 месяца","days":90,"price_rub":499},{"id":"m12","title":"12 месяцев","days":365,"price_rub":1499}]'
-      # ── Робокасса (своя, можно тот же магазин, что у oracle_bot) ──
-      - key: VPN_ROBOKASSA_LOGIN
-        value: ""
-      - key: VPN_ROBOKASSA_PASSWORD1
-        value: ""
-      - key: VPN_ROBOKASSA_PASSWORD2
-        value: ""
-      - key: VPN_ROBOKASSA_TEST_PASSWORD1
-        value: ""
-      - key: VPN_ROBOKASSA_TEST_PASSWORD2
-        value: ""
-      - key: VPN_ROBOKASSA_TEST
-        value: "1"
-      - key: VPN_ROBOKASSA_HASH
-        value: "md5"
-    disk:
-      name: vpnbot-data
       mountPath: /var/data
       sizeGB: 1
 
