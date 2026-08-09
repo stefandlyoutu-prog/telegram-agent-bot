@@ -132,7 +132,7 @@ services:
   - type: web
     name: vpnbot
     runtime: python
-    plan: free
+    plan: starter
     buildCommand: pip install -r requirements-vpn.txt
     startCommand: python scripts/run_vpn_cloud.py
     healthCheckPath: /health
@@ -140,28 +140,28 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.9"
       - key: VPN_BOT_TOKEN
-        sync: false
+        value: "8452714870:AAFawmUn1aEZKecKOWfL0plTthQusJsBaWU"
       - key: VPN_BOT_USERNAME
-        sync: false
+        value: "Vpn_pobratskibot"
       - key: VPN_WEBHOOK_URL
-        sync: false
+        value: "https://vpnbot.onrender.com"
       - key: VPN_BRAND_NAME
         value: "VPN По-Братски"
       - key: VPN_NEWS_CHANNEL
-        sync: false
+        value: ""
       - key: VPN_HELP_CONTACT
-        sync: false
+        value: ""
       - key: VPN_DB_PATH
         value: /var/data/vpn_bot.db
       - key: MONEY_ADMIN_IDS
-        sync: false
+        value: "5845195049"
       # ── Панель Marzban (VPS с Xray VLESS+Reality) ──
       - key: MARZBAN_BASE_URL
-        sync: false
+        value: "https://213.176.113.164:8000"
       - key: MARZBAN_USERNAME
-        sync: false
+        value: "vpnadmin"
       - key: MARZBAN_PASSWORD
-        sync: false
+        value: "kdhpzjLSgo3CqOIAQOfo"
       - key: MARZBAN_INBOUNDS
         value: "VLESS TCP REALITY"
       # ── Тарифы / пробный период ──
@@ -173,15 +173,15 @@ services:
         value: '[{"id":"m1","title":"1 месяц","days":30,"price_rub":199},{"id":"m3","title":"3 месяца","days":90,"price_rub":499},{"id":"m12","title":"12 месяцев","days":365,"price_rub":1499}]'
       # ── Робокасса (своя, можно тот же магазин, что у oracle_bot) ──
       - key: VPN_ROBOKASSA_LOGIN
-        sync: false
+        value: ""
       - key: VPN_ROBOKASSA_PASSWORD1
-        sync: false
+        value: ""
       - key: VPN_ROBOKASSA_PASSWORD2
-        sync: false
+        value: ""
       - key: VPN_ROBOKASSA_TEST_PASSWORD1
-        sync: false
+        value: ""
       - key: VPN_ROBOKASSA_TEST_PASSWORD2
-        sync: false
+        value: ""
       - key: VPN_ROBOKASSA_TEST
         value: "1"
       - key: VPN_ROBOKASSA_HASH
