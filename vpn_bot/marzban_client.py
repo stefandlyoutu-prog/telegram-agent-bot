@@ -6,6 +6,8 @@
   1. POST /api/admin/token (form: username/password) → access_token (JWT).
   2. Токен кешируем и переиспользуем, при 401 — логинимся заново.
   3. create_user/get_user/modify_user/delete_user — управление ключами.
+  
+Использует HTTP для совместимости с Happ клиентом.
 """
 
 from __future__ import annotations
@@ -32,15 +34,16 @@ class MarzbanClient:
         username: str = MARZBAN_USERNAME,
         password: str = MARZBAN_PASSWORD,
     ) -> None:
-        self._base_url = base_url.rstrip("/")
+        # Всегда используем HTTP для API для совместимости с Happ
+        self._base_url = base_url.replace("https://", "http://").rstrip("/")
         self._username = username
         self._password = password
         self._token: Optional[str] = None
         self._token_expires_at: float = 0.0
 
     async def _login(self) -> str:
-        # verify=False: панель часто на self-signed сертификате (IP без домена).
-        async with httpx.AsyncClient(timeout=20, verify=False) as client:
+        # Используем HTTP для совместимости с Happ
+        async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.post(
                 f"{self._base_url}/api/admin/token",
                 data={
@@ -64,13 +67,13 @@ class MarzbanClient:
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         headers = await self._auth_headers()
-        async with httpx.AsyncClient(timeout=30, verify=False) as client:
+        async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.request(
                 method, f"{self._base_url}{path}", headers=headers, **kwargs
             )
         if resp.status_code == 401:
             headers = await self._auth_headers(force_refresh=True)
-            async with httpx.AsyncClient(timeout=30, verify=False) as client:
+            async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.request(
                     method, f"{self._base_url}{path}", headers=headers, **kwargs
                 )
@@ -160,4 +163,6 @@ class MarzbanClient:
         sub = user_obj.get("subscription_url") or ""
         if sub.startswith("http"):
             return sub
-        return f"{MARZBAN_BASE_URL}{sub}"
+        # Если Marzban возвращает относительный путь, используем HTTP для совместимости с Happ
+        base_url = MARZBAN_BASE_URL.replace("https://", "http://")
+        return f"{base_url}{sub}"
