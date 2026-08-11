@@ -156,8 +156,7 @@ class MarzbanClient:
 
     @staticmethod
     def subscription_url(user_obj: dict[str, Any]) -> str:
-        """Абсолютная подписочная ссылка (Marzban отдаёт относительный путь)."""
+        """Абсолютная подписочная ссылка (Marzban отдаёт полный URL с sslip.io)."""
         sub = user_obj.get("subscription_url") or ""
-        if sub.startswith("http"):
-            return sub
-        return f"{MARZBAN_BASE_URL}{sub}"
+        # Marzban теперь возвращает полный URL из XRAY_SUBSCRIPTION_URL_PREFIX
+        return sub
