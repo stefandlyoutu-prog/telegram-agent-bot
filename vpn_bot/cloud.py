@@ -211,3 +211,59 @@ async def vpn_robokassa_fail(request: Request):
     return HTMLResponse(
         _back_to_bot_html("Оплата не завершена", "Платёж отменён. Можно попробовать снова в боте.")
     )
+
+
+@router_vpn.post("/vpn/admin/reset_trial")
+async def admin_reset_trial(request: Request):
+    """Admin endpoint для сброса trial периода пользователя"""
+    from vpn_bot import storage as db
+    from vpn_bot.config import VPN_DB_PATH
+    
+    try:
+        data = await request.json()
+        user_id = int(data.get("user_id"))
+    except (ValueError, TypeError):
+        return {"ok": False, "error": "Invalid user_id"}
+    
+    # Простая проверка авторизации (можно улучшить)
+    admin_id = 5845195049  # Твой user_id из render.yaml
+    if user_id != admin_id:
+        return {"ok": False, "error": "Unauthorized"}
+    
+    try:
+        conn = db._connect().__enter__()
+        cursor = conn.cursor()
+        
+        # Проверяем текущее состояние
+        cursor.execute("SELECT trial_used FROM users WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            return {"ok": False, "error": "User not found"}
+        
+        current_trial = result[0]
+        
+        # Сбрасываем trial_used
+        cursor.execute("UPDATE users SET trial_used = 0 WHERE user_id = ?", (user_id,))
+        
+        # Удаляем подписку
+        cursor.execute("DELETE FROM subscriptions WHERE user_id = ?", (user_id,))
+        
+        # Удаляем инвойсы
+        cursor.execute("DELETE FROM invoices WHERE user_id = ?", (user_id,))
+        
+        conn.commit()
+        conn.__exit__(None, None)
+        
+        logger.info("Admin reset trial for user %s (was %s)", user_id, current_trial)
+        
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "previous_trial_used": current_trial,
+            "new_trial_used": 0
+        }
+        
+    except Exception as e:
+        logger.exception("Admin reset trial failed for user %s", user_id)
+        return {"ok": False, "error": str(e)}
