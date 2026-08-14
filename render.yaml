@@ -98,7 +98,7 @@ services:
       - key: VPN_DB_PATH
         value: /var/data/vpn_bot.db
       - key: MARZBAN_BASE_URL
-        value: "https://213.176.113.164:8000"
+        value: "https://213-176-113-164.sslip.io:8443"
       - key: MARZBAN_USERNAME
         value: "vpnadmin"
       - key: MARZBAN_PASSWORD
