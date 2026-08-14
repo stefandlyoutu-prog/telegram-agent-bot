@@ -115,6 +115,9 @@ async def _send_key_card(callback_or_message, user_id: int, subscription_url: st
 
 @router.callback_query(F.data == "my_key")
 async def cb_my_key(callback: CallbackQuery) -> None:
+    if not callback.from_user:
+        await callback.answer("Ошибка авторизации", show_alert=True)
+        return
     user_id = callback.from_user.id
     sub = db.get_subscription(user_id)
     if not sub or not sub.get("expires_at"):

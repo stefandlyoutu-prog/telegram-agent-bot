@@ -40,6 +40,12 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     expires_at TEXT,
     updated_at TEXT NOT NULL
 );
+
+-- Индексы для оптимизации запросов
+CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active_at);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_invoices_user_id ON invoices(user_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_expires ON subscriptions(expires_at);
 """
 
 
@@ -131,13 +137,21 @@ def mark_invoice_paid(inv_id: int) -> Optional[dict[str, Any]]:
     """Идемпотентно помечает инвойс оплаченным (pending → paid один раз)."""
     now = _now_iso()
     with _connect() as conn:
-        cur = conn.execute(
-            "UPDATE invoices SET status = 'paid', paid_at = ? WHERE inv_id = ? AND status = 'pending'",
-            (now, inv_id),
-        )
-        if cur.rowcount == 0:
-            return None
-        row = conn.execute("SELECT * FROM invoices WHERE inv_id = ?", (inv_id,)).fetchone()
+        # Используем эксклюзивную транзакцию для защиты от race condition
+        conn.execute("BEGIN EXCLUSIVE TRANSACTION")
+        try:
+            cur = conn.execute(
+                "UPDATE invoices SET status = 'paid', paid_at = ? WHERE inv_id = ? AND status = 'pending'",
+                (now, inv_id),
+            )
+            if cur.rowcount == 0:
+                conn.execute("ROLLBACK")
+                return None
+            row = conn.execute("SELECT * FROM invoices WHERE inv_id = ?", (inv_id,)).fetchone()
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
     return dict(row) if row else None
 
 

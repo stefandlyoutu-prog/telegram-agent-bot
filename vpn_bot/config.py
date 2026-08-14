@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -60,10 +63,19 @@ def _load_tariffs() -> list[dict]:
         return _DEFAULT_TARIFFS
     try:
         data = json.loads(raw)
-        if isinstance(data, list) and data:
+        # Валидация структуры тарифов
+        if not isinstance(data, list):
+            raise ValueError("Tariffs must be a list")
+        for item in data:
+            if not isinstance(item, dict):
+                raise ValueError("Each tariff must be a dict")
+            required_fields = ["id", "title", "days", "price_rub"]
+            if not all(k in item for k in required_fields):
+                raise ValueError(f"Tariff missing required fields: {required_fields}")
+        if data:
             return data
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Invalid VPN_TARIFFS format: %s", e)
     return _DEFAULT_TARIFFS
 
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any, Optional
+from urllib.parse import quote
 
 import httpx
 
@@ -39,7 +40,7 @@ class MarzbanClient:
         self._token_expires_at: float = 0.0
 
     async def _login(self) -> str:
-        # verify=False: панель часто на self-signed сертификате (IP без домена).
+        # verify=False: sslip.io использует самоподписанный сертификат
         async with httpx.AsyncClient(timeout=20, verify=False) as client:
             resp = await client.post(
                 f"{self._base_url}/api/admin/token",
@@ -50,7 +51,11 @@ class MarzbanClient:
                 },
             )
         if resp.status_code != 200:
-            raise MarzbanError(f"Marzban login failed: {resp.status_code} {resp.text[:300]}")
+            # Не логируем конфиденциальные данные
+            if resp.status_code == 401:
+                raise MarzbanError("Marzban login failed: invalid credentials")
+            else:
+                raise MarzbanError(f"Marzban login failed: HTTP {resp.status_code}")
         data = resp.json()
         self._token = data["access_token"]
         # Токен обычно живёт 24ч (JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440) — обновим через 20ч.
@@ -77,11 +82,13 @@ class MarzbanClient:
         return resp
 
     async def get_user(self, marzban_username: str) -> Optional[dict[str, Any]]:
-        resp = await self._request("GET", f"/api/user/{marzban_username}")
+        # Безопасное кодирование username для предотвращения инъекций
+        safe_username = quote(marzban_username, safe='')
+        resp = await self._request("GET", f"/api/user/{safe_username}")
         if resp.status_code == 404:
             return None
         if resp.status_code != 200:
-            raise MarzbanError(f"get_user {marzban_username}: {resp.status_code} {resp.text[:300]}")
+            raise MarzbanError(f"get_user {marzban_username}: HTTP {resp.status_code}")
         return resp.json()
 
     async def create_user(
@@ -106,19 +113,21 @@ class MarzbanClient:
         }
         resp = await self._request("POST", "/api/user", json=payload)
         if resp.status_code not in (200, 201):
-            raise MarzbanError(f"create_user {marzban_username}: {resp.status_code} {resp.text[:300]}")
+            raise MarzbanError(f"create_user {marzban_username}: HTTP {resp.status_code}")
         return resp.json()
 
     async def modify_user(self, marzban_username: str, **fields: Any) -> dict[str, Any]:
-        resp = await self._request("PUT", f"/api/user/{marzban_username}", json=fields)
+        safe_username = quote(marzban_username, safe='')
+        resp = await self._request("PUT", f"/api/user/{safe_username}", json=fields)
         if resp.status_code != 200:
-            raise MarzbanError(f"modify_user {marzban_username}: {resp.status_code} {resp.text[:300]}")
+            raise MarzbanError(f"modify_user {marzban_username}: HTTP {resp.status_code}")
         return resp.json()
 
     async def delete_user(self, marzban_username: str) -> None:
-        resp = await self._request("DELETE", f"/api/user/{marzban_username}")
+        safe_username = quote(marzban_username, safe='')
+        resp = await self._request("DELETE", f"/api/user/{safe_username}")
         if resp.status_code not in (200, 204, 404):
-            raise MarzbanError(f"delete_user {marzban_username}: {resp.status_code} {resp.text[:300]}")
+            raise MarzbanError(f"delete_user {marzban_username}: HTTP {resp.status_code}")
 
     async def ensure_active_user(
         self,
@@ -158,6 +167,10 @@ class MarzbanClient:
     def subscription_url(user_obj: dict[str, Any]) -> str:
         """Абсолютная подписочная ссылка (Marzban отдаёт относительный путь)."""
         sub = user_obj.get("subscription_url") or ""
+        if not sub:
+            logger.warning("Empty subscription_url received from Marzban for user: %s",
+                         user_obj.get("username", "unknown"))
+            return ""
         if sub.startswith("http"):
             return sub
         return f"{MARZBAN_BASE_URL}{sub}"
