@@ -117,6 +117,8 @@ services:
         value: ""
       - key: VPN_ROBOKASSA_TEST
         value: "1"
+      - key: VPN_WEBHOOK_URL
+        value: "https://moracul.ru"
     disk:
       name: oracle-data
       mountPath: /var/data
