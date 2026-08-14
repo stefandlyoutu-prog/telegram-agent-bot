@@ -90,6 +90,7 @@ services:
         value: "0"         # 0 = приём только в рублях (без Telegram Stars)
       # ── VPN-бот (@Vpn_pobratskibot) на том же moracul ──
       - key: VPN_BOT_TOKEN
+        sync: false
         value: "8452714870:AAFawmUn1aEZKecKOWfL0plTthQusJsBaWU"
       - key: VPN_BOT_USERNAME
         value: Vpn_pobratskibot
@@ -98,7 +99,7 @@ services:
       - key: VPN_DB_PATH
         value: /var/data/vpn_bot.db
       - key: MARZBAN_BASE_URL
-        value: "https://213.176.113.164:8000"
+        value: "https://213-176-113.164.sslip.io:8443"
       - key: MARZBAN_USERNAME
         value: "vpnadmin"
       - key: MARZBAN_PASSWORD
@@ -119,6 +120,53 @@ services:
         value: "1"
     disk:
       name: oracle-data
+      mountPath: /var/data
+      sizeGB: 1
+
+  # ── VPN-бот (@Vpn_pobratskibot) ──
+  - type: web
+    name: vpn-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-vpn.txt
+    startCommand: python scripts/run_vpn_cloud.py
+    healthCheckPath: /health
+    envVars:
+      - key: VPN_CLOUD
+        value: "1"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: VPN_BOT_TOKEN
+        sync: false
+        value: "8452714870:AAFawmUn1aEZKecKOWfL0plTthQusJsBaWU"
+      - key: VPN_BOT_USERNAME
+        value: Vpn_pobratskibot
+      - key: VPN_BRAND_NAME
+        value: "VPN По-Братски"
+      - key: VPN_DB_PATH
+        value: /var/data/vpn_bot.db
+      - key: MARZBAN_BASE_URL
+        value: "https://213-176-113.164.sslip.io:8443"
+      - key: MARZBAN_USERNAME
+        value: vpnadmin
+      - key: MARZBAN_PASSWORD
+        value: kdhpzjLSgo3CqOIAQOfo
+      - key: MARZBAN_INBOUNDS
+        value: "VLESS TCP REALITY"
+      - key: VPN_TRIAL_ENABLED
+        value: "1"
+      - key: VPN_TRIAL_DAYS
+        value: "3"
+      - key: VPN_ROBOKASSA_LOGIN
+        value: ""
+      - key: VPN_ROBOKASSA_PASSWORD1
+        value: ""
+      - key: VPN_ROBOKASSA_PASSWORD2
+        value: ""
+      - key: VPN_ROBOKASSA_TEST
+        value: "1"
+    disk:
+      name: vpn-data
       mountPath: /var/data
       sizeGB: 1
 
