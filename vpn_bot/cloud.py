@@ -33,9 +33,10 @@ ALLOWED_UPDATES = ["message", "edited_message", "callback_query"]
 
 
 def _webhook_base() -> str:
+    # Приоритет: VPN_WEBHOOK_URL → ORACLE_WEBHOOK_URL → ORACLE_WEBAPP_URL → RENDER_EXTERNAL_URL
     return (
-        os.getenv("ORACLE_WEBHOOK_URL", "").strip()
-        or os.getenv("VPN_WEBHOOK_URL", "").strip()
+        os.getenv("VPN_WEBHOOK_URL", "").strip()
+        or os.getenv("ORACLE_WEBHOOK_URL", "").strip()
         or os.getenv("ORACLE_WEBAPP_URL", "").strip()
         or os.getenv("RENDER_EXTERNAL_URL", "").strip()
     )
@@ -76,12 +77,19 @@ async def init_vpn_bot() -> None:
 
     webhook_base = _webhook_base()
     if not webhook_base:
-        logger.warning("VPN bot: webhook base URL не задан")
-        return
+        # Попробуем получить URL из render.yaml через переменную окружения
+        webhook_base = "https://moracul.ru"  # Хардкод как fallback
+        logger.warning("VPN bot: используем fallback URL: %s", webhook_base)
+
     webhook_url = webhook_base.rstrip("/") + "/webhook/vpn"
-    await _bot.delete_webhook(drop_pending_updates=False)
-    await _bot.set_webhook(webhook_url, allowed_updates=ALLOWED_UPDATES, drop_pending_updates=False)
-    logger.info("VPN webhook: %s", webhook_url)
+    try:
+        await _bot.delete_webhook(drop_pending_updates=False)
+        await _bot.set_webhook(webhook_url, allowed_updates=ALLOWED_UPDATES, drop_pending_updates=False)
+        logger.info("VPN webhook установлен: %s", webhook_url)
+        print(f"VPN webhook установлен: {webhook_url}", flush=True)
+    except Exception as e:
+        logger.error("Ошибка установки VPN webhook: %s", e)
+        print(f"ОШИБКА VPN webhook: {e}", flush=True)
 
 
 async def stop_vpn_bot() -> None:
@@ -267,3 +275,24 @@ async def admin_reset_trial(request: Request):
     except Exception as e:
         logger.exception("Admin reset trial failed for user %s", user_id)
         return {"ok": False, "error": str(e)}
+
+
+@router_vpn.get("/vpn/debug")
+async def vpn_debug():
+    """Отладочная информация VPN бота"""
+    return {
+        "bot_ready": _bot is not None,
+        "dp_ready": _dp is not None,
+        "webhook_base": _webhook_base(),
+        "env_vars": {
+            "VPN_WEBHOOK_URL": os.getenv("VPN_WEBHOOK_URL", "").strip(),
+            "ORACLE_WEBHOOK_URL": os.getenv("ORACLE_WEBHOOK_URL", "").strip(),
+            "ORACLE_WEBAPP_URL": os.getenv("ORACLE_WEBAPP_URL", "").strip(),
+            "RENDER_EXTERNAL_URL": os.getenv("RENDER_EXTERNAL_URL", "").strip(),
+        },
+        "marzban_config": {
+            "base_url": os.getenv("MARZBAN_BASE_URL", "").strip(),
+            "username": bool(os.getenv("MARZBAN_USERNAME", "").strip()),
+            "password": bool(os.getenv("MARZBAN_PASSWORD", "").strip()),
+        }
+    }
