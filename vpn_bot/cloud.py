@@ -239,38 +239,35 @@ async def admin_reset_trial(request: Request):
         return {"ok": False, "error": "Unauthorized"}
     
     try:
-        conn = db._connect().__enter__()
-        cursor = conn.cursor()
-        
-        # Проверяем текущее состояние
-        cursor.execute("SELECT trial_used FROM users WHERE user_id = ?", (user_id,))
-        result = cursor.fetchone()
-        
-        if not result:
-            return {"ok": False, "error": "User not found"}
-        
-        current_trial = result[0]
-        
-        # Сбрасываем trial_used
-        cursor.execute("UPDATE users SET trial_used = 0 WHERE user_id = ?", (user_id,))
-        
-        # Удаляем подписку
-        cursor.execute("DELETE FROM subscriptions WHERE user_id = ?", (user_id,))
-        
-        # Удаляем инвойсы
-        cursor.execute("DELETE FROM invoices WHERE user_id = ?", (user_id,))
-        
-        conn.commit()
-        conn.__exit__(None, None)
-        
-        logger.info("Admin reset trial for user %s (was %s)", user_id, current_trial)
-        
-        return {
-            "ok": True,
-            "user_id": user_id,
-            "previous_trial_used": current_trial,
-            "new_trial_used": 0
-        }
+        with db._connect() as conn:
+            cursor = conn.cursor()
+            
+            # Проверяем текущее состояние
+            cursor.execute("SELECT trial_used FROM users WHERE user_id = ?", (user_id,))
+            result = cursor.fetchone()
+            
+            if not result:
+                return {"ok": False, "error": "User not found"}
+            
+            current_trial = result[0]
+            
+            # Сбрасываем trial_used
+            cursor.execute("UPDATE users SET trial_used = 0 WHERE user_id = ?", (user_id,))
+            
+            # Удаляем подписку
+            cursor.execute("DELETE FROM subscriptions WHERE user_id = ?", (user_id,))
+            
+            # Удаляем инвойсы
+            cursor.execute("DELETE FROM invoices WHERE user_id = ?", (user_id,))
+            
+            logger.info("Admin reset trial for user %s (was %s)", user_id, current_trial)
+            
+            return {
+                "ok": True,
+                "user_id": user_id,
+                "previous_trial_used": current_trial,
+                "new_trial_used": 0
+            }
         
     except Exception as e:
         logger.exception("Admin reset trial failed for user %s", user_id)
